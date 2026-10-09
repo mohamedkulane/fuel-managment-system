@@ -1,0 +1,16 @@
+{
+  "name": "fuel-wholesale-system",
+  "private": true,
+  "packageManager": "pnpm@11.17.0",
+  "scripts": {
+    "build": "pnpm -r build",
+    "dev": "pnpm --parallel --filter @fuel/api --filter @fuel/web dev",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck",
+    "test:unit": "pnpm --filter @fuel/api test",
+    "test:integration": "pnpm --filter @fuel/api test:integration",
+    "db:generate": "pnpm --filter @fuel/database prisma:generate",
+    "db:migrate": "pnpm --filter @fuel/database prisma:migrate",
+    "db:seed": "pnpm --filter @fuel/database prisma:seed"
+  }
+}

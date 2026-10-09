@@ -1,0 +1,15 @@
+services:
+  postgres:
+    image: postgres:17.6-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: fuel
+      POSTGRES_PASSWORD: fuel
+      POSTGRES_DB: fuel_wholesale
+    ports:
+      - "5436:5432"
+    volumes:
+      - fuel-postgres:/var/lib/postgresql/data
+
+volumes:
+  fuel-postgres:

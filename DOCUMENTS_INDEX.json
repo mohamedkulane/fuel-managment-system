@@ -1,0 +1,43 @@
+{
+  "bundleVersion": "2.0",
+  "createdDate": "2026-10-08",
+  "files": [
+    "AGENTS.md",
+    "CODEX_IMPORT_PROMPT.md",
+    "README.md",
+    "docs/00-start-here.md",
+    "docs/01-product/acceptance-scenarios.md",
+    "docs/01-product/glossary-and-assumptions.md",
+    "docs/01-product/requirements.md",
+    "docs/02-domain/business-rules.md",
+    "docs/02-domain/roles-and-permissions.md",
+    "docs/02-domain/workflows.md",
+    "docs/03-architecture/api-contracts.md",
+    "docs/03-architecture/database-design.md",
+    "docs/03-architecture/erd.md",
+    "docs/03-architecture/financial-ledger.md",
+    "docs/03-architecture/inventory-accounting.md",
+    "docs/03-architecture/pricing-and-units.md",
+    "docs/03-architecture/system-architecture.md",
+    "docs/04-ui-ux/design-system.md",
+    "docs/04-ui-ux/pages-specification.md",
+    "docs/05-phases/phase-01-foundation-inventory.md",
+    "docs/05-phases/phase-02-orders-delivery.md",
+    "docs/05-phases/phase-03-invoices-credit-payments.md",
+    "docs/05-phases/phase-04-reports-hardening-deployment.md",
+    "docs/05-phases/phase-gates.md",
+    "docs/06-quality/security-and-audit.md",
+    "docs/06-quality/test-strategy.md",
+    "docs/07-operations/backup-and-recovery.md",
+    "docs/07-operations/deployment.md",
+    "docs/08-ai/CODEX_HANDOFF.md",
+    "docs/09-decisions/decision-log.md"
+  ],
+  "status": "documentation only",
+  "phaseCount": 4,
+  "appRoles": [
+    "OWNER",
+    "OFFICE_EMPLOYEE"
+  ],
+  "decisionsRequireConfirmation": true
+}

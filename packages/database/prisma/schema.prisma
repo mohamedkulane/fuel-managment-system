@@ -1,0 +1,413 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  OWNER
+  OFFICE_EMPLOYEE
+}
+enum FuelCode {
+  DIESEL
+  PETROL
+}
+enum CustomerStatus {
+  ACTIVE
+  HOLD
+  INACTIVE
+}
+enum ReceiptStatus {
+  DRAFT
+  POSTED
+  CANCELLED
+  REVERSED
+}
+enum OrderStatus {
+  DRAFT
+  CONFIRMED
+  SCHEDULED
+  IN_PROGRESS
+  PARTIALLY_FULFILLED
+  FULFILLED
+  CANCELLED
+}
+enum DeliverySheetStatus {
+  PREPARED
+  PRINTED
+  DISPATCHED
+  PARTIALLY_RECONCILED
+  RECONCILED
+}
+enum DispatchStatus {
+  PREPARED
+  POSTED
+  PARTIALLY_RECONCILED
+  RECONCILED
+}
+enum CommercialDisposition {
+  NONE
+  CANCEL_REMAINDER
+  BACKORDER_REMAINDER
+}
+enum Location {
+  WAREHOUSE
+  IN_TRANSIT
+}
+enum MovementType {
+  RECEIPT
+  DISPATCH
+  ACCEPTED
+  RETURN
+  ADJUSTMENT
+  REVERSAL
+}
+
+model User {
+  id             String   @id @default(uuid()) @db.Uuid
+  displayName    String
+  email          String   @unique
+  passwordHash   String
+  role           Role
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  lastLoginAt    DateTime?
+  sessions       Session[]
+  audits         AuditEvent[]
+  createdCustomers Customer[] @relation("CustomerCreator")
+  createdOrders  SalesOrder[] @relation("OrderCreator")
+  createdReceipts TankerReceipt[] @relation("ReceiptCreator")
+  postedReceipts TankerReceipt[] @relation("ReceiptPoster")
+  createdPrices  PriceVersion[]
+  createdUnits   FuelUnitVersion[]
+  dispatches     Dispatch[]
+  confirmations  DeliveryConfirmation[]
+}
+
+model Session {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @db.Uuid
+  tokenHash String   @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  userAgentHash String?
+  user      User @relation(fields: [userId], references: [id], onDelete: Restrict)
+  createdAt DateTime @default(now())
+  @@index([userId, expiresAt])
+}
+
+model AuditEvent {
+  id            String   @id @default(uuid()) @db.Uuid
+  actorId       String?  @db.Uuid
+  entityType    String
+  entityId      String
+  action        String
+  beforeRedacted Json?
+  afterRedacted  Json?
+  reason        String?
+  correlationId String?
+  createdAt     DateTime @default(now())
+  actor         User? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  @@index([entityType, entityId, createdAt])
+}
+
+model FuelType {
+  id        String @id @default(uuid()) @db.Uuid
+  code      FuelCode @unique
+  displayName String
+  active    Boolean @default(true)
+  units     FuelUnitVersion[]
+  prices    PriceVersion[]
+  receiptLines TankerReceiptLine[]
+  orderLines SalesOrderLine[]
+  movements InventoryMovement[]
+  balances StockBalance[]
+}
+
+model SalesUnit {
+  id       String @id @default(uuid()) @db.Uuid
+  code     String @unique
+  name     String
+  active   Boolean @default(true)
+  versions FuelUnitVersion[]
+  prices   PriceVersion[]
+  orderLines SalesOrderLine[]
+}
+
+model FuelUnitVersion {
+  id              String @id @default(uuid()) @db.Uuid
+  fuelId          String @db.Uuid
+  salesUnitId     String @db.Uuid
+  litersPerUnit   Decimal @db.Decimal(18, 6)
+  effectiveFromUtc DateTime
+  effectiveToUtc  DateTime?
+  createdById     String @db.Uuid
+  fuel            FuelType @relation(fields: [fuelId], references: [id], onDelete: Restrict)
+  salesUnit       SalesUnit @relation(fields: [salesUnitId], references: [id], onDelete: Restrict)
+  createdBy       User @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  orderLines      SalesOrderLine[]
+  @@index([fuelId, salesUnitId, effectiveFromUtc])
+}
+
+model PriceVersion {
+  id              String @id @default(uuid()) @db.Uuid
+  fuelId          String @db.Uuid
+  salesUnitId     String @db.Uuid
+  unitPrice       Decimal @db.Decimal(20, 4)
+  currencyCode    String @default("USD")
+  effectiveFromUtc DateTime
+  effectiveToUtc  DateTime?
+  reason          String?
+  createdById     String @db.Uuid
+  fuel            FuelType @relation(fields: [fuelId], references: [id], onDelete: Restrict)
+  salesUnit       SalesUnit @relation(fields: [salesUnitId], references: [id], onDelete: Restrict)
+  createdBy       User @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  orderLines      SalesOrderLine[]
+  @@index([fuelId, salesUnitId, effectiveFromUtc])
+}
+
+model Customer {
+  id          String @id @default(uuid()) @db.Uuid
+  code        String @unique
+  name        String
+  primaryPhone String?
+  otherPhone  String?
+  notes       String?
+  status      CustomerStatus @default(ACTIVE)
+  creditLimit Decimal? @db.Decimal(20, 2)
+  createdById String @db.Uuid
+  createdBy   User @relation("CustomerCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  addresses   CustomerAddress[]
+  orders      SalesOrder[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  @@index([name])
+}
+
+model CustomerAddress {
+  id String @id @default(uuid()) @db.Uuid
+  customerId String @db.Uuid
+  label String
+  addressText String
+  district String?
+  city String?
+  isDefault Boolean @default(false)
+  active Boolean @default(true)
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  @@index([customerId, isDefault])
+}
+
+model TankerReceipt {
+  id String @id @default(uuid()) @db.Uuid
+  receiptNo String @unique
+  tankerReference String?
+  arrivedAt DateTime
+  status ReceiptStatus @default(DRAFT)
+  createdById String @db.Uuid
+  postedById String? @db.Uuid
+  postedAt DateTime?
+  postIdempotencyKey String? @unique
+  notes String?
+  createdBy User @relation("ReceiptCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  postedBy User? @relation("ReceiptPoster", fields: [postedById], references: [id], onDelete: Restrict)
+  lines TankerReceiptLine[]
+  createdAt DateTime @default(now())
+  @@index([arrivedAt])
+}
+
+model TankerReceiptLine {
+  id String @id @default(uuid()) @db.Uuid
+  receiptId String @db.Uuid
+  fuelId String @db.Uuid
+  expectedLiters Decimal? @db.Decimal(18, 3)
+  actualLiters Decimal @db.Decimal(18, 3)
+  unitPurchaseCost Decimal? @db.Decimal(20, 4)
+  receipt TankerReceipt @relation(fields: [receiptId], references: [id], onDelete: Restrict)
+  fuel FuelType @relation(fields: [fuelId], references: [id], onDelete: Restrict)
+  @@index([fuelId])
+}
+
+model SalesOrder {
+  id String @id @default(uuid()) @db.Uuid
+  orderNo String @unique
+  customerId String @db.Uuid
+  orderDate DateTime
+  requestedDeliveryDate DateTime?
+  addressSnapshot String
+  status OrderStatus @default(DRAFT)
+  createdById String @db.Uuid
+  confirmedById String? @db.Uuid
+  confirmedAt DateTime?
+  confirmationIdempotencyKey String? @unique
+  currencyCode String @default("USD")
+  notes String?
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  createdBy User @relation("OrderCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  lines SalesOrderLine[]
+  events OrderEvent[]
+  createdAt DateTime @default(now())
+  @@index([customerId, orderDate])
+}
+
+model SalesOrderLine {
+  id String @id @default(uuid()) @db.Uuid
+  orderId String @db.Uuid
+  fuelId String @db.Uuid
+  salesUnitId String @db.Uuid
+  requestedUnits Decimal @db.Decimal(18, 3)
+  conversionVersionId String? @db.Uuid
+  litersPerUnitSnapshot Decimal? @db.Decimal(18, 6)
+  requestedLitersSnapshot Decimal? @db.Decimal(18, 3)
+  priceVersionId String? @db.Uuid
+  unitPriceSnapshot Decimal? @db.Decimal(20, 4)
+  currencyCode String @default("USD")
+  confirmedAt DateTime?
+  orderIdempotencyKey String?
+  order SalesOrder @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  fuel FuelType @relation(fields: [fuelId], references: [id], onDelete: Restrict)
+  salesUnit SalesUnit @relation(fields: [salesUnitId], references: [id], onDelete: Restrict)
+  conversionVersion FuelUnitVersion? @relation(fields: [conversionVersionId], references: [id], onDelete: Restrict)
+  priceVersion PriceVersion? @relation(fields: [priceVersionId], references: [id], onDelete: Restrict)
+  events OrderEvent[]
+  sheetLines DeliverySheetLine[]
+  dispatchLines DispatchLine[]
+  @@index([orderId])
+}
+
+model OrderEvent {
+  id String @id @default(uuid()) @db.Uuid
+  orderId String @db.Uuid
+  lineId String? @db.Uuid
+  kind String
+  oldValues Json?
+  newValues Json
+  actorId String @db.Uuid
+  reason String?
+  occurredAt DateTime @default(now())
+  order SalesOrder @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  line SalesOrderLine? @relation(fields: [lineId], references: [id], onDelete: Restrict)
+  @@index([orderId, occurredAt])
+}
+
+model DeliverySheet {
+  id String @id @default(uuid()) @db.Uuid
+  sheetNo String @unique
+  serviceDate DateTime @db.Date
+  status DeliverySheetStatus @default(PREPARED)
+  revision Int @default(1)
+  createdById String @db.Uuid
+  notes String?
+  createdAt DateTime @default(now())
+  lines DeliverySheetLine[]
+  dispatches Dispatch[]
+  @@index([serviceDate, createdAt])
+}
+
+model DeliverySheetLine {
+  id String @id @default(uuid()) @db.Uuid
+  sheetId String @db.Uuid
+  orderLineId String @db.Uuid
+  scheduledUnits Decimal @db.Decimal(18, 3)
+  orderNoSnapshot String
+  displayCustomerNameSnapshot String
+  phoneSnapshot String?
+  addressSnapshot String
+  fuelLabelSnapshot String
+  instructions String?
+  sheet DeliverySheet @relation(fields: [sheetId], references: [id], onDelete: Restrict)
+  orderLine SalesOrderLine @relation(fields: [orderLineId], references: [id], onDelete: Restrict)
+  dispatchLines DispatchLine[]
+  @@unique([sheetId, orderLineId])
+}
+
+model Dispatch {
+  id String @id @default(uuid()) @db.Uuid
+  dispatchNo String @unique
+  deliverySheetId String? @db.Uuid
+  status DispatchStatus @default(PREPARED)
+  dispatchedAt DateTime?
+  postedById String? @db.Uuid
+  postedAt DateTime?
+  idempotencyKey String? @unique
+  postIdempotencyKey String? @unique
+  notes String?
+  deliverySheet DeliverySheet? @relation(fields: [deliverySheetId], references: [id], onDelete: Restrict)
+  postedBy User? @relation(fields: [postedById], references: [id], onDelete: Restrict)
+  lines DispatchLine[]
+  confirmations DeliveryConfirmation[]
+  @@index([deliverySheetId])
+}
+
+model DispatchLine {
+  id String @id @default(uuid()) @db.Uuid
+  dispatchId String @db.Uuid
+  orderLineId String @db.Uuid
+  sheetLineId String? @db.Uuid
+  dispatchedUnits Decimal @db.Decimal(18, 3)
+  dispatchedLiters Decimal @db.Decimal(18, 3)
+  litersPerUnitSnapshot Decimal @db.Decimal(18, 6)
+  dispatch Dispatch @relation(fields: [dispatchId], references: [id], onDelete: Restrict)
+  orderLine SalesOrderLine @relation(fields: [orderLineId], references: [id], onDelete: Restrict)
+  sheetLine DeliverySheetLine? @relation(fields: [sheetLineId], references: [id], onDelete: Restrict)
+  confirmations DeliveryConfirmationLine[]
+  @@unique([dispatchId, orderLineId])
+}
+
+model DeliveryConfirmation {
+  id String @id @default(uuid()) @db.Uuid
+  confirmationNo String @unique
+  dispatchId String @db.Uuid
+  confirmedAt DateTime
+  recordedById String @db.Uuid
+  notes String?
+  idempotencyKey String @unique
+  dispatch Dispatch @relation(fields: [dispatchId], references: [id], onDelete: Restrict)
+  recordedBy User @relation(fields: [recordedById], references: [id], onDelete: Restrict)
+  lines DeliveryConfirmationLine[]
+  @@index([dispatchId, confirmedAt])
+}
+
+model DeliveryConfirmationLine {
+  id String @id @default(uuid()) @db.Uuid
+  confirmationId String @db.Uuid
+  dispatchLineId String @db.Uuid
+  acceptedUnits Decimal @db.Decimal(18, 3)
+  acceptedLiters Decimal @db.Decimal(18, 3)
+  physicalReturnedLiters Decimal @db.Decimal(18, 3)
+  commercialDisposition CommercialDisposition @default(NONE)
+  discrepancyReason String?
+  billingSourceKey String @unique
+  confirmation DeliveryConfirmation @relation(fields: [confirmationId], references: [id], onDelete: Restrict)
+  dispatchLine DispatchLine @relation(fields: [dispatchLineId], references: [id], onDelete: Restrict)
+}
+
+model InventoryMovement {
+  id String @id @default(uuid()) @db.Uuid
+  fuelId String @db.Uuid
+  location Location
+  signedDeltaLiters Decimal @db.Decimal(18, 3)
+  eventType MovementType
+  sourceType String
+  sourceId String
+  sourceLineId String?
+  occurredAt DateTime @default(now())
+  createdById String @db.Uuid
+  reversalOfId String?
+  fuel FuelType @relation(fields: [fuelId], references: [id], onDelete: Restrict)
+  @@unique([sourceType, sourceLineId, eventType, location])
+  @@index([fuelId, location, occurredAt])
+  @@index([sourceType, sourceId])
+}
+
+model StockBalance {
+  id String @id @default(uuid()) @db.Uuid
+  fuelId String @db.Uuid
+  location Location
+  balanceLiters Decimal @db.Decimal(18, 3)
+  version Int @default(0)
+  fuel FuelType @relation(fields: [fuelId], references: [id], onDelete: Restrict)
+  @@unique([fuelId, location])
+}
