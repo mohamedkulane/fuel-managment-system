@@ -6,9 +6,10 @@ import { useEffect, useState } from "react";
 import { api, type Actor } from "../lib/api";
 
 const groups = [
-  { label: "Workspace", links: [["/", "Overview"], ["/customers", "Customers"], ["/orders", "Sales orders"], ["/deliveries", "Delivery lists"]] },
+  { label: "Workspace", links: [["/", "Overview"], ["/customers", "Customers"], ["/orders", "Sales orders"], ["/deliveries", "Delivery lists"], ["/dispatches", "Dispatches"]] },
+  { label: "Finances & Billing", links: [["/invoices", "Invoices"], ["/payments", "Payments"], ["/debts", "Accounts receivable"], ["/reports", "Reports Hub"]] },
   { label: "Inventory & pricing", links: [["/stock", "Fuel inventory"], ["/stock/receive", "Tanker receipts"], ["/pricing", "Price book"]] },
-  { label: "Administration", links: [["/settings", "Settings"]] }
+  { label: "Administration", links: [["/settings", "Settings"], ["/audits", "Audit logs"]] }
 ] as const;
 
 export function AppShell({ children }: { children: React.ReactNode }) {

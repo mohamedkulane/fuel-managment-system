@@ -66,6 +66,33 @@ enum MovementType {
   REVERSAL
 }
 
+enum InvoiceStatus {
+  UNPAID
+  PARTIALLY_PAID
+  PAID
+  CANCELLED
+  REVERSED
+}
+enum PaymentStatus {
+  POSTED
+  REVERSED
+}
+enum PaymentMethod {
+  CASH
+  BANK_TRANSFER
+  EVC_PLUS
+  EDAHAB
+  OTHER
+}
+enum LedgerEntryType {
+  INVOICE
+  PAYMENT
+  PAYMENT_ALLOCATION
+  REVERSAL
+  CREDIT_NOTE
+  ADJUSTMENT
+}
+
 model User {
   id             String   @id @default(uuid()) @db.Uuid
   displayName    String
@@ -85,6 +112,10 @@ model User {
   createdUnits   FuelUnitVersion[]
   dispatches     Dispatch[]
   confirmations  DeliveryConfirmation[]
+  createdInvoices Invoice[] @relation("InvoiceCreator")
+  recordedPayments Payment[] @relation("PaymentRecorder")
+  createdAllocations PaymentAllocation[] @relation("AllocationCreator")
+  reversedPayments PaymentReversal[] @relation("PaymentReverser")
 }
 
 model Session {
@@ -125,6 +156,7 @@ model FuelType {
   orderLines SalesOrderLine[]
   movements InventoryMovement[]
   balances StockBalance[]
+  invoiceLines InvoiceLine[]
 }
 
 model SalesUnit {
@@ -135,6 +167,7 @@ model SalesUnit {
   versions FuelUnitVersion[]
   prices   PriceVersion[]
   orderLines SalesOrderLine[]
+  invoiceLines InvoiceLine[]
 }
 
 model FuelUnitVersion {
@@ -182,6 +215,9 @@ model Customer {
   createdBy   User @relation("CustomerCreator", fields: [createdById], references: [id], onDelete: Restrict)
   addresses   CustomerAddress[]
   orders      SalesOrder[]
+  invoices    Invoice[]
+  payments    Payment[]
+  ledgerEntries CustomerLedgerEntry[]
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   @@index([name])
@@ -274,6 +310,7 @@ model SalesOrderLine {
   events OrderEvent[]
   sheetLines DeliverySheetLine[]
   dispatchLines DispatchLine[]
+  invoiceLines InvoiceLine[]
   @@index([orderId])
 }
 
@@ -382,6 +419,121 @@ model DeliveryConfirmationLine {
   billingSourceKey String @unique
   confirmation DeliveryConfirmation @relation(fields: [confirmationId], references: [id], onDelete: Restrict)
   dispatchLine DispatchLine @relation(fields: [dispatchLineId], references: [id], onDelete: Restrict)
+  invoice Invoice?
+}
+
+model Invoice {
+  id                         String   @id @default(uuid()) @db.Uuid
+  invoiceNo                  String   @unique
+  customerId                 String   @db.Uuid
+  deliveryConfirmationLineId String?  @unique @db.Uuid
+  billingSourceKey           String   @unique
+  issueDate                  DateTime
+  dueDate                    DateTime?
+  status                     InvoiceStatus @default(UNPAID)
+  subtotal                   Decimal  @db.Decimal(20, 4)
+  taxAmount                  Decimal  @db.Decimal(20, 4) @default(0)
+  totalAmount                Decimal  @db.Decimal(20, 4)
+  paidAmount                 Decimal  @db.Decimal(20, 4) @default(0)
+  balanceDue                 Decimal  @db.Decimal(20, 4)
+  currencyCode               String   @default("USD")
+  notes                      String?
+  createdById                String   @db.Uuid
+  createdAt                  DateTime @default(now())
+
+  customer                 Customer                 @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  createdBy                User                     @relation("InvoiceCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  deliveryConfirmationLine DeliveryConfirmationLine? @relation(fields: [deliveryConfirmationLineId], references: [id], onDelete: Restrict)
+
+  lines       InvoiceLine[]
+  allocations PaymentAllocation[]
+  @@index([customerId, issueDate])
+  @@index([status])
+}
+
+model InvoiceLine {
+  id                    String   @id @default(uuid()) @db.Uuid
+  invoiceId             String   @db.Uuid
+  orderLineId           String   @db.Uuid
+  fuelId                String   @db.Uuid
+  salesUnitId           String   @db.Uuid
+  acceptedUnits         Decimal  @db.Decimal(18, 3)
+  acceptedLiters        Decimal  @db.Decimal(18, 3)
+  unitPriceSnapshot     Decimal  @db.Decimal(20, 4)
+  litersPerUnitSnapshot Decimal  @db.Decimal(18, 6)
+  lineTotal             Decimal  @db.Decimal(20, 4)
+
+  invoice   Invoice        @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  orderLine SalesOrderLine @relation(fields: [orderLineId], references: [id], onDelete: Restrict)
+  fuel      FuelType       @relation(fields: [fuelId], references: [id], onDelete: Restrict)
+  salesUnit SalesUnit      @relation(fields: [salesUnitId], references: [id], onDelete: Restrict)
+  @@index([invoiceId])
+}
+
+model Payment {
+  id              String        @id @default(uuid()) @db.Uuid
+  paymentNo       String        @unique
+  customerId      String        @db.Uuid
+  amount          Decimal       @db.Decimal(20, 4)
+  allocatedAmount Decimal       @db.Decimal(20, 4) @default(0)
+  unappliedAmount Decimal       @db.Decimal(20, 4)
+  paymentDate     DateTime
+  paymentMethod   PaymentMethod @default(CASH)
+  reference       String?
+  notes           String?
+  idempotencyKey  String?       @unique
+  status          PaymentStatus @default(POSTED)
+  recordedById    String        @db.Uuid
+  createdAt       DateTime      @default(now())
+
+  customer    Customer            @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  recordedBy  User                @relation("PaymentRecorder", fields: [recordedById], references: [id], onDelete: Restrict)
+  allocations PaymentAllocation[]
+  reversals   PaymentReversal[]
+  @@index([customerId, paymentDate])
+}
+
+model PaymentAllocation {
+  id          String   @id @default(uuid()) @db.Uuid
+  paymentId   String   @db.Uuid
+  invoiceId   String   @db.Uuid
+  amount      Decimal  @db.Decimal(20, 4)
+  allocatedAt DateTime @default(now())
+  createdById String   @db.Uuid
+
+  payment   Payment  @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  invoice   Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  createdBy User     @relation("AllocationCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  @@unique([paymentId, invoiceId])
+}
+
+model PaymentReversal {
+  id           String   @id @default(uuid()) @db.Uuid
+  reversalNo   String   @unique
+  paymentId    String   @db.Uuid
+  reason       String
+  reversedById String   @db.Uuid
+  reversedAt   DateTime @default(now())
+
+  payment    Payment @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  reversedBy User    @relation("PaymentReverser", fields: [reversedById], references: [id], onDelete: Restrict)
+}
+
+model CustomerLedgerEntry {
+  id             String          @id @default(uuid()) @db.Uuid
+  customerId     String          @db.Uuid
+  occurredAt     DateTime        @default(now())
+  entryType      LedgerEntryType
+  referenceNo    String
+  debitAmount    Decimal         @db.Decimal(20, 4) @default(0)
+  creditAmount   Decimal         @db.Decimal(20, 4) @default(0)
+  runningBalance Decimal         @db.Decimal(20, 4)
+  sourceType     String
+  sourceId       String
+  notes          String?
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  @@index([customerId, occurredAt])
 }
 
 model InventoryMovement {
@@ -411,3 +563,4 @@ model StockBalance {
   fuel FuelType @relation(fields: [fuelId], references: [id], onDelete: Restrict)
   @@unique([fuelId, location])
 }
+

@@ -1,5 +1,16 @@
-export const apiBase = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api/v1";
+const envUrl = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "");
+export const apiBase = envUrl
+  ? (envUrl.endsWith("/api/v1") ? envUrl : `${envUrl}/api/v1`)
+  : "http://localhost:4000/api/v1";
 export type Actor = { id: string; displayName: string; email: string; role: "OWNER" | "OFFICE_EMPLOYEE" };
+
+export type PaginatedResponse<T> = {
+  items: T[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+};
 
 export class ApiError extends Error { public constructor(public readonly status: number, message: string) { super(message); } }
 
@@ -11,3 +22,4 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const mutationKey = (): string => crypto.randomUUID();
+

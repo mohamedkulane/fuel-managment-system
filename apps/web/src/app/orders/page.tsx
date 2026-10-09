@@ -1,7 +1,168 @@
 "use client";
+import { useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, mutationKey } from "../../lib/api";
-import { Badge, Card, CardHead, Empty, ErrorState, PageHeader } from "../../components/ui";
-type Order={id:string;orderNo:string;status:string;orderDate:string;requestedDeliveryDate:string|null;customer:{name:string};lines:Array<{requestedUnits:string;fuel:{displayName:string};unitPriceSnapshot:string|null;litersPerUnitSnapshot:string|null}>};
-export default function OrdersPage(){const client=useQueryClient();const rows=useQuery({queryKey:["orders"],queryFn:()=>api<Order[]>("/orders")});const confirm=useMutation({mutationFn:(id:string)=>api(`/orders/${id}/confirm`,{method:"POST",headers:{"idempotency-key":mutationKey()}}),onSuccess:async()=>client.invalidateQueries({queryKey:["orders"]})});return <main className="page"><PageHeader eyebrow="Sales operations" title="Sales orders" description="Confirmed orders freeze effective price and fuusto-to-liter snapshots." actions={<Link className="btn primary" href="/orders/new">Create order</Link>}/><Card><CardHead title="Order register" description="Requested quantities remain historical after dispatch and acceptance"/>{rows.isError?<ErrorState message={(rows.error as Error).message} retry={()=>void rows.refetch()}/>:<div className="table-wrap"><table className="data-table"><thead><tr><th>Order</th><th>Customer</th><th>Requested</th><th>Delivery date</th><th>Status</th><th></th></tr></thead><tbody>{rows.data?.map(row=><tr key={row.id}><td><Link className="strong" href={`/orders/${row.id}`}>{row.orderNo}</Link></td><td>{row.customer.name}</td><td>{row.lines.map(line=>`${line.fuel.displayName}: ${line.requestedUnits} fuusto`).join(", ")}</td><td>{row.requestedDeliveryDate?.slice(0,10)??"—"}</td><td><Badge tone={row.status==="DRAFT"?"neutral":row.status==="FULFILLED"?"ok":"info"}>{row.status}</Badge></td><td>{row.status==="DRAFT"&&<button className="btn primary" disabled={confirm.isPending} onClick={()=>confirm.mutate(row.id)}>Confirm</button>}</td></tr>)}</tbody></table>{rows.data?.length===0&&<Empty>No orders found.</Empty>}</div>}{confirm.isError&&<div className="notice warn">{(confirm.error as Error).message}</div>}</Card></main>}
+import { api, mutationKey, type PaginatedResponse } from "../../lib/api";
+import { Badge, Card, CardHead, Empty, ErrorState, PageHeader, Pagination } from "../../components/ui";
+
+type Order = {
+  id: string;
+  orderNo: string;
+  status: string;
+  orderDate: string;
+  requestedDeliveryDate: string | null;
+  customer: { name: string };
+  lines: Array<{
+    requestedUnits: string;
+    fuel: { displayName: string };
+    unitPriceSnapshot: string | null;
+    litersPerUnitSnapshot: string | null;
+  }>;
+};
+
+export default function OrdersPage() {
+  const client = useQueryClient();
+  const [search, setSearch] = useState("");
+  const [status, setStatus] = useState("");
+  const [page, setPage] = useState(1);
+
+  const queryParams = new URLSearchParams({ page: String(page), limit: "15" });
+  if (search.trim()) queryParams.set("search", search.trim());
+  if (status) queryParams.set("status", status);
+
+  const rows = useQuery({
+    queryKey: ["orders", search, status, page],
+    queryFn: () => api<PaginatedResponse<Order> | Order[]>(`/orders?${queryParams.toString()}`)
+  });
+
+  const confirm = useMutation({
+    mutationFn: (id: string) =>
+      api(`/orders/${id}/confirm`, {
+        method: "POST",
+        headers: { "idempotency-key": mutationKey() }
+      }),
+    onSuccess: async () => client.invalidateQueries({ queryKey: ["orders"] })
+  });
+
+  const rawData = rows.data;
+  const items: Order[] = Array.isArray(rawData) ? rawData : (rawData?.items ?? []);
+  const totalPages = Array.isArray(rawData) ? 1 : (rawData?.totalPages ?? 1);
+
+  return (
+    <main className="page">
+      <PageHeader
+        eyebrow="Sales operations"
+        title="Sales orders"
+        description="Confirmed orders freeze effective price and fuusto-to-liter snapshots."
+        actions={
+          <Link className="btn primary" href="/orders/new">
+            Create order
+          </Link>
+        }
+      />
+      <Card>
+        <CardHead
+          title="Order register"
+          description="Requested quantities remain historical after dispatch and acceptance"
+        />
+        <div className="toolbar" style={{ marginBottom: 16 }}>
+          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", flex: 1 }}>
+            <input
+              className="input"
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
+              placeholder="Search by order # or customer name…"
+              aria-label="Search orders"
+              style={{ flex: 1, minWidth: "220px" }}
+            />
+            <select
+              className="select"
+              value={status}
+              onChange={(e) => {
+                setStatus(e.target.value);
+                setPage(1);
+              }}
+            >
+              <option value="">All Statuses</option>
+              <option value="DRAFT">Draft</option>
+              <option value="CONFIRMED">Confirmed</option>
+              <option value="SCHEDULED">Scheduled</option>
+              <option value="IN_PROGRESS">In Progress</option>
+              <option value="PARTIALLY_FULFILLED">Partially Fulfilled</option>
+              <option value="FULFILLED">Fulfilled</option>
+              <option value="CANCELLED">Cancelled</option>
+            </select>
+          </div>
+        </div>
+
+        {rows.isError ? (
+          <ErrorState message={(rows.error as Error).message} retry={() => void rows.refetch()} />
+        ) : (
+          <div className="table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Order</th>
+                  <th>Customer</th>
+                  <th>Requested</th>
+                  <th>Delivery date</th>
+                  <th>Status</th>
+                  <th style={{ textAlign: "right" }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((row) => (
+                  <tr key={row.id}>
+                    <td>
+                      <Link className="strong mono" href={`/orders/${row.id}`}>
+                        {row.orderNo}
+                      </Link>
+                    </td>
+                    <td>{row.customer.name}</td>
+                    <td>
+                      {row.lines.map((line) => `${line.fuel.displayName}: ${line.requestedUnits} fuusto`).join(", ")}
+                    </td>
+                    <td>{row.requestedDeliveryDate?.slice(0, 10) ?? "—"}</td>
+                    <td>
+                      <Badge
+                        tone={
+                          row.status === "DRAFT"
+                            ? "neutral"
+                            : row.status === "FULFILLED"
+                            ? "ok"
+                            : row.status === "CONFIRMED" || row.status === "SCHEDULED" || row.status === "IN_PROGRESS"
+                            ? "info"
+                            : "warn"
+                        }
+                      >
+                        {row.status}
+                      </Badge>
+                    </td>
+                    <td style={{ textAlign: "right" }}>
+                      {row.status === "DRAFT" && (
+                        <button
+                          className="btn primary small"
+                          disabled={confirm.isPending}
+                          onClick={() => confirm.mutate(row.id)}
+                        >
+                          Confirm
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {items.length === 0 && <Empty>No orders found.</Empty>}
+            <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
+          </div>
+        )}
+        {confirm.isError && <div className="notice warn" style={{ marginTop: 16 }}>{(confirm.error as Error).message}</div>}
+      </Card>
+    </main>
+  );
+}
+
