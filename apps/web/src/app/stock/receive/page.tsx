@@ -1,8 +1,9 @@
 "use client";
+import { dateTime } from "../../../lib/format";
 import { FormEvent, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, mutationKey, type Actor } from "../../../lib/api";
-import { Badge, Card, CardHead, Empty, ErrorState, Modal, PageHeader, SubmitButton } from "../../../components/ui";
+import { LoadingState, Badge, Card, CardHead, Empty, ErrorState, Modal, PageHeader, SubmitButton } from "../../../components/ui";
 
 type Fuel = { id: string; code: string; displayName: string };
 type ReceiptLine = {
@@ -24,6 +25,7 @@ type Receipt = {
 
 export default function ReceivePage() {
   const client = useQueryClient();
+  const [showCreate, setShowCreate] = useState(false);
   const [selectedReceiptId, setSelectedReceiptId] = useState<string | null>(null);
 
   const me = useQuery({ queryKey: ["me"], queryFn: () => api<Actor>("/auth/me") });
@@ -39,6 +41,7 @@ export default function ReceivePage() {
   const create = useMutation({
     mutationFn: (body: object) => api<Receipt>("/tanker-receipts", { method: "POST", body: JSON.stringify(body) }),
     onSuccess: async () => {
+      setShowCreate(false);
       await client.invalidateQueries({ queryKey: ["tanker-receipts"] });
     }
   });
@@ -79,11 +82,12 @@ export default function ReceivePage() {
   }
 
   return (
-    <main className="page">
+    <main className="page receive-page">
       <PageHeader
         eyebrow="Stock receiving"
         title="Tanker receipts"
-        description="A booyad is an incoming tanker truck delivery. Register and post actual measured liters to canonical stock."
+        description="Record incoming booyado and post verified liters into warehouse stock."
+        actions={<button className="btn primary" onClick={() => setShowCreate(!showCreate)}>{showCreate ? "Close arrival form" : "Register new tanker"}</button>}
       />
 
       {selectedReceiptId && (
@@ -114,7 +118,7 @@ export default function ReceivePage() {
                   </div>
                   <div>
                     <small className="muted">Arrived At</small>
-                    <div>{new Date(receiptDetail.data.arrivedAt).toLocaleString()}</div>
+                    <div>{dateTime(receiptDetail.data.arrivedAt)}</div>
                   </div>
                 </div>
 
@@ -158,22 +162,22 @@ export default function ReceivePage() {
         </Modal>
       )}
 
-      <div className="two-col">
+      {showCreate && <div className="two-col">
         <Card>
           <CardHead title="Record Tanker Arrival" description="Saving creates a draft receipt; posting updates inventory stock." />
           <form className="card-body" onSubmit={submit}>
             <div className="form-grid">
               <div className="field">
-                <label>Truck / Tanker reference</label>
-                <input className="input" name="reference" placeholder="e.g. Tanker #TRK-884" />
+                <label htmlFor="reference">Truck / Tanker reference</label>
+                <input id="reference" className="input" name="reference" placeholder="e.g. Tanker #TRK-884" />
               </div>
               <div className="field">
-                <label>Arrival date & time *</label>
-                <input className="input" name="arrivedAt" type="datetime-local" required defaultValue={new Date().toISOString().slice(0, 16)} />
+                <label htmlFor="arrivedAt">Arrival date & time *</label>
+                <input id="arrivedAt" className="input" name="arrivedAt" type="datetime-local" required defaultValue={new Date().toISOString().slice(0, 16)} />
               </div>
               <div className="field">
-                <label>Fuel type *</label>
-                <select className="select" name="fuelId" required>
+                <label htmlFor="fuelId">Fuel type *</label>
+                <select id="fuelId" className="select" name="fuelId" required>
                   <option value="">Select fuel type</option>
                   {fuels.data?.map((f) => (
                     <option key={f.id} value={f.id}>
@@ -183,17 +187,17 @@ export default function ReceivePage() {
                 </select>
               </div>
               <div className="field">
-                <label>Actual measured liters *</label>
-                <input className="input" name="actualLiters" inputMode="decimal" required placeholder="e.g. 10000.000" />
+                <label htmlFor="actualLiters">Actual measured liters *</label>
+                <input id="actualLiters" className="input" name="actualLiters" inputMode="decimal" required placeholder="e.g. 10000.000" />
               </div>
               <div className="field">
-                <label>Expected liters (optional)</label>
-                <input className="input" name="expectedLiters" inputMode="decimal" placeholder="e.g. 10000.000" />
+                <label htmlFor="expectedLiters">Expected liters (optional)</label>
+                <input id="expectedLiters" className="input" name="expectedLiters" inputMode="decimal" placeholder="e.g. 10000.000" />
               </div>
               {isOwner && (
                 <div className="field">
-                  <label>Unit purchase cost USD/L (Owner only)</label>
-                  <input className="input" name="unitPurchaseCost" inputMode="decimal" placeholder="e.g. 0.8500" />
+                  <label htmlFor="unitPurchaseCost">Unit purchase cost USD/L (Owner only)</label>
+                  <input id="unitPurchaseCost" className="input" name="unitPurchaseCost" inputMode="decimal" placeholder="e.g. 0.8500" />
                 </div>
               )}
             </div>
@@ -205,20 +209,20 @@ export default function ReceivePage() {
         </Card>
 
         <Card>
-          <CardHead title="Booyad Receiving Rules" />
+          <CardHead title="Before you post" />
           <div className="card-body">
             <p>
-              <b>Canonical Stock Unit</b>
+              <b>01 · Measure the fuel</b>
               <br />
               All fuel is stocked in actual liters.
             </p>
             <p>
-              <b>Atomic Posting</b>
+              <b>02 · Review and post</b>
               <br />
-              Posting a draft tanker receipt increases warehouse stock balance immediately.
+              Review the draft before posting. Posting adds the measured liters to warehouse stock.
             </p>
             <p>
-              <b>Purchase Cost Confidentiality</b>
+              <b>03 · Purchase information</b>
               <br />
               {isOwner
                 ? "You have Owner privileges. Purchase costs are recorded and visible."
@@ -226,11 +230,11 @@ export default function ReceivePage() {
             </p>
           </div>
         </Card>
-      </div>
+      </div>}
 
       <Card>
         <CardHead title="Incoming Tanker Register" description="Draft and posted tanker receipts" />
-        {receipts.isError ? (
+        {receipts.isLoading ? <LoadingState /> : receipts.isError ? (
           <ErrorState message={(receipts.error as Error).message} />
         ) : (
           <div className="table-wrap">

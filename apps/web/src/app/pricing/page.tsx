@@ -1,4 +1,7 @@
 "use client";
+import { Fuel as FuelIcon, Pencil } from "lucide-react";
+import { decimal } from "../../lib/format";
+import { dateTime } from "../../lib/format";
 import { FormEvent, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, type Actor } from "../../lib/api";
@@ -65,11 +68,11 @@ export default function PricingPage() {
   const owner = me.data?.role === "OWNER";
 
   return (
-    <main className="page">
+    <main className="page pricing-page">
       <PageHeader
-        eyebrow="Price & Container Management"
-        title="Price book & Fuusto configuration"
-        description="Effective-dated master records. Confirmed sales orders retain their price and conversion snapshots forever."
+        eyebrow="Pricing & conversions"
+        title="Fuel pricing"
+        description="Manage Diesel and Petrol selling rates. Previously confirmed orders retain their prices."
         actions={
           owner ? (
             <>
@@ -84,8 +87,14 @@ export default function PricingPage() {
         }
       />
 
+      <div className="price-grid">
+        {fuels.data?.map(fuel => {
+          const current = prices.data?.filter(p => p.fuel.id === fuel.id && new Date(p.effectiveFromUtc).getTime() <= Date.now() && (!p.effectiveToUtc || new Date(p.effectiveToUtc).getTime() > Date.now())) ?? [];
+          return <Card className="price-card" key={fuel.id}><div className="metric-top"><Badge tone={current.length ? "ok" : "warn"}>{current.length ? "Current selling rate" : "Not configured"}</Badge><span className="metric-icon"><FuelIcon size={18} /></span></div><h2>{fuel.displayName}</h2>{prices.isError ? <ErrorState message={prices.error.message} retry={() => void prices.refetch()} /> : current.length ? current.map(price => <div key={price.id}><div className="price-value mono">{price.currencyCode} {decimal(price.unitPrice)}<small>/ {price.salesUnit.name}</small></div><div className="price-meta"><span>Effective {dateTime(price.effectiveFromUtc)}</span>{owner && <button className="btn dark small" onClick={() => setMode("price")}><Pencil size={13} />Change rate</button>}</div></div>) : <p className="muted">{prices.isLoading ? "Loading rates…" : "An owner must configure a selling price before confirming orders."}</p>}</Card>;
+        })}
+      </div>
       <div className="notice">
-        <b>Configurable Container Sizes:</b> 20 Liters is an illustrative example only. Sales order confirmations require an active Fuusto capacity version set up by an Owner.
+        <b>Configurable Container Sizes:</b> Set the actual liters per fuusto before confirming orders. New versions never change historical quantities.
       </div>
 
       <Modal
@@ -96,8 +105,8 @@ export default function PricingPage() {
         <form onSubmit={submit}>
           <div className="form-grid">
             <div className="field">
-              <label>Fuel Type *</label>
-              <select className="select" name="fuelId" required>
+              <label htmlFor="fuelId">Fuel Type *</label>
+              <select id="fuelId" className="select" name="fuelId" required>
                 <option value="">Select fuel</option>
                 {fuels.data?.map((x) => (
                   <option key={x.id} value={x.id}>
@@ -107,8 +116,8 @@ export default function PricingPage() {
               </select>
             </div>
             <div className="field">
-              <label>Sales Unit *</label>
-              <select className="select" name="salesUnitId" required>
+              <label htmlFor="salesUnitId">Sales Unit *</label>
+              <select id="salesUnitId" className="select" name="salesUnitId" required>
                 <option value="">Select unit</option>
                 {units.data?.map((x) => (
                   <option key={x.id} value={x.id}>
@@ -118,17 +127,17 @@ export default function PricingPage() {
               </select>
             </div>
             <div className="field">
-              <label>{mode === "price" ? "Price per Fuusto ($ USD) *" : "Liters per Fuusto *"}</label>
-              <input className="input" name="value" inputMode="decimal" placeholder={mode === "price" ? "120.0000" : "20.000000"} required />
+              <label htmlFor="value">{mode === "price" ? "Price per Fuusto ($ USD) *" : "Liters per Fuusto *"}</label>
+              <input id="value" className="input" name="value" inputMode="decimal" placeholder={mode === "price" ? "Enter selling price" : "Enter confirmed capacity"} required />
             </div>
             <div className="field">
-              <label>Effective Date & Time *</label>
-              <input className="input" name="effectiveFromUtc" type="datetime-local" required defaultValue={new Date().toISOString().slice(0, 16)} />
+              <label htmlFor="effectiveFromUtc">Effective Date & Time *</label>
+              <input id="effectiveFromUtc" className="input" name="effectiveFromUtc" type="datetime-local" required defaultValue={new Date().toISOString().slice(0, 16)} />
             </div>
             {mode === "price" && (
               <div className="field full">
-                <label>Update Reason</label>
-                <input className="input" name="reason" placeholder="e.g. Inbound tanker price adjustment" />
+                <label htmlFor="reason">Update Reason</label>
+                <input id="reason" className="input" name="reason" placeholder="e.g. Inbound tanker price adjustment" />
               </div>
             )}
           </div>
@@ -142,7 +151,7 @@ export default function PricingPage() {
         </form>
       </Modal>
 
-      <div className="two-col">
+      <div className="two-col equal-cols">
         <Card>
           <CardHead title="Fuusto Capacity History" description="Liters per Fuusto unit configuration history" />
           {versions.isError ? (
@@ -164,7 +173,7 @@ export default function PricingPage() {
                       <td className="strong">{row.fuel}</td>
                       <td>{row.unit}</td>
                       <td className="strong mono">{row.litersPerUnit} L</td>
-                      <td>{new Date(row.effectiveFromUtc).toLocaleString()}</td>
+                      <td>{dateTime(row.effectiveFromUtc)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -196,7 +205,7 @@ export default function PricingPage() {
                       <td className="strong mono">
                         {row.currencyCode} ${row.unitPrice}
                       </td>
-                      <td>{new Date(row.effectiveFromUtc).toLocaleString()}</td>
+                      <td>{dateTime(row.effectiveFromUtc)}</td>
                       <td>
                         <Badge tone={row.effectiveToUtc ? "neutral" : "ok"}>
                           {row.effectiveToUtc ? "Historical" : "Active"}

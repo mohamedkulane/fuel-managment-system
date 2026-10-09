@@ -1,11 +1,16 @@
 "use client";
+import Decimal from "decimal.js";
+import { Receipt, Wallet, CircleCheck, TrendingUp } from "lucide-react";
+import { sum } from "../../../lib/format";
+import { dateTime } from "../../../lib/format";
+import { decimal } from "../../../lib/format";
 
 import { FormEvent, useState } from "react";
 import { useParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import { api, type PaginatedResponse } from "../../../lib/api";
-import { Badge, Card, CardHead, Empty, ErrorState, Modal, PageHeader, Pagination, SubmitButton } from "../../../components/ui";
+import { api, apiBase, type PaginatedResponse } from "../../../lib/api";
+import { Badge, Card, CardHead, Empty, ErrorState, LoadingState, MetricCard, Modal, PageHeader, Pagination, SubmitButton } from "../../../components/ui";
 
 type Address = { id: string; label: string; addressText: string; district: string | null; city: string | null };
 
@@ -141,7 +146,7 @@ export default function CustomerDetailPage() {
 
   if (customerQuery.isError) {
     return (
-      <main className="page">
+      <main className="page detail-page">
         <ErrorState message={(customerQuery.error as Error).message} retry={() => void customerQuery.refetch()} />
       </main>
     );
@@ -182,8 +187,8 @@ export default function CustomerDetailPage() {
 
       {/* Top Header */}
       <PageHeader
-        eyebrow="Customer Commercial Account"
-        title={cust?.name ?? "Loading Customer Profile…"}
+        eyebrow="Customer relationships"
+        title="Customer account"
         description={
           cust
             ? `Customer Code: ${cust.code} · Primary Phone: ${cust.primaryPhone ?? "N/A"} · Registered: ${
@@ -195,19 +200,19 @@ export default function CustomerDetailPage() {
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <a
               className="btn"
-              href={`/api/v1/customers/${id}/statement/pdf`}
+              href={`${apiBase}/customers/${id}/statement/pdf`}
               target="_blank"
               rel="noreferrer"
               title="Download official PDF statement document"
             >
-              📄 Download PDF Statement
+              Download PDF Statement
             </a>
             <button className="btn" onClick={() => window.print()} title="Print browser view of financial statement">
-              🖨️ Print Statement
+              Print Statement
             </button>
             {cust && (
               <button className="btn primary" onClick={() => setShowEdit(true)}>
-                ✏️ Edit Customer
+                Edit Customer
               </button>
             )}
             <Link className="btn" href="/customers">
@@ -224,28 +229,28 @@ export default function CustomerDetailPage() {
             <form onSubmit={handleEditSubmit}>
               <div className="form-grid">
                 <div className="field">
-                  <label>Customer Name *</label>
-                  <input className="input" name="name" defaultValue={cust.name} required />
+                  <label htmlFor="name">Customer Name *</label>
+                  <input id="name" className="input" name="name" defaultValue={cust.name} required />
                 </div>
                 <div className="field">
-                  <label>Primary Phone</label>
-                  <input className="input" name="phone" defaultValue={cust.primaryPhone ?? ""} />
+                  <label htmlFor="phone">Primary Phone</label>
+                  <input id="phone" className="input" name="phone" defaultValue={cust.primaryPhone ?? ""} />
                 </div>
                 <div className="field">
-                  <label>Account Status</label>
-                  <select className="select" name="status" defaultValue={cust.status}>
+                  <label htmlFor="status">Account Status</label>
+                  <select id="status" className="select" name="status" defaultValue={cust.status}>
                     <option value="ACTIVE">Active (Normal Trading)</option>
                     <option value="HOLD">Account Hold (Restrict New Credit Orders)</option>
                     <option value="INACTIVE">Inactive</option>
                   </select>
                 </div>
                 <div className="field full">
-                  <label>Primary Delivery Address</label>
-                  <input className="input" name="address" defaultValue={cust.addresses[0]?.addressText ?? ""} />
+                  <label htmlFor="address">Primary Delivery Address</label>
+                  <input id="address" className="input" name="address" defaultValue={cust.addresses[0]?.addressText ?? ""} />
                 </div>
                 <div className="field full">
-                  <label>Operational Notes</label>
-                  <input className="input" name="notes" defaultValue={cust.notes ?? ""} />
+                  <label htmlFor="notes">Operational Notes</label>
+                  <input id="notes" className="input" name="notes" defaultValue={cust.notes ?? ""} />
                 </div>
               </div>
               {updateCustomer.isError && (
@@ -262,84 +267,23 @@ export default function CustomerDetailPage() {
             </form>
           </Modal>
 
-          {/* Top 5 Financial Summary KPI Cards Grid */}
-          <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16, marginBottom: 24 }}>
-            <Card className="kpi">
-              <small>Total Invoiced</small>
-              <strong className="mono">${parseFloat(fin?.totalInvoiced ?? "0").toFixed(2)}</strong>
-              <span>Gross Invoiced Sales</span>
-            </Card>
-
-            <Card className="kpi">
-              <small>Total Payments Received</small>
-              <strong className="mono text-emerald-400">${parseFloat(fin?.totalPaid ?? "0").toFixed(2)}</strong>
-              <span>Posted Receipts Total</span>
-            </Card>
-
-            <Card className="kpi" style={{ borderColor: parseFloat(fin?.outstandingDebt ?? "0") > 0 ? "#f43f5e" : undefined }}>
-              <small>Outstanding Invoice Debt</small>
-              <strong className="mono" style={{ color: parseFloat(fin?.outstandingDebt ?? "0") > 0 ? "#f43f5e" : "inherit" }}>
-                ${parseFloat(fin?.outstandingDebt ?? "0").toFixed(2)}
-              </strong>
-              <span>Unpaid Invoices Total</span>
-            </Card>
-
-            <Card className="kpi" style={{ borderColor: parseFloat(fin?.unappliedCredit ?? "0") > 0 ? "#f59e0b" : undefined }}>
-              <small>Unapplied Customer Credit</small>
-              <strong className="mono" style={{ color: parseFloat(fin?.unappliedCredit ?? "0") > 0 ? "#f59e0b" : "inherit" }}>
-                ${parseFloat(fin?.unappliedCredit ?? "0").toFixed(2)}
-              </strong>
-              <span>Overpayments / Deposit Credit</span>
-            </Card>
-
-            <Card className="kpi" style={{ background: "var(--card-bg, #f8fafc)", borderLeft: "4px solid #2563eb" }}>
-              <small>Net Account Position</small>
-              <strong className="mono" style={{ fontSize: 20 }}>
-                ${parseFloat(fin?.netPosition ?? "0").toFixed(2)}
-              </strong>
-              <span>
-                <Badge tone={parseFloat(fin?.netPosition ?? "0") > 0 ? "warn" : parseFloat(fin?.netPosition ?? "0") < 0 ? "ok" : "neutral"}>
-                  {parseFloat(fin?.netPosition ?? "0") > 0
-                    ? "Net Debt Due"
-                    : parseFloat(fin?.netPosition ?? "0") < 0
-                    ? "Net Unapplied Credit"
-                    : "Settled Account"}
-                </Badge>
-              </span>
-            </Card>
-          </div>
-
-          {/* Account Tabs Header */}
-          <div className="tabs-header no-print" style={{ display: "flex", borderBottom: "2px solid #e2e8f0", marginBottom: 20, gap: 4 }}>
-            {[
-              { id: "overview", label: "📊 Overview" },
-              { id: "orders", label: "📦 Orders & Deliveries" },
-              { id: "invoices", label: "📄 Invoices & Debts" },
-              { id: "payments", label: "💳 Payments & Receipts" },
-              { id: "ledger", label: "📖 Statement & Subledger" }
-            ].map((tab) => {
-              const active = activeTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id as any)}
-                  style={{
-                    padding: "10px 18px",
-                    border: "none",
-                    background: "none",
-                    fontWeight: active ? 700 : 500,
-                    fontSize: 14,
-                    color: active ? "#2563eb" : "#64748b",
-                    borderBottom: active ? "3px solid #2563eb" : "3px solid transparent",
-                    cursor: "pointer",
-                    transition: "all 0.15s ease"
-                  }}
-                >
-                  {tab.label}
-                </button>
-              );
-            })}
-          </div>
+          <Card className="profile-identity"><div className="avatar">{cust.name.split(" ").slice(0,2).map(n => n[0]).join("")}</div><div><h2>{cust.name}</h2><p>{cust.code} · {cust.primaryPhone ?? "No phone recorded"} · <Badge tone={cust.status === "ACTIVE" ? "ok" : "warn"}>{cust.status}</Badge></p></div><div className="actions"><button className="btn" onClick={() => setShowEdit(true)}>Edit customer</button><Link className="btn primary" href="/orders/new">New order</Link></div></Card>
+          {financialQuery.isError ? <ErrorState message={financialQuery.error.message} retry={() => void financialQuery.refetch()} /> : financialQuery.isLoading ? <LoadingState label="Loading account balances…" /> : <div className="grid profile-metrics">
+            <MetricCard label="Total invoiced" value={`$${decimal(fin?.totalInvoiced)}`} note="Historical posted invoices" icon={Receipt} />
+            <MetricCard label="Total received" value={`$${decimal(fin?.totalPaid)}`} note="Posted payments" icon={Wallet} />
+            <MetricCard label="Outstanding debt" value={`$${decimal(fin?.outstandingDebt)}`} note="Open invoice amount" icon={TrendingUp} dark />
+            <MetricCard label="Unapplied credit" value={`$${decimal(fin?.unappliedCredit)}`} note="Not yet allocated" icon={CircleCheck} />
+            <MetricCard label="Net account position" value={`$${decimal(fin?.netPosition)}`} note="Debt less available credit" icon={Wallet} />
+          </div>}
+          <nav className="tabs-header no-print" aria-label="Customer account sections">
+            {([
+              { id: "overview", label: "Overview" },
+              { id: "orders", label: "Orders & deliveries" },
+              { id: "invoices", label: "Invoices & debts" },
+              { id: "payments", label: "Payments" },
+              { id: "ledger", label: "Account ledger" }
+            ] as const).map(tab => <button key={tab.id} className={activeTab === tab.id ? "active" : ""} aria-current={activeTab === tab.id ? "page" : undefined} onClick={() => setActiveTab(tab.id)}>{tab.label}</button>)}
+          </nav>
 
           {/* Tab 1: Overview */}
           {activeTab === "overview" && <CustomerOverviewTab customer={cust} fin={fin} />}
@@ -370,7 +314,7 @@ function CustomerOverviewTab({ customer, fin }: { customer: Customer; fin?: Fina
       <div className="two-col">
         {/* Account Metadata */}
         <Card>
-          <CardHead title="Customer Account Metadata" description="Primary operational profile details" />
+          <CardHead title="Account details" description="Contact and delivery information" />
           <div className="card-body">
             <div className="grid grid-cols-2 gap-4" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
               <div>
@@ -393,7 +337,7 @@ function CustomerOverviewTab({ customer, fin }: { customer: Customer; fin?: Fina
               </div>
             </div>
 
-            <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid #eff0f2" }}>
+            <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid var(--line)" }}>
               <small className="muted" style={{ display: "block", fontSize: 12, marginBottom: 6 }}>Registered Delivery Addresses</small>
               {customer.addresses.length === 0 ? (
                 <span className="muted">No explicit delivery addresses saved.</span>
@@ -407,7 +351,7 @@ function CustomerOverviewTab({ customer, fin }: { customer: Customer; fin?: Fina
             </div>
 
             {customer.notes && (
-              <div style={{ marginTop: 16, paddingTop: 12, borderTop: "1px solid #eff0f2" }}>
+              <div style={{ marginTop: 16, paddingTop: 12, borderTop: "1px solid var(--line)" }}>
                 <small className="muted" style={{ display: "block", fontSize: 12 }}>Operational Notes</small>
                 <p style={{ margin: "4px 0 0 0", fontSize: 13, lineHeight: 1.4 }}>{customer.notes}</p>
               </div>
@@ -417,30 +361,30 @@ function CustomerOverviewTab({ customer, fin }: { customer: Customer; fin?: Fina
 
         {/* Commercial Balance Breakdown */}
         <Card>
-          <CardHead title="Financial Position Breakdown" description="Authoritative ledger receivables vs credits" />
+          <CardHead title="Financial position" description="Authoritative ledger receivables vs credits" />
           <div className="card-body">
             <div className="table-wrap">
               <table className="data-table">
                 <tbody>
                   <tr>
                     <td>Total Invoiced Revenue</td>
-                    <td className="mono strong" style={{ textAlign: "right" }}>${parseFloat(fin?.totalInvoiced ?? "0").toFixed(2)}</td>
+                    <td className="mono strong" style={{ textAlign: "right" }}>${decimal(fin?.totalInvoiced ?? "0", 2)}</td>
                   </tr>
                   <tr>
                     <td>Total Payments Collected</td>
-                    <td className="mono strong text-emerald-400" style={{ textAlign: "right" }}>${parseFloat(fin?.totalPaid ?? "0").toFixed(2)}</td>
+                    <td className="mono strong text-emerald-400" style={{ textAlign: "right" }}>${decimal(fin?.totalPaid ?? "0", 2)}</td>
                   </tr>
                   <tr>
                     <td>Outstanding Open Invoices Debt</td>
-                    <td className="mono strong" style={{ textAlign: "right", color: "#f43f5e" }}>${parseFloat(fin?.outstandingDebt ?? "0").toFixed(2)}</td>
+                    <td className="mono strong" style={{ textAlign: "right", color: "var(--red)" }}>${decimal(fin?.outstandingDebt ?? "0", 2)}</td>
                   </tr>
                   <tr>
                     <td>Unapplied Payments / Deposits</td>
-                    <td className="mono strong" style={{ textAlign: "right", color: "#f59e0b" }}>${parseFloat(fin?.unappliedCredit ?? "0").toFixed(2)}</td>
+                    <td className="mono strong" style={{ textAlign: "right", color: "var(--amber)" }}>${decimal(fin?.unappliedCredit ?? "0", 2)}</td>
                   </tr>
-                  <tr style={{ borderTop: "2px solid #e2e8f0", fontWeight: "bold" }}>
+                  <tr style={{ borderTop: "2px solid var(--line)", fontWeight: "bold" }}>
                     <td>Net Account Balance</td>
-                    <td className="mono strong" style={{ textAlign: "right", fontSize: 16 }}>${parseFloat(fin?.netPosition ?? "0").toFixed(2)}</td>
+                    <td className="mono strong" style={{ textAlign: "right", fontSize: 16 }}>${decimal(fin?.netPosition ?? "0", 2)}</td>
                   </tr>
                 </tbody>
               </table>
@@ -535,7 +479,7 @@ function CustomerOrdersTab({ customerId }: { customerId: string }) {
         </select>
       </div>
 
-      {ordersQuery.isError ? (
+      {ordersQuery.isLoading ? <LoadingState /> : ordersQuery.isError ? (
         <ErrorState message={(ordersQuery.error as Error).message} retry={() => void ordersQuery.refetch()} />
       ) : (
         <div className="table-wrap">
@@ -577,7 +521,7 @@ function CustomerOrdersTab({ customerId }: { customerId: string }) {
                   <td>
                     {row.lines.map((l) => (
                       <div key={l.id} className="mono text-xs">
-                        {l.unitPriceSnapshot ? `$${parseFloat(l.unitPriceSnapshot).toFixed(2)}` : "Unconfirmed"}
+                        {l.unitPriceSnapshot ? `$${decimal(l.unitPriceSnapshot, 2)}` : "Unconfirmed"}
                       </div>
                     ))}
                   </td>
@@ -643,7 +587,7 @@ function CustomerInvoicesTab({ customerId }: { customerId: string }) {
         </select>
       </div>
 
-      {invoicesQuery.isError ? (
+      {invoicesQuery.isLoading ? <LoadingState /> : invoicesQuery.isError ? (
         <ErrorState message={(invoicesQuery.error as Error).message} retry={() => void invoicesQuery.refetch()} />
       ) : (
         <div className="table-wrap">
@@ -675,10 +619,10 @@ function CustomerInvoicesTab({ customerId }: { customerId: string }) {
                       {inv.status.replace("_", " ")}
                     </Badge>
                   </td>
-                  <td className="mono font-bold">${parseFloat(inv.totalAmount).toFixed(2)}</td>
-                  <td className="mono text-emerald-400">${parseFloat(inv.paidAmount).toFixed(2)}</td>
-                  <td className="mono font-bold" style={{ color: parseFloat(inv.balanceDue) > 0 ? "#f43f5e" : "inherit" }}>
-                    ${parseFloat(inv.balanceDue).toFixed(2)}
+                  <td className="mono font-bold">${decimal(inv.totalAmount, 2)}</td>
+                  <td className="mono text-emerald-400">${decimal(inv.paidAmount, 2)}</td>
+                  <td className="mono font-bold" style={{ color: new Decimal(inv.balanceDue).gt(0) ? "var(--red)" : "inherit" }}>
+                    ${decimal(inv.balanceDue, 2)}
                   </td>
                   <td style={{ textAlign: "right" }}>
                     <Link className="btn small" href={`/invoices/${inv.id}`}>View Invoice</Link>
@@ -737,7 +681,7 @@ function CustomerPaymentsTab({ customerId }: { customerId: string }) {
         </select>
       </div>
 
-      {paymentsQuery.isError ? (
+      {paymentsQuery.isLoading ? <LoadingState /> : paymentsQuery.isError ? (
         <ErrorState message={(paymentsQuery.error as Error).message} retry={() => void paymentsQuery.refetch()} />
       ) : (
         <div className="table-wrap">
@@ -767,10 +711,10 @@ function CustomerPaymentsTab({ customerId }: { customerId: string }) {
                   <td>{p.paymentDate.slice(0, 10)}</td>
                   <td><Badge tone="neutral">{p.paymentMethod}</Badge></td>
                   <td>{p.reference ?? "—"}</td>
-                  <td className="mono font-bold text-emerald-400">${parseFloat(p.amount).toFixed(2)}</td>
-                  <td className="mono">${parseFloat(p.allocatedAmount).toFixed(2)}</td>
-                  <td className="mono" style={{ color: parseFloat(p.unappliedAmount) > 0 ? "#f59e0b" : "inherit" }}>
-                    ${parseFloat(p.unappliedAmount).toFixed(2)}
+                  <td className="mono font-bold text-emerald-400">${decimal(p.amount, 2)}</td>
+                  <td className="mono">${decimal(p.allocatedAmount, 2)}</td>
+                  <td className="mono" style={{ color: new Decimal(p.unappliedAmount).gt(0) ? "var(--amber)" : "inherit" }}>
+                    ${decimal(p.unappliedAmount, 2)}
                   </td>
                   <td>
                     <Badge tone={p.status === "POSTED" ? "ok" : "danger"}>{p.status}</Badge>
@@ -818,29 +762,29 @@ function CustomerLedgerTab({ customerId, customerName, customerCode }: { custome
     ? fullEntries.filter((e) => e.entryType === entryTypeFilter)
     : fullEntries;
 
-  const openingBalance = fullEntries.length > 0 ? parseFloat(fullEntries[0]?.runningBalance ?? "0") - parseFloat(fullEntries[0]?.debitAmount ?? "0") + parseFloat(fullEntries[0]?.creditAmount ?? "0") : 0;
-  const closingBalance = fullEntries.length > 0 ? parseFloat(fullEntries[fullEntries.length - 1]?.runningBalance ?? "0") : 0;
+  const openingBalance = fullEntries.length ? new Decimal(fullEntries[0]!.runningBalance).minus(fullEntries[0]!.debitAmount).plus(fullEntries[0]!.creditAmount) : null;
+  const closingBalance = fullEntries.length ? new Decimal(fullEntries[fullEntries.length - 1]!.runningBalance) : null;
 
-  const totalPeriodDebits = filteredEntries.reduce((sum, e) => sum + parseFloat(e.debitAmount), 0);
-  const totalPeriodCredits = filteredEntries.reduce((sum, e) => sum + parseFloat(e.creditAmount), 0);
+  const totalPeriodDebits = new Decimal(sum(filteredEntries.map(e => e.debitAmount)));
+  const totalPeriodCredits = new Decimal(sum(filteredEntries.map(e => e.creditAmount)));
 
   return (
-    <Card>
+    <Card className="ledger-document">
       <CardHead
         title={`Chronological Statement of Account — ${customerName}`}
         description="Official financial subledger. Debits increase outstanding debt (+); Credits decrease debt (-)."
         action={
           <div style={{ display: "flex", gap: 8 }}>
             <button className="btn small" onClick={() => window.print()}>
-              🖨️ Print View
+              Print View
             </button>
             <a
               className="btn small primary"
-              href={`/api/v1/customers/${customerId}/statement/pdf`}
+              href={`${apiBase}/customers/${customerId}/statement/pdf?fromDate=${fromDate}&toDate=${toDate}`}
               target="_blank"
               rel="noreferrer"
             >
-              📄 Download PDF
+              Download PDF
             </a>
           </div>
         }
@@ -880,26 +824,26 @@ function CustomerLedgerTab({ customerId, customerName, customerCode }: { custome
 
       {/* Period Balance Summary Banner */}
       <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12, marginBottom: 16 }}>
-        <div style={{ padding: 12, background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 8 }}>
+        <div style={{ padding: 12, background: "var(--canvas)", border: "1px solid var(--line)", borderRadius: 8 }}>
           <small className="muted" style={{ fontSize: 11, textTransform: "uppercase" }}>Period Opening Balance</small>
-          <div className="mono strong" style={{ fontSize: 16 }}>${openingBalance.toFixed(2)}</div>
+          <div className="mono strong" style={{ fontSize: 16 }}>${openingBalance?.toFixed(2) ?? "—"}</div>
         </div>
-        <div style={{ padding: 12, background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 8 }}>
+        <div style={{ padding: 12, background: "var(--canvas)", border: "1px solid var(--line)", borderRadius: 8 }}>
           <small className="muted" style={{ fontSize: 11, textTransform: "uppercase" }}>Period Total Debits (+)</small>
-          <div className="mono strong" style={{ fontSize: 16, color: "#f43f5e" }}>+${totalPeriodDebits.toFixed(2)}</div>
+          <div className="mono strong" style={{ fontSize: 16, color: "var(--red)" }}>+${totalPeriodDebits.toFixed(2)}</div>
         </div>
-        <div style={{ padding: 12, background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 8 }}>
+        <div style={{ padding: 12, background: "var(--canvas)", border: "1px solid var(--line)", borderRadius: 8 }}>
           <small className="muted" style={{ fontSize: 11, textTransform: "uppercase" }}>Period Total Credits (-)</small>
           <div className="mono strong text-emerald-400" style={{ fontSize: 16 }}>-${totalPeriodCredits.toFixed(2)}</div>
         </div>
-        <div style={{ padding: 12, background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 8 }}>
+        <div style={{ padding: 12, background: "var(--lime-pale)", border: "1px solid var(--line)", borderRadius: 8 }}>
           <small className="muted" style={{ fontSize: 11, textTransform: "uppercase" }}>Period Closing Balance</small>
-          <div className="mono strong" style={{ fontSize: 16, color: "#1d4ed8" }}>${closingBalance.toFixed(2)}</div>
+          <div className="mono strong" style={{ fontSize: 16, color: "var(--petrol)" }}>${closingBalance?.toFixed(2) ?? "—"}</div>
         </div>
       </div>
 
       {/* Statement Table */}
-      {statementQuery.isError ? (
+      {statementQuery.isLoading ? <LoadingState /> : statementQuery.isError ? (
         <ErrorState message={(statementQuery.error as Error).message} retry={() => void statementQuery.refetch()} />
       ) : (
         <div className="table-wrap">
@@ -917,7 +861,7 @@ function CustomerLedgerTab({ customerId, customerName, customerCode }: { custome
             <tbody>
               {filteredEntries.map((e) => (
                 <tr key={e.id}>
-                  <td>{new Date(e.occurredAt).toLocaleString()}</td>
+                  <td>{dateTime(e.occurredAt)}</td>
                   <td>
                     <Badge
                       tone={
@@ -934,14 +878,14 @@ function CustomerLedgerTab({ customerId, customerName, customerCode }: { custome
                     </Badge>
                   </td>
                   <td className="mono strong">{e.referenceNo}</td>
-                  <td className="mono" style={{ color: parseFloat(e.debitAmount) > 0 ? "#f43f5e" : "inherit" }}>
-                    {parseFloat(e.debitAmount) > 0 ? `$${parseFloat(e.debitAmount).toFixed(2)}` : "—"}
+                  <td className="mono" style={{ color: new Decimal(e.debitAmount).gt(0) ? "var(--red)" : "inherit" }}>
+                    {new Decimal(e.debitAmount).gt(0) ? `$${decimal(e.debitAmount, 2)}` : "—"}
                   </td>
                   <td className="mono text-emerald-400">
-                    {parseFloat(e.creditAmount) > 0 ? `$${parseFloat(e.creditAmount).toFixed(2)}` : "—"}
+                    {new Decimal(e.creditAmount).gt(0) ? `$${decimal(e.creditAmount, 2)}` : "—"}
                   </td>
                   <td className="mono font-bold" style={{ textAlign: "right" }}>
-                    ${parseFloat(e.runningBalance).toFixed(2)}
+                    ${decimal(e.runningBalance, 2)}
                   </td>
                 </tr>
               ))}

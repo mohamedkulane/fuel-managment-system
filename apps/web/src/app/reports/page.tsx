@@ -1,9 +1,10 @@
 "use client";
 
-import Link from "next/link";
+import { ArrowRight, FileDown, FileSpreadsheet, BarChart3 } from "lucide-react";
+import { ReportPreview, type ReportData } from "../../components/report-preview";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { api } from "../../lib/api";
+import { api, apiBase } from "../../lib/api";
 import { Badge, Card, CardHead, PageHeader } from "../../components/ui";
 
 type ReportCard = {
@@ -120,12 +121,12 @@ export default function ReportsHubPage() {
 
   const previewQuery = useQuery({
     queryKey: ["report-preview", activeReport.id, fromDate, toDate, selectedCustomerId],
-    queryFn: () => api<any>(reportQueryUrl()),
+    queryFn: () => api<ReportData>(reportQueryUrl()),
     enabled: activeReport.id !== "statement" || Boolean(selectedCustomerId)
   });
 
   const handleDownload = (format: "pdf" | "xlsx") => {
-    let url = `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"}/api/v1${activeReport.endpoint}/${format}?fromDate=${fromDate}&toDate=${toDate}`;
+    let url = `${apiBase}${activeReport.endpoint}/${format}?fromDate=${fromDate}&toDate=${toDate}`;
     if (activeReport.id === "statement") {
       if (!selectedCustomerId) {
         alert("Please select a customer to generate a statement report.");
@@ -137,23 +138,23 @@ export default function ReportsHubPage() {
   };
 
   return (
-    <main className="page">
+    <main className="page reports-page">
       <PageHeader
-        eyebrow="Business Intelligence & Export Hub"
-        title="Reporting & Analytics Center"
-        description="Comprehensive Excel (.xlsx) and PDF report generation for customer subledgers, inventory movements, sales, collections, and financial position."
+        eyebrow="Business insights"
+        title="Reports & exports"
+        description="Find the records you need. Export clear PDF and Excel reports."
       />
 
       {/* Global Filter Bar */}
-      <Card style={{ marginBottom: 20 }}>
+      <Card className="filter-panel">
         <div style={{ display: "flex", flexWrap: "wrap", gap: 16, alignItems: "center" }}>
           <div>
             <label style={{ display: "block", fontSize: 12, fontWeight: "bold", marginBottom: 4 }}>Date Range From (Mogadishu UTC+3):</label>
-            <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} style={{ padding: "6px 10px", borderRadius: 4, border: "1px solid #ccc" }} />
+            <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="input" />
           </div>
           <div>
             <label style={{ display: "block", fontSize: 12, fontWeight: "bold", marginBottom: 4 }}>Date Range To:</label>
-            <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} style={{ padding: "6px 10px", borderRadius: 4, border: "1px solid #ccc" }} />
+            <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="input" />
           </div>
 
           {activeReport.id === "statement" && (
@@ -162,7 +163,7 @@ export default function ReportsHubPage() {
               <select
                 value={selectedCustomerId}
                 onChange={(e) => setSelectedCustomerId(e.target.value)}
-                style={{ padding: "6px 10px", borderRadius: 4, border: "1px solid #ccc", minWidth: 200 }}
+                className="input"
               >
                 <option value="">-- Choose Customer --</option>
                 {customers.data?.items.map((c) => (
@@ -176,48 +177,24 @@ export default function ReportsHubPage() {
 
           <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
             <button className="btn" onClick={() => handleDownload("pdf")}>
-              📄 Export PDF
+              <FileDown size={14} /> Export PDF
             </button>
             <button className="btn primary" onClick={() => handleDownload("xlsx")}>
-              📊 Export Excel (.xlsx)
+              <FileSpreadsheet size={14} /> Export Excel
             </button>
           </div>
         </div>
       </Card>
 
-      {/* Report Cards Selector Grid */}
-      <div className="grid" style={{ marginBottom: 24 }}>
-        {reports.map((r) => {
-          if (r.ownerOnly && !isOwner) return null;
-          const isSelected = r.id === selectedReport;
-          return (
-            <Card
-              key={r.id}
-              style={{
-                cursor: "pointer",
-                borderColor: isSelected ? "var(--primary-color, #2563eb)" : undefined,
-                background: isSelected ? "var(--accent-bg, #eff6ff)" : undefined
-              }}
-              onClick={() => setSelectedReport(r.id)}
-            >
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                <Badge tone={r.category === "Financial" ? "info" : r.category === "Owner" ? "warn" : "neutral"}>{r.category}</Badge>
-                {isSelected && <span style={{ color: "#2563eb", fontWeight: "bold", fontSize: 13 }}>● Selected</span>}
-              </div>
-              <strong style={{ display: "block", fontSize: 15, marginBottom: 4 }}>{r.title}</strong>
-              <small className="muted" style={{ display: "block", lineHeight: 1.4 }}>
-                {r.description}
-              </small>
-            </Card>
-          );
-        })}
+      <div className="report-grid">
+        {reports.filter(r => !r.ownerOnly || isOwner).map(r => <button type="button" key={r.id} className={`report-option ${r.id === selectedReport ? "selected" : ""}`} aria-pressed={r.id === selectedReport} onClick={() => setSelectedReport(r.id)}><span className="report-icon"><BarChart3 size={19} /></span><strong>{r.title}</strong><p>{r.description}</p><span className="report-link">{r.id === selectedReport ? "Viewing report" : "View report"} <ArrowRight size={13} /></span>{r.ownerOnly && <Badge tone="warn">Owner only</Badge>}</button>)}
       </div>
 
       {/* Report Data Preview Section */}
       <Card>
         <CardHead
           title={`Report Data Preview — ${activeReport.title}`}
-          description={`Showing sample results for range ${fromDate} to ${toDate}`}
+          description={`Records from the selected report · ${fromDate} to ${toDate}`}
           action={
             <div style={{ display: "flex", gap: 8 }}>
               <button className="btn small" onClick={() => handleDownload("pdf")}>
@@ -236,16 +213,12 @@ export default function ReportsHubPage() {
           </div>
         ) : previewQuery.isError ? (
           <div className="card-body">
-            <p className="muted" style={{ color: "#dc2626" }}>
+            <p className="muted" style={{ color: "var(--red)" }}>
               {(previewQuery.error as Error).message}
             </p>
           </div>
         ) : (
-          <div className="table-wrap">
-            <pre style={{ padding: 16, background: "#f8fafc", borderRadius: 6, fontSize: 12, overflowX: "auto", maxHeight: 400 }}>
-              {JSON.stringify(previewQuery.data?.data, null, 2)}
-            </pre>
-          </div>
+          <ReportPreview data={previewQuery.data} />
         )}
       </Card>
     </main>

@@ -1,9 +1,10 @@
 "use client";
+import { dateTime } from "../../lib/format";
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { api } from "../../lib/api";
-import { Badge, Card, CardHead, ErrorState, PageHeader } from "../../components/ui";
+import { api, apiBase } from "../../lib/api";
+import { Badge, Card, CardHead, ErrorState, LoadingState, PageHeader, Pagination } from "../../components/ui";
 
 type AuditEvent = {
   id: string;
@@ -13,8 +14,8 @@ type AuditEvent = {
   reason?: string;
   createdAt: string;
   actor?: { id: string; displayName: string; email: string; role: string };
-  beforeRedacted?: any;
-  afterRedacted?: any;
+  beforeRedacted?: unknown;
+  afterRedacted?: unknown;
 };
 
 type AuditsResponse = {
@@ -44,45 +45,45 @@ export default function AuditsPage() {
   });
 
   const handleExport = (format: "pdf" | "xlsx") => {
-    const baseUrl = `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"}/api/v1/audits/${format}`;
+    const baseUrl = `${apiBase}/audits/${format}`;
     const url = `${baseUrl}?${entityType ? `&entityType=${entityType}` : ""}${action ? `&action=${action}` : ""}${fromDate ? `&fromDate=${fromDate}` : ""}${toDate ? `&toDate=${toDate}` : ""}`;
     window.open(url, "_blank");
   };
 
-  if (me.isLoading) return <main className="page"><div className="skeleton tall" /></main>;
+  if (me.isLoading) return <main className="page audits-page"><div className="skeleton tall" /></main>;
 
   if (!isOwner) {
     return (
-      <main className="page">
+      <main className="page audits-page">
         <ErrorState title="Access Restricted" message="System audit logs are strictly reserved for the Business Owner role (OWNER)." />
       </main>
     );
   }
 
   return (
-    <main className="page">
+    <main className="page audits-page">
       <PageHeader
-        eyebrow="Security & Governance Trail"
-        title="System Audit Logs"
-        description="Immutable audit trail of master data edits, stock adjustments, pricing changes, status transitions, and financial reversals."
+        eyebrow="Security & governance"
+        title="Activity & audit log"
+        description="Owner-only history of changes, approvals and financial reversals."
         actions={
           <>
             <button className="btn" onClick={() => handleExport("pdf")}>
-              📄 Export PDF
+              Export PDF
             </button>
             <button className="btn primary" onClick={() => handleExport("xlsx")}>
-              📊 Export Excel (.xlsx)
+              Export Excel (.xlsx)
             </button>
           </>
         }
       />
 
       {/* Filter Bar */}
-      <Card style={{ marginBottom: 20 }}>
+      <Card className="filter-panel">
         <div style={{ display: "flex", flexWrap: "wrap", gap: 16, alignItems: "center" }}>
           <div>
             <label style={{ display: "block", fontSize: 12, fontWeight: "bold", marginBottom: 4 }}>Entity Type:</label>
-            <select value={entityType} onChange={(e) => setEntityType(e.target.value)} style={{ padding: "6px 10px", borderRadius: 4, border: "1px solid #ccc" }}>
+            <select value={entityType} onChange={(e) => { setEntityType(e.target.value); setPage(1); }} className="input">
               <option value="">All Entities</option>
               <option value="Customer">Customer</option>
               <option value="PriceVersion">PriceVersion</option>
@@ -100,7 +101,7 @@ export default function AuditsPage() {
 
           <div>
             <label style={{ display: "block", fontSize: 12, fontWeight: "bold", marginBottom: 4 }}>Action:</label>
-            <select value={action} onChange={(e) => setAction(e.target.value)} style={{ padding: "6px 10px", borderRadius: 4, border: "1px solid #ccc" }}>
+            <select value={action} onChange={(e) => { setAction(e.target.value); setPage(1); }} className="input">
               <option value="">All Actions</option>
               <option value="CREATED">CREATED</option>
               <option value="UPDATED">UPDATED</option>
@@ -114,12 +115,12 @@ export default function AuditsPage() {
 
           <div>
             <label style={{ display: "block", fontSize: 12, fontWeight: "bold", marginBottom: 4 }}>From Date:</label>
-            <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} style={{ padding: "6px 10px", borderRadius: 4, border: "1px solid #ccc" }} />
+            <input type="date" value={fromDate} onChange={(e) => { setFromDate(e.target.value); setPage(1); }} className="input" />
           </div>
 
           <div>
             <label style={{ display: "block", fontSize: 12, fontWeight: "bold", marginBottom: 4 }}>To Date:</label>
-            <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} style={{ padding: "6px 10px", borderRadius: 4, border: "1px solid #ccc" }} />
+            <input type="date" value={toDate} onChange={(e) => { setToDate(e.target.value); setPage(1); }} className="input" />
           </div>
 
           <button className="btn small" onClick={() => { setEntityType(""); setAction(""); setFromDate(""); setToDate(""); setPage(1); }} style={{ marginLeft: "auto" }}>
@@ -130,12 +131,12 @@ export default function AuditsPage() {
 
       {/* Audit Log Table */}
       <Card>
-        <CardHead title="Audit Events Trail" description={`Showing ${audits.data?.items.length ?? 0} events of ${audits.data?.total ?? 0}`} />
-        <div className="table-wrap">
+        <CardHead title="Recent system activity" description={`Showing ${audits.data?.items.length ?? 0} events of ${audits.data?.total ?? 0}`} />
+        {audits.isLoading ? <LoadingState /> : audits.isError ? <ErrorState message={audits.error.message} retry={() => void audits.refetch()} /> : <div className="table-wrap">
           <table className="data-table">
             <thead>
               <tr>
-                <th>Timestamp (UTC)</th>
+                <th>Timestamp · Mogadishu</th>
                 <th>Actor</th>
                 <th>Entity</th>
                 <th>Entity ID</th>
@@ -149,7 +150,7 @@ export default function AuditsPage() {
                 audits.data.items.map((event) => (
                   <tr key={event.id}>
                     <td className="mono" style={{ fontSize: 12 }}>
-                      {new Date(event.createdAt).toISOString().slice(0, 19).replace("T", " ")}
+                      {dateTime(event.createdAt)}
                     </td>
                     <td>
                       <strong>{event.actor?.displayName ?? "System"}</strong>
@@ -164,10 +165,10 @@ export default function AuditsPage() {
                     </td>
                     <td className="muted">{event.reason ?? "—"}</td>
                     <td style={{ fontSize: 11, maxWidth: 300, overflowX: "auto" }}>
-                      {event.afterRedacted ? (
-                        <pre style={{ margin: 0, padding: 4, background: "#f1f5f9", borderRadius: 4 }}>
+                      {event.afterRedacted != null ? (
+                        <details className="audit-details"><summary>View changes</summary><pre>
                           {JSON.stringify(event.afterRedacted)}
-                        </pre>
+                        </pre></details>
                       ) : (
                         "—"
                       )}
@@ -183,7 +184,8 @@ export default function AuditsPage() {
               )}
             </tbody>
           </table>
-        </div>
+        </div>}
+        <Pagination page={page} totalPages={audits.data?.totalPages ?? 1} onPageChange={setPage} />
       </Card>
     </main>
   );

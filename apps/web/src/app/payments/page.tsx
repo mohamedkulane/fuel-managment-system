@@ -1,4 +1,7 @@
 "use client";
+import { PageHeader, CardHead } from "../../components/ui";
+import Decimal from "decimal.js";
+import { decimal } from "../../lib/format";
 import { useState } from "react";
 import Link from "next/link";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -100,7 +103,7 @@ export default function PaymentsPage() {
     }
 
     const allocs = Object.entries(allocationsInput)
-      .filter(([_, val]) => parseFloat(val) > 0)
+      .filter(([_, val]) => new Decimal(val).gt(0))
       .map(([invId, val]) => ({ invoiceId: invId, amount: val }));
 
     setFormError("");
@@ -116,18 +119,10 @@ export default function PaymentsPage() {
   };
 
   return (
-    <main className="page">
-      <header className="page-header">
-        <div>
-          <h1 className="title">Payment Collections</h1>
-          <p className="subtitle">Record customer receipts, partial installment payments, and invoice allocations</p>
-        </div>
-        <button className="btn primary" onClick={() => setOpenModal(true)}>
-          + Record Payment
-        </button>
-      </header>
+    <main className="page payments-page">
+      <PageHeader eyebrow="Customer finance" title="Payment collections" description="Record customer payments and allocate them to invoices." actions={<button className="btn primary" onClick={() => setOpenModal(true)}>Record payment</button>} />
 
-      <section className="card space-y-4">
+      <section className="card"><CardHead title="Payment register" description="Review records and open an account for details." />
         <div className="filter-bar">
           <input
             type="search"
@@ -171,7 +166,7 @@ export default function PaymentsPage() {
         ) : (
           <>
             <div className="table-wrap">
-              <table className="table">
+              <table className="data-table">
                 <thead>
                   <tr>
                     <th>Payment #</th>
@@ -203,9 +198,9 @@ export default function PaymentsPage() {
                         <span className="badge neutral">{p.paymentMethod}</span>
                       </td>
                       <td>{p.reference ?? "—"}</td>
-                      <td className="font-mono font-bold text-emerald-400">${parseFloat(p.amount).toFixed(2)}</td>
-                      <td className="font-mono">${parseFloat(p.allocatedAmount).toFixed(2)}</td>
-                      <td className="font-mono text-amber-400">${parseFloat(p.unappliedAmount).toFixed(2)}</td>
+                      <td className="font-mono font-bold text-emerald-400">${decimal(p.amount, 2)}</td>
+                      <td className="font-mono">${decimal(p.allocatedAmount, 2)}</td>
+                      <td className="font-mono text-amber-400">${decimal(p.unappliedAmount, 2)}</td>
                       <td>
                         <span className={`badge ${p.status === "POSTED" ? "success" : "danger"}`}>{p.status}</span>
                       </td>
@@ -285,7 +280,7 @@ export default function PaymentsPage() {
               <label className="label">Payment Method *</label>
               <select
                 value={methodInput}
-                onChange={(e) => setMethodInput(e.target.value as any)}
+                onChange={(e) => setMethodInput(e.target.value as typeof methodInput)}
                 className="input"
                 required
               >
@@ -318,7 +313,7 @@ export default function PaymentsPage() {
                     <div>
                       <strong>{inv.invoiceNo}</strong> ({inv.issueDate.slice(0, 10)})
                       <div className="text-xs text-amber-400 font-mono">
-                        Balance Due: ${parseFloat(inv.balanceDue).toFixed(2)}
+                        Balance Due: ${decimal(inv.balanceDue, 2)}
                       </div>
                     </div>
                     <div className="w-32">

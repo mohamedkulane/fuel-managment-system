@@ -1,9 +1,10 @@
 "use client";
+import { Users, ClipboardList, CircleCheck, Clock3 } from "lucide-react";
 import { FormEvent, useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, type PaginatedResponse } from "../../lib/api";
-import { Badge, Card, CardHead, Empty, ErrorState, Modal, PageHeader, Pagination, SubmitButton } from "../../components/ui";
+import { MetricCard, LoadingState, Badge, Card, CardHead, Empty, ErrorState, Modal, PageHeader, Pagination, SubmitButton } from "../../components/ui";
 
 type Customer = {
   id: string;
@@ -57,40 +58,41 @@ export default function CustomersPage() {
   const totalPages = Array.isArray(rawData) ? 1 : (rawData?.totalPages ?? 1);
 
   return (
-    <main className="page">
+    <main className="page customers-page">
       <PageHeader
         eyebrow="Customer relationships"
-        title="Customer directory"
-        description="Operational contacts and delivery addresses. Customer debt balance is billing-managed."
+        title="Customers"
+        description="Every account, contact and delivery address in one place."
         actions={<button className="btn primary" onClick={() => setShowModal(true)}>Add customer</button>}
       />
 
+      <div className="grid"><MetricCard label="Matching customers" value={query.data ? (Array.isArray(query.data) ? query.data.length : query.data.total) : "—"} note="Across the current search" icon={Users}/><MetricCard label="Active on this page" value={items.filter(c=>c.status==="ACTIVE").length} note="Accounts accepting orders" icon={CircleCheck}/><MetricCard label="On hold on this page" value={items.filter(c=>c.status==="HOLD").length} note="Restricted by the owner" icon={Clock3}/><MetricCard label="Directory page" value={page} note={`Of ${totalPages} pages`} icon={ClipboardList}/></div>
       <Modal isOpen={showModal} onClose={() => setShowModal(false)} title="Create Operational Customer">
         <form onSubmit={submit}>
           <div className="form-grid">
             <div className="field">
-              <label>Customer name *</label>
-              <input className="input" name="name" required placeholder="e.g. Hassan Trading Co." />
+              <label htmlFor="name">Customer name *</label>
+              <input id="name" className="input" name="name" required placeholder="e.g. Hassan Trading Co." />
             </div>
             <div className="field">
-              <label>Primary phone</label>
-              <input className="input" name="phone" placeholder="+252 61 XXX XXXX" />
+              <label htmlFor="phone">Primary phone</label>
+              <input id="phone" className="input" name="phone" placeholder="+252 61 XXX XXXX" />
             </div>
             <div className="field full">
-              <label>Delivery address</label>
-              <input className="input" name="address" placeholder="Main Warehouse, Hodan District" />
+              <label htmlFor="address">Delivery address</label>
+              <input id="address" className="input" name="address" placeholder="Main Warehouse, Hodan District" />
             </div>
             <div className="field">
-              <label>District</label>
-              <input className="input" name="district" placeholder="Hodan" />
+              <label htmlFor="district">District</label>
+              <input id="district" className="input" name="district" placeholder="Hodan" />
             </div>
             <div className="field">
-              <label>City</label>
-              <input className="input" name="city" placeholder="Mogadishu" />
+              <label htmlFor="city">City</label>
+              <input id="city" className="input" name="city" placeholder="Mogadishu" />
             </div>
             <div className="field full">
-              <label>Operational notes</label>
-              <input className="input" name="notes" placeholder="e.g. Preferred delivery in morning" />
+              <label htmlFor="notes">Operational notes</label>
+              <input id="notes" className="input" name="notes" placeholder="e.g. Preferred delivery in morning" />
             </div>
           </div>
           {create.isError && <div className="notice warn" role="alert" style={{ marginTop: 16 }}>{(create.error as Error).message}</div>}
@@ -122,7 +124,7 @@ export default function CustomersPage() {
           </div>
         </div>
 
-        {query.isError ? (
+        {query.isLoading ? <LoadingState /> : query.isError ? (
           <ErrorState message={(query.error as Error).message} retry={() => void query.refetch()} />
         ) : (
           <div className="table-wrap">

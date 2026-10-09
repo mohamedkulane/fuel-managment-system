@@ -1,0 +1,39 @@
+{
+  "screens_rendered": 27,
+  "routes": [
+    "login",
+    "dashboard",
+    "customers",
+    "customer-profile",
+    "customer-ledger",
+    "orders",
+    "new-order",
+    "order-detail",
+    "stock",
+    "tankers",
+    "tanker-detail",
+    "receive",
+    "pricing",
+    "price-history",
+    "deliveries",
+    "manifest",
+    "dispatches",
+    "reconcile",
+    "invoices",
+    "invoice-detail",
+    "payments",
+    "payment-detail",
+    "debts",
+    "reports",
+    "audits",
+    "team",
+    "settings"
+  ],
+  "demo_interactions": [
+    "pricing update",
+    "customer ledger tab",
+    "directory search"
+  ],
+  "browser_errors": [],
+  "status": "PASS"
+}

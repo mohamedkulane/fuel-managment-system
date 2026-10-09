@@ -56,12 +56,12 @@ export default function DispatchDetailPage() {
     }
   });
 
-  if (query.isError) return <main className="page"><ErrorState message={(query.error as Error).message} /></main>;
+  if (query.isError) return <main className="page detail-page"><ErrorState message={(query.error as Error).message} /></main>;
 
   const row = query.data;
 
   return (
-    <main className="page">
+    <main className="page detail-page">
       <PageHeader
         eyebrow="Dispatch details"
         title={row?.dispatchNo ?? "Loading dispatch…"}

@@ -1,10 +1,11 @@
 "use client";
+import { decimal } from "../../../lib/format";
 import { useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api, type Actor } from "../../../lib/api";
-import { Modal } from "../../../components/ui";
+import { api, apiBase, type Actor } from "../../../lib/api";
+import { Modal, PageHeader } from "../../../components/ui";
 
 type InvoiceDetail = {
   id: string;
@@ -69,7 +70,7 @@ export default function InvoiceDetailPage() {
 
   if (invoiceQuery.isLoading) {
     return (
-      <main className="page">
+      <main className="page detail-page">
         <div className="skeleton tall" />
       </main>
     );
@@ -77,7 +78,7 @@ export default function InvoiceDetailPage() {
 
   if (invoiceQuery.isError || !invoiceQuery.data) {
     return (
-      <main className="page">
+      <main className="page detail-page">
         <div className="callout error">Invoice not found or could not be loaded.</div>
       </main>
     );
@@ -86,18 +87,9 @@ export default function InvoiceDetailPage() {
   const inv = invoiceQuery.data;
 
   return (
-    <main className="page space-y-6">
-      <header className="page-header">
-        <div>
-          <div className="crumb">
-            <Link href="/invoices">Invoices</Link> / <span>{inv.invoiceNo}</span>
-          </div>
-          <h1 className="title font-mono">{inv.invoiceNo}</h1>
-          <p className="subtitle">Issued {inv.issueDate.slice(0, 10)} for {inv.customer.name}</p>
-        </div>
-
-        <div className="actions">
-          <a href={`/api/v1/invoices/${inv.id}/pdf`} target="_blank" rel="noreferrer" className="btn secondary">
+    <main className="page finance-page">
+<PageHeader eyebrow="Invoice / detail" title={`Invoice ${inv.invoiceNo}`} description={inv.customer.name} actions={<div className="actions">
+          <a href={`${apiBase}/invoices/${inv.id}/pdf`} target="_blank" rel="noreferrer" className="btn secondary">
             Download PDF
           </a>
 
@@ -106,22 +98,21 @@ export default function InvoiceDetailPage() {
               Reverse Invoice
             </button>
           )}
-        </div>
-      </header>
+        </div>} />
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid finance-metrics">
         <div className="card">
           <span className="text-muted text-xs">Total Amount</span>
-          <div className="text-2xl font-mono font-bold">${parseFloat(inv.totalAmount).toFixed(2)}</div>
+          <div className="text-2xl font-mono font-bold">${decimal(inv.totalAmount, 2)}</div>
         </div>
         <div className="card">
           <span className="text-muted text-xs">Paid Amount</span>
-          <div className="text-2xl font-mono font-bold text-emerald-400">${parseFloat(inv.paidAmount).toFixed(2)}</div>
+          <div className="text-2xl font-mono font-bold text-emerald-400">${decimal(inv.paidAmount, 2)}</div>
         </div>
         <div className="card">
           <span className="text-muted text-xs">Balance Due</span>
-          <div className="text-2xl font-mono font-bold text-amber-400">${parseFloat(inv.balanceDue).toFixed(2)}</div>
+          <div className="text-2xl font-mono font-bold text-amber-400">${decimal(inv.balanceDue, 2)}</div>
         </div>
         <div className="card">
           <span className="text-muted text-xs">Status</span>
@@ -144,7 +135,7 @@ export default function InvoiceDetailPage() {
       </div>
 
       {/* Customer & Issue Information */}
-      <section className="card grid grid-cols-1 md:grid-cols-2 gap-6">
+      <section className="card grid detail-information">
         <div>
           <h2 className="section-title">Customer Information</h2>
           <div className="space-y-1 mt-2 text-sm">
@@ -190,7 +181,7 @@ export default function InvoiceDetailPage() {
       <section className="card space-y-3">
         <h2 className="section-title">Billed Fuel Delivered</h2>
         <div className="table-wrap">
-          <table className="table">
+          <table className="data-table">
             <thead>
               <tr>
                 <th>Fuel</th>
@@ -210,10 +201,10 @@ export default function InvoiceDetailPage() {
                   </td>
                   <td>{l.salesUnit.name}</td>
                   <td className="font-mono">{l.acceptedUnits}</td>
-                  <td className="font-mono">{parseFloat(l.litersPerUnitSnapshot).toFixed(2)} L</td>
+                  <td className="font-mono">{decimal(l.litersPerUnitSnapshot, 2)} L</td>
                   <td className="font-mono">{l.acceptedLiters} L</td>
-                  <td className="font-mono">${parseFloat(l.unitPriceSnapshot).toFixed(4)}</td>
-                  <td className="font-mono font-semibold">${parseFloat(l.lineTotal).toFixed(2)}</td>
+                  <td className="font-mono">${decimal(l.unitPriceSnapshot, 4)}</td>
+                  <td className="font-mono font-semibold">${decimal(l.lineTotal, 2)}</td>
                 </tr>
               ))}
             </tbody>
@@ -228,7 +219,7 @@ export default function InvoiceDetailPage() {
           <div className="text-muted text-sm italic">No payments allocated to this invoice yet.</div>
         ) : (
           <div className="table-wrap">
-            <table className="table">
+            <table className="data-table">
               <thead>
                 <tr>
                   <th>Payment #</th>
@@ -248,7 +239,7 @@ export default function InvoiceDetailPage() {
                     </td>
                     <td>{a.payment.paymentDate.slice(0, 10)}</td>
                     <td>{a.payment.paymentMethod}</td>
-                    <td className="font-mono font-semibold text-emerald-400">${parseFloat(a.amount).toFixed(2)}</td>
+                    <td className="font-mono font-semibold text-emerald-400">${decimal(a.amount, 2)}</td>
                     <td>{a.allocatedAt.slice(0, 10)}</td>
                   </tr>
                 ))}

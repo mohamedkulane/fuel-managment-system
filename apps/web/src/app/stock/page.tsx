@@ -1,9 +1,12 @@
 "use client";
+import { Fuel as FuelIcon } from "lucide-react";
+import { decimal } from "../../lib/format";
+import { dateTime } from "../../lib/format";
 import { FormEvent, useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, type Actor, type PaginatedResponse } from "../../lib/api";
-import { Badge, Card, CardHead, Empty, ErrorState, Modal, PageHeader, Pagination, SubmitButton } from "../../components/ui";
+import { MetricCard, LoadingState, Badge, Card, CardHead, Empty, ErrorState, Modal, PageHeader, Pagination, SubmitButton } from "../../components/ui";
 
 type Balance = { fuel: string; fuelName: string; location: string; balanceLiters: string };
 type Fuel = { id: string; code: string; displayName: string };
@@ -65,11 +68,11 @@ export default function StockPage() {
   const totalPages = Array.isArray(rawMovements) ? 1 : (rawMovements?.totalPages ?? 1);
 
   return (
-    <main className="page">
+    <main className="page stock-page">
       <PageHeader
         eyebrow="Inventory control"
-        title="Fuel inventory"
-        description="Warehouse and in-transit liters are separate posted physical balances."
+        title="Inventory overview"
+        description="A clear view of warehouse stock, in-transit fuel and movement history."
         actions={
           <>
             {isOwner && (
@@ -91,8 +94,8 @@ export default function StockPage() {
           </div>
           <div className="form-grid">
             <div className="field">
-              <label>Fuel Type *</label>
-              <select className="select" name="fuelId" required>
+              <label htmlFor="fuelId">Fuel Type *</label>
+              <select id="fuelId" className="select" name="fuelId" required>
                 <option value="">Select fuel type</option>
                 {fuels.data?.map((f) => (
                   <option key={f.id} value={f.id}>
@@ -102,12 +105,12 @@ export default function StockPage() {
               </select>
             </div>
             <div className="field">
-              <label>Signed Delta Liters * (+ / -)</label>
-              <input className="input" name="delta" required placeholder="e.g. 500 or -150" inputMode="decimal" />
+              <label htmlFor="delta">Signed Delta Liters * (+ / -)</label>
+              <input id="delta" className="input" name="delta" required placeholder="e.g. 500 or -150" inputMode="decimal" />
             </div>
             <div className="field full">
-              <label>Mandatory Audit Reason *</label>
-              <input className="input" name="reason" required placeholder="e.g. Tank calibration adjustment approved by owner" />
+              <label htmlFor="reason">Mandatory Audit Reason *</label>
+              <input id="reason" className="input" name="reason" required placeholder="e.g. Tank calibration adjustment approved by owner" />
             </div>
           </div>
           {adjust.isError && <div className="notice warn" role="alert" style={{ marginTop: 16 }}>{(adjust.error as Error).message}</div>}
@@ -120,16 +123,12 @@ export default function StockPage() {
         </form>
       </Modal>
 
-      {balances.isError ? (
+      {balances.isLoading ? <LoadingState /> : balances.isError ? (
         <ErrorState message={(balances.error as Error).message} retry={() => void balances.refetch()} />
       ) : (
         <div className="grid">
           {balances.data?.map((row) => (
-            <Card className="kpi" key={`${row.fuel}-${row.location}`}>
-              <small>{row.fuelName}</small>
-              <strong className="mono">{row.balanceLiters} L</strong>
-              <span>{row.location.replace("_", " ")}</span>
-            </Card>
+            <MetricCard key={`${row.fuel}-${row.location}`} label={`${row.fuelName} · ${row.location.replaceAll("_", " ")}`} value={`${decimal(row.balanceLiters, 3)} L`} note="Posted physical balance" icon={FuelIcon} dark={row.fuel === "DIESEL" && row.location === "WAREHOUSE"} />
           ))}
         </div>
       )}
@@ -165,7 +164,7 @@ export default function StockPage() {
           </div>
         </div>
 
-        {movements.isError ? (
+        {movements.isLoading ? <LoadingState /> : movements.isError ? (
           <ErrorState message={(movements.error as Error).message} />
         ) : (
           <div className="table-wrap">
@@ -183,7 +182,7 @@ export default function StockPage() {
               <tbody>
                 {movementItems.map((row) => (
                   <tr key={row.id}>
-                    <td>{new Date(row.occurredAt).toLocaleString()}</td>
+                    <td>{dateTime(row.occurredAt)}</td>
                     <td>{row.fuelName}</td>
                     <td>
                       <Badge

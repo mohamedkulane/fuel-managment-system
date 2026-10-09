@@ -1,10 +1,11 @@
 "use client";
+import { decimal } from "../../../lib/format";
 import { useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api, type Actor } from "../../../lib/api";
-import { Modal } from "../../../components/ui";
+import { api, apiBase, type Actor } from "../../../lib/api";
+import { Modal, PageHeader } from "../../../components/ui";
 
 type PaymentDetail = {
   id: string;
@@ -58,7 +59,7 @@ export default function PaymentDetailPage() {
 
   if (paymentQuery.isLoading) {
     return (
-      <main className="page">
+      <main className="page detail-page">
         <div className="skeleton tall" />
       </main>
     );
@@ -66,7 +67,7 @@ export default function PaymentDetailPage() {
 
   if (paymentQuery.isError || !paymentQuery.data) {
     return (
-      <main className="page">
+      <main className="page detail-page">
         <div className="callout error">Payment record not found.</div>
       </main>
     );
@@ -75,18 +76,9 @@ export default function PaymentDetailPage() {
   const pay = paymentQuery.data;
 
   return (
-    <main className="page space-y-6">
-      <header className="page-header">
-        <div>
-          <div className="crumb">
-            <Link href="/payments">Payments</Link> / <span>{pay.paymentNo}</span>
-          </div>
-          <h1 className="title font-mono">{pay.paymentNo}</h1>
-          <p className="subtitle">Received {pay.paymentDate.slice(0, 10)} from {pay.customer.name}</p>
-        </div>
-
-        <div className="actions">
-          <a href={`/api/v1/payments/${pay.id}/receipt-pdf`} target="_blank" rel="noreferrer" className="btn secondary">
+    <main className="page finance-page">
+<PageHeader eyebrow="Payment / detail" title={`Payment ${pay.paymentNo}`} description={pay.customer.name} actions={<div className="actions">
+          <a href={`${apiBase}/payments/${pay.id}/receipt-pdf`} target="_blank" rel="noreferrer" className="btn secondary">
             Print Receipt PDF
           </a>
 
@@ -95,22 +87,21 @@ export default function PaymentDetailPage() {
               Reverse Payment
             </button>
           )}
-        </div>
-      </header>
+        </div>} />
 
       {/* KPI Summary */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid finance-metrics">
         <div className="card">
           <span className="text-muted text-xs">Total Received</span>
-          <div className="text-2xl font-mono font-bold text-emerald-400">${parseFloat(pay.amount).toFixed(2)}</div>
+          <div className="text-2xl font-mono font-bold text-emerald-400">${decimal(pay.amount, 2)}</div>
         </div>
         <div className="card">
           <span className="text-muted text-xs">Allocated to Invoices</span>
-          <div className="text-2xl font-mono font-bold">${parseFloat(pay.allocatedAmount).toFixed(2)}</div>
+          <div className="text-2xl font-mono font-bold">${decimal(pay.allocatedAmount, 2)}</div>
         </div>
         <div className="card">
           <span className="text-muted text-xs">Unapplied Customer Credit</span>
-          <div className="text-2xl font-mono font-bold text-amber-400">${parseFloat(pay.unappliedAmount).toFixed(2)}</div>
+          <div className="text-2xl font-mono font-bold text-amber-400">${decimal(pay.unappliedAmount, 2)}</div>
         </div>
         <div className="card">
           <span className="text-muted text-xs">Status</span>
@@ -121,7 +112,7 @@ export default function PaymentDetailPage() {
       </div>
 
       {/* Information Overview */}
-      <section className="card grid grid-cols-1 md:grid-cols-2 gap-6">
+      <section className="card grid detail-information">
         <div>
           <h2 className="section-title">Customer Details</h2>
           <div className="space-y-1 mt-2 text-sm">
@@ -173,11 +164,11 @@ export default function PaymentDetailPage() {
         <h2 className="section-title">Allocated Invoices Breakdown</h2>
         {!pay.allocations.length ? (
           <div className="text-muted text-sm italic">
-            This payment has no invoice allocations. The full amount (${parseFloat(pay.unappliedAmount).toFixed(2)}) remains as unapplied customer credit.
+            This payment has no invoice allocations. The full amount (${decimal(pay.unappliedAmount, 2)}) remains as unapplied customer credit.
           </div>
         ) : (
           <div className="table-wrap">
-            <table className="table">
+            <table className="data-table">
               <thead>
                 <tr>
                   <th>Invoice #</th>
@@ -194,9 +185,9 @@ export default function PaymentDetailPage() {
                         {a.invoice.invoiceNo}
                       </Link>
                     </td>
-                    <td className="font-mono">${parseFloat(a.invoice.totalAmount).toFixed(2)}</td>
-                    <td className="font-mono font-semibold text-emerald-400">${parseFloat(a.amount).toFixed(2)}</td>
-                    <td className="font-mono">${parseFloat(a.invoice.balanceDue).toFixed(2)}</td>
+                    <td className="font-mono">${decimal(a.invoice.totalAmount, 2)}</td>
+                    <td className="font-mono font-semibold text-emerald-400">${decimal(a.amount, 2)}</td>
+                    <td className="font-mono">${decimal(a.invoice.balanceDue, 2)}</td>
                   </tr>
                 ))}
               </tbody>

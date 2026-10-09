@@ -1,9 +1,10 @@
 "use client";
+import { Users, ClipboardList, CircleCheck, Clock3 } from "lucide-react";
 import { useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, mutationKey, type PaginatedResponse } from "../../lib/api";
-import { Badge, Card, CardHead, Empty, ErrorState, PageHeader, Pagination } from "../../components/ui";
+import { MetricCard, LoadingState, Badge, Card, CardHead, Empty, ErrorState, PageHeader, Pagination } from "../../components/ui";
 
 type Order = {
   id: string;
@@ -49,17 +50,18 @@ export default function OrdersPage() {
   const totalPages = Array.isArray(rawData) ? 1 : (rawData?.totalPages ?? 1);
 
   return (
-    <main className="page">
+    <main className="page orders-page">
       <PageHeader
         eyebrow="Sales operations"
         title="Sales orders"
-        description="Confirmed orders freeze effective price and fuusto-to-liter snapshots."
+        description="Create orders with saved prices. Track fulfillment from request to delivery."
         actions={
           <Link className="btn primary" href="/orders/new">
             Create order
           </Link>
         }
       />
+      <div className="grid"><MetricCard label="Matching orders" value={rows.data ? (Array.isArray(rows.data) ? rows.data.length : rows.data.total) : "—"} note="Across the current search" icon={ClipboardList}/><MetricCard label="Drafts on this page" value={items.filter(o=>o.status==="DRAFT").length} note="Awaiting confirmation" icon={Clock3}/><MetricCard label="In progress on this page" value={items.filter(o=>["CONFIRMED","SCHEDULED","IN_PROGRESS"].includes(o.status)).length} note="Confirmed and active orders" icon={Users}/><MetricCard label="Fulfilled on this page" value={items.filter(o=>o.status==="FULFILLED").length} note="Accepted deliveries" icon={CircleCheck}/></div>
       <Card>
         <CardHead
           title="Order register"
@@ -98,7 +100,7 @@ export default function OrdersPage() {
           </div>
         </div>
 
-        {rows.isError ? (
+        {rows.isLoading ? <LoadingState /> : rows.isError ? (
           <ErrorState message={(rows.error as Error).message} retry={() => void rows.refetch()} />
         ) : (
           <div className="table-wrap">
@@ -142,7 +144,7 @@ export default function OrdersPage() {
                       </Badge>
                     </td>
                     <td style={{ textAlign: "right" }}>
-                      {row.status === "DRAFT" && (
+                      <Link className="btn small" href={`/orders/${row.id}`}>Details</Link> {row.status === "DRAFT" && (
                         <button
                           className="btn primary small"
                           disabled={confirm.isPending}

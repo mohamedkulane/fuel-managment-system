@@ -20,7 +20,7 @@ export default function DispatchesPage() {
   });
 
   return (
-    <main className="page">
+    <main className="page dispatches-page">
       <PageHeader
         eyebrow="Physical movement"
         title="Dispatches"

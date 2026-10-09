@@ -1,4 +1,6 @@
 "use client";
+import { PageHeader, CardHead } from "../../components/ui";
+import { decimal } from "../../lib/format";
 import { useState } from "react";
 import Link from "next/link";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -85,18 +87,10 @@ export default function InvoicesPage() {
   };
 
   return (
-    <main className="page">
-      <header className="page-header">
-        <div>
-          <h1 className="title">Commercial Invoices</h1>
-          <p className="subtitle">Billing generated exclusively from accepted fuel deliveries</p>
-        </div>
-        <button className="btn primary" onClick={() => setOpenModal(true)}>
-          + Generate Invoice
-        </button>
-      </header>
+    <main className="page invoices-page">
+      <PageHeader eyebrow="Customer finance" title="Invoices" description="Billing follows accepted deliveries. Review posted invoices and outstanding amounts." actions={<button className="btn primary" onClick={() => setOpenModal(true)}>Generate invoice</button>} />
 
-      <section className="card space-y-4">
+      <section className="card"><CardHead title="Invoices register" description="Review records and open an account for details." />
         <div className="filter-bar">
           <input
             type="search"
@@ -140,7 +134,7 @@ export default function InvoicesPage() {
         ) : (
           <>
             <div className="table-wrap">
-              <table className="table">
+              <table className="data-table">
                 <thead>
                   <tr>
                     <th>Invoice #</th>
@@ -183,9 +177,9 @@ export default function InvoicesPage() {
                           {inv.status.replace("_", " ")}
                         </span>
                       </td>
-                      <td className="font-mono">${parseFloat(inv.totalAmount).toFixed(2)}</td>
-                      <td className="font-mono text-emerald-400">${parseFloat(inv.paidAmount).toFixed(2)}</td>
-                      <td className="font-mono text-amber-400 font-semibold">${parseFloat(inv.balanceDue).toFixed(2)}</td>
+                      <td className="font-mono">${decimal(inv.totalAmount, 2)}</td>
+                      <td className="font-mono text-emerald-400">${decimal(inv.paidAmount, 2)}</td>
+                      <td className="font-mono text-amber-400 font-semibold">${decimal(inv.balanceDue, 2)}</td>
                       <td>
                         <Link href={`/invoices/${inv.id}`} className="btn ghost sm">
                           View details
@@ -243,7 +237,7 @@ export default function InvoicesPage() {
                       <div className="text-right">
                         <div className="font-mono text-sm font-semibold">{item.acceptedUnits} units</div>
                         <div className="text-xs text-emerald-400 font-mono">
-                          ${parseFloat(item.estimatedTotal ?? "0").toFixed(2)}
+                          ${decimal(item.estimatedTotal ?? "0", 2)}
                         </div>
                       </div>
                     </div>
