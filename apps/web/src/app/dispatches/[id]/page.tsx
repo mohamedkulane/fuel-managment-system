@@ -1,9 +1,11 @@
 "use client";
+import { sum, decimal } from "../../../lib/format";
+import { Boxes, Truck, CircleCheck } from "lucide-react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, mutationKey } from "../../../lib/api";
-import { Badge, Card, CardHead, ErrorState, PageHeader } from "../../../components/ui";
+import { MetricCard, Badge, Card, CardHead, ErrorState, PageHeader } from "../../../components/ui";
 
 type DispatchLine = {
   id: string;
@@ -87,12 +89,14 @@ export default function DispatchDetailPage() {
         }
       />
 
+      {post.isError && <ErrorState message={post.error.message} />}
       {row && (
         <>
           <div className="notice warn">
-            <b>Operational Inventory Invariant:</b> Posting dispatch reduces Warehouse stock and increases In-Transit stock.
+            <b>Physical dispatch:</b> Posting dispatch reduces Warehouse stock and increases In-Transit stock.
           </div>
 
+          <div className="grid team-metrics"><MetricCard label="Dispatched liters" value={`${decimal(sum(row.lines.map(l=>l.dispatchedLiters)),3)} L`} note="Fuel physically dispatched" icon={Truck}/><MetricCard label="Accepted liters" value={`${decimal(sum(row.lines.flatMap(l=>l.confirmations.map(c=>c.acceptedLiters))),3)} L`} note="Confirmed customer acceptance" icon={CircleCheck}/><MetricCard label="Returned liters" value={`${decimal(sum(row.lines.flatMap(l=>l.confirmations.map(c=>c.physicalReturnedLiters))),3)} L`} note="Returned to warehouse" icon={Boxes}/></div>
           <Card>
             <CardHead title="Dispatched Order Lines" description="Dispatched fuel quantities in fuusto and actual liters" />
             <div className="table-wrap">
@@ -109,8 +113,8 @@ export default function DispatchDetailPage() {
                 </thead>
                 <tbody>
                   {row.lines.map((line) => {
-                    const totalAccepted = line.confirmations.reduce((s, c) => s + Number(c.acceptedUnits), 0);
-                    const totalReturned = line.confirmations.reduce((s, c) => s + Number(c.physicalReturnedLiters), 0);
+                    const totalAccepted = sum(line.confirmations.map(c=>c.acceptedUnits));
+                    const totalReturned = sum(line.confirmations.map(c=>c.physicalReturnedLiters));
                     return (
                       <tr key={line.id}>
                         <td>

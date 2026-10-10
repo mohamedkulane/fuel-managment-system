@@ -1,8 +1,10 @@
 "use client";
+import { ClipboardList, Clock3, CircleCheck, Truck } from "lucide-react";
+import { sum } from "../../lib/format";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../../lib/api";
-import { Badge, Card, CardHead, Empty, ErrorState, PageHeader } from "../../components/ui";
+import { MetricCard, LoadingState, Badge, Card, CardHead, Empty, ErrorState, PageHeader } from "../../components/ui";
 
 type Dispatch = {
   id: string;
@@ -23,13 +25,14 @@ export default function DispatchesPage() {
     <main className="page dispatches-page">
       <PageHeader
         eyebrow="Physical movement"
-        title="Dispatches"
-        description="Track fuel dispatched from the warehouse to in-transit status and perform actual delivery reconciliation."
+        title="Dispatch management"
+        description="Follow physical fuel movement and record actual delivery acceptance."
       />
 
+      <div className="grid"><MetricCard label="Dispatch records" value={query.data?.length ?? "—"} note="All recorded dispatches" icon={ClipboardList}/><MetricCard label="Awaiting dispatch" value={query.data?.filter(d=>d.status==="PREPARED").length ?? "—"} note="Prepared for physical movement" icon={Clock3}/><MetricCard label="Awaiting reconciliation" value={query.data?.filter(d=>["POSTED","PARTIALLY_RECONCILED"].includes(d.status)).length ?? "—"} note="Accepted and returned quantities needed" icon={Truck} dark/><MetricCard label="Reconciled" value={query.data?.filter(d=>d.status==="RECONCILED").length ?? "—"} note="Physical disposition recorded" icon={CircleCheck}/></div>
       <Card>
         <CardHead title="All Dispatches" description="Physical fuel leaves warehouse stock only when dispatch is posted" />
-        {query.isError ? (
+        {query.isLoading ? <LoadingState /> : query.isError ? (
           <ErrorState message={(query.error as Error).message} retry={() => void query.refetch()} />
         ) : (
           <div className="table-wrap">
@@ -53,8 +56,8 @@ export default function DispatchesPage() {
                     </td>
                     <td>{row.deliverySheet?.sheetNo ?? "Direct"}</td>
                     <td className="strong mono">
-                      {row.lines.reduce((s, l) => s + Number(l.dispatchedUnits), 0)} fuusto (
-                      {row.lines.reduce((s, l) => s + Number(l.dispatchedLiters), 0)} L)
+                      {sum(row.lines.map(l => l.dispatchedUnits))} fuusto (
+                      {sum(row.lines.map(l => l.dispatchedLiters))} L)
                     </td>
                     <td>
                       <Badge

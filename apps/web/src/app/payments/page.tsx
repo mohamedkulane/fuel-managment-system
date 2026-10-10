@@ -1,4 +1,5 @@
 "use client";
+import { FinanceMetrics } from "../../components/finance-metrics";
 import { PageHeader, CardHead } from "../../components/ui";
 import Decimal from "decimal.js";
 import { decimal } from "../../lib/format";
@@ -83,6 +84,8 @@ export default function PaymentsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["payments"] });
       queryClient.invalidateQueries({ queryKey: ["invoices"] });
+      queryClient.invalidateQueries({ queryKey: ["financial-summary"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       queryClient.invalidateQueries({ queryKey: ["debts"] });
       setOpenModal(false);
       setSelectedCustomerId("");
@@ -122,6 +125,7 @@ export default function PaymentsPage() {
     <main className="page payments-page">
       <PageHeader eyebrow="Customer finance" title="Payment collections" description="Record customer payments and allocate them to invoices." actions={<button className="btn primary" onClick={() => setOpenModal(true)}>Record payment</button>} />
 
+      <FinanceMetrics kind="payments" />
       <section className="card"><CardHead title="Payment register" description="Review records and open an account for details." />
         <div className="filter-bar">
           <input

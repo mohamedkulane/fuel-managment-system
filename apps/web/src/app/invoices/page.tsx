@@ -1,4 +1,5 @@
 "use client";
+import { FinanceMetrics } from "../../components/finance-metrics";
 import { PageHeader, CardHead } from "../../components/ui";
 import { decimal } from "../../lib/format";
 import { useState } from "react";
@@ -62,6 +63,8 @@ export default function InvoicesPage() {
       api("/invoices", { method: "POST", body: JSON.stringify(body) }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["invoices"] });
+      queryClient.invalidateQueries({ queryKey: ["financial-summary"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       queryClient.invalidateQueries({ queryKey: ["invoices-unbilled"] });
       setOpenModal(false);
       setSelectedUnbilledId("");
@@ -90,6 +93,7 @@ export default function InvoicesPage() {
     <main className="page invoices-page">
       <PageHeader eyebrow="Customer finance" title="Invoices" description="Billing follows accepted deliveries. Review posted invoices and outstanding amounts." actions={<button className="btn primary" onClick={() => setOpenModal(true)}>Generate invoice</button>} />
 
+      <FinanceMetrics kind="invoices" />
       <section className="card"><CardHead title="Invoices register" description="Review records and open an account for details." />
         <div className="filter-bar">
           <input
