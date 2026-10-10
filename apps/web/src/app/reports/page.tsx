@@ -61,9 +61,9 @@ const reports: ReportCard[] = [
   },
   {
     id: "tanker-receipts",
-    title: "Inbound Booyad Tanker Receipts",
+    title: "Fuel Stock Receipts & Purchases",
     category: "Inventory",
-    description: "Inbound booyad receipts with actual liters, expected liters, and purchase costs (Owner only).",
+    description: "Inbound fuel stock purchases in fuusto with calculated liters and purchase costs (Owner only).",
     endpoint: "/reports/tanker-receipts"
   },
   {
@@ -84,7 +84,7 @@ const reports: ReportCard[] = [
     id: "profitability",
     title: "Financial Profitability Summary",
     category: "Owner",
-    description: "Confirmed invoiced revenue vs total booyad purchase costs with cost allocation policy disclosures.",
+    description: "Confirmed invoiced revenue vs total fuel stock purchase costs with cost allocation policy disclosures.",
     endpoint: "/reports/profitability",
     ownerOnly: true
   }

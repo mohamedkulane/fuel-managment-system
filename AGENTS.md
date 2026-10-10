@@ -3,10 +3,10 @@
 > Applies to all work under this repository. Read `README.md`, `docs/00-start-here.md`, the decision log and the current authorized phase before editing code. This document is a contract, not an optional suggestion.
 
 ## Objective and scope
-Build a **single-business** fuel wholesale/distribution web application for Diesel/Naafto and Petrol/Basiin: inbound booyad tanker receipts, liter-based stock, fuusto sales, price snapshots, customers with persistent debts and multiple part-payments, manual delivery manifests, reconciled actual deliveries, Excel/PDF reports and owner/office-employee access.
+Build a **single-business** fuel wholesale/distribution web application for Diesel/Naafto and Petrol/Basiin: fuel stock purchases in fuusto, 240 L/fuusto canonical inventory, fuusto sales, price snapshots, customers with persistent debts and multiple part-payments, manual delivery manifests, reconciled actual deliveries, Excel/PDF reports and owner/office-employee access.
 
 ## Non-negotiable domain rules
-1. **Booyad != fuusto**: booyad is an inbound tanker truck/receipt; fuusto is an order/sale container. An illustrative 20 L fuusto is **not** a confirmed default. Require configurable liters-per-fuusto before stocking/order flows that need conversion.
+1. **Confirmed Fuusto Volume**: **1 FUUSTO = 240 LITERS** (statically confirmed business rule). Stock is purchased, received, and sold to customers in **FUUSTO**. Operational concept of Booyad/Tanker receiving is removed; workflow uses **Fuel Stock Receiving / Stock Purchases**.
 2. Canonical stock is liters, independently by fuel type. Persist quantity/price/conversion snapshots on transactional rows. Never recompute historical sales from mutable price or conversion settings.
 3. Prices change over time. New confirmed orders snapshot the agreed price; previously confirmed orders/invoices are never repriced by a price-list update.
 4. Invoicing is based on **confirmed accepted delivered quantity**, not the original order quantity. For 20 requested/18 accepted, bill exactly 18, and explicitly reconcile the remaining 2 and their physical fuel disposition.

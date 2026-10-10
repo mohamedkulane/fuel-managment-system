@@ -1,14 +1,13 @@
 "use client";
 import { Fuel as FuelIcon } from "lucide-react";
-import { decimal } from "../../lib/format";
-import { dateTime } from "../../lib/format";
+import { decimal, dateTime } from "../../lib/format";
 import { FormEvent, useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, type Actor, type PaginatedResponse } from "../../lib/api";
 import { MetricCard, LoadingState, Badge, Card, CardHead, Empty, ErrorState, Modal, PageHeader, Pagination, SubmitButton } from "../../components/ui";
 
-type Balance = { fuel: string; fuelName: string; location: string; balanceLiters: string };
+type Balance = { fuel: string; fuelName: string; location: string; balanceFuusto?: string; balanceLiters: string };
 type Fuel = { id: string; code: string; displayName: string };
 type Movement = {
   id: string;
@@ -16,6 +15,7 @@ type Movement = {
   fuelName: string;
   location: string;
   eventType: string;
+  quantityFuusto?: string;
   quantityLiters: string;
   sourceType: string;
   occurredAt: string;
@@ -72,7 +72,7 @@ export default function StockPage() {
       <PageHeader
         eyebrow="Inventory control"
         title="Inventory overview"
-        description="A clear view of warehouse stock, in-transit fuel and movement history."
+        description="Warehouse stock, in-transit fuel and movement history measured primarily in Fuusto (1 fuusto = 240 liters)."
         actions={
           <>
             {isOwner && (
@@ -81,7 +81,7 @@ export default function StockPage() {
               </button>
             )}
             <Link className="btn primary" href="/stock/receive">
-              Receive tanker
+              + Receive stock purchase
             </Link>
           </>
         }
@@ -106,7 +106,7 @@ export default function StockPage() {
             </div>
             <div className="field">
               <label htmlFor="delta">Signed Delta Liters * (+ / -)</label>
-              <input id="delta" className="input" name="delta" required placeholder="e.g. 500 or -150" inputMode="decimal" />
+              <input id="delta" className="input" name="delta" required placeholder="e.g. 12000 or -2400" inputMode="decimal" />
             </div>
             <div className="field full">
               <label htmlFor="reason">Mandatory Audit Reason *</label>
@@ -127,14 +127,24 @@ export default function StockPage() {
         <ErrorState message={(balances.error as Error).message} retry={() => void balances.refetch()} />
       ) : (
         <div className="grid">
-          {balances.data?.map((row) => (
-            <MetricCard key={`${row.fuel}-${row.location}`} label={`${row.fuelName} · ${row.location.replaceAll("_", " ")}`} value={`${decimal(row.balanceLiters, 3)} L`} note="Posted physical balance" icon={FuelIcon} dark={row.fuel === "DIESEL" && row.location === "WAREHOUSE"} />
-          ))}
+          {balances.data?.map((row) => {
+            const fuusto = row.balanceFuusto ?? (Number(row.balanceLiters) / 240).toFixed(3);
+            return (
+              <MetricCard
+                key={`${row.fuel}-${row.location}`}
+                label={`${row.fuelName} · ${row.location.replaceAll("_", " ")}`}
+                value={`${fuusto} fuusto`}
+                note={`${decimal(row.balanceLiters, 3)} canonical liters`}
+                icon={FuelIcon}
+                dark={row.fuel === "DIESEL" && row.location === "WAREHOUSE"}
+              />
+            );
+          })}
         </div>
       )}
 
       <Card>
-        <CardHead title="Stock Movement Ledger" description="Receipts, dispatch, acceptance, return and adjustment remain distinct audit events" />
+        <CardHead title="Stock Movement Ledger" description="Purchases, dispatches, acceptances, returns and adjustments measured in fuusto" />
         <div className="toolbar">
           <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", width: "100%" }}>
             <select
@@ -175,33 +185,38 @@ export default function StockPage() {
                   <th>Fuel</th>
                   <th>Movement Type</th>
                   <th>Location</th>
-                  <th>Quantity (Liters)</th>
+                  <th>Quantity (Fuusto)</th>
+                  <th>Canonical Liters</th>
                   <th>Source Reference</th>
                 </tr>
               </thead>
               <tbody>
-                {movementItems.map((row) => (
-                  <tr key={row.id}>
-                    <td>{dateTime(row.occurredAt)}</td>
-                    <td>{row.fuelName}</td>
-                    <td>
-                      <Badge
-                        tone={
-                          row.eventType === "RECEIPT" || row.eventType === "RETURN"
-                            ? "ok"
-                            : row.eventType === "ADJUSTMENT"
-                            ? "warn"
-                            : "info"
-                        }
-                      >
-                        {row.eventType}
-                      </Badge>
-                    </td>
-                    <td>{row.location.replace("_", " ")}</td>
-                    <td className="mono strong">{row.quantityLiters} L</td>
-                    <td>{row.sourceType}</td>
-                  </tr>
-                ))}
+                {movementItems.map((row) => {
+                  const fuustoQty = row.quantityFuusto ?? (Number(row.quantityLiters) / 240).toFixed(3);
+                  return (
+                    <tr key={row.id}>
+                      <td>{dateTime(row.occurredAt)}</td>
+                      <td>{row.fuelName}</td>
+                      <td>
+                        <Badge
+                          tone={
+                            row.eventType === "RECEIPT" || row.eventType === "RETURN"
+                              ? "ok"
+                              : row.eventType === "ADJUSTMENT"
+                              ? "warn"
+                              : "info"
+                          }
+                        >
+                          {row.eventType}
+                        </Badge>
+                      </td>
+                      <td>{row.location.replace("_", " ")}</td>
+                      <td className="mono strong" style={{ fontSize: 13 }}>{fuustoQty} fuusto</td>
+                      <td className="mono muted">{row.quantityLiters} L</td>
+                      <td>{row.sourceType}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
             {movementItems.length === 0 && <Empty>No posted stock movements found.</Empty>}
@@ -212,4 +227,3 @@ export default function StockPage() {
     </main>
   );
 }
-

@@ -9,7 +9,7 @@ import { ErrorState, LoadingState } from "./ui";
 
 const groups = [
   { label: "Workspace", links: [{ href: "/", label: "Overview", icon: LayoutGrid }, { href: "/customers", label: "Customers", icon: Users }, { href: "/orders", label: "Sales orders", icon: ShoppingBag }, { href: "/invoices", label: "Invoices", icon: Receipt }, { href: "/payments", label: "Payments", icon: Wallet }, { href: "/debts", label: "Debt center", icon: TrendingUp }] },
-  { label: "Operations", links: [{ href: "/stock", label: "Inventory", icon: Boxes }, { href: "/stock/receive", label: "Tanker receipts", icon: Truck }, { href: "/pricing", label: "Fuel pricing", icon: Fuel }, { href: "/deliveries", label: "Delivery sheets", icon: ClipboardList }, { href: "/dispatches", label: "Dispatches", icon: Repeat2 }] },
+  { label: "Operations", links: [{ href: "/stock", label: "Inventory", icon: Boxes }, { href: "/stock/receive", label: "Fuel stock receiving", icon: Truck }, { href: "/pricing", label: "Fuel pricing", icon: Fuel }, { href: "/deliveries", label: "Delivery sheets", icon: ClipboardList }, { href: "/dispatches", label: "Dispatches", icon: Repeat2 }] },
   { label: "Insights", links: [{ href: "/reports", label: "Reports & exports", icon: BarChart3 }, { href: "/audits", label: "Activity log", icon: Clock3 }] },
   { label: "Administration", links: [{ href: "/settings", label: "Settings & access", icon: Settings }] }
 ];

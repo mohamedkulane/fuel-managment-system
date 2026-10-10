@@ -62,7 +62,15 @@ export class AppController {
   @Get("stock/balances")
   async balances() {
     const rows = await this.prisma.stockBalance.findMany({ include: { fuel: true }, orderBy: [{ fuel: { code: "asc" } }, { location: "asc" }] });
-    return { data: rows.map((row) => ({ fuel: row.fuel.code, fuelName: row.fuel.displayName, location: row.location, balanceLiters: row.balanceLiters.toFixed(3) })) };
+    return {
+      data: rows.map((row) => ({
+        fuel: row.fuel.code,
+        fuelName: row.fuel.displayName,
+        location: row.location,
+        balanceFuusto: row.balanceLiters.div(240).toFixed(3),
+        balanceLiters: row.balanceLiters.toFixed(3)
+      }))
+    };
   }
 
   @UseGuards(SessionGuard)
@@ -103,6 +111,7 @@ export class AppController {
           fuelName: row.fuel.displayName,
           location: row.location,
           eventType: row.eventType,
+          quantityFuusto: row.signedDeltaLiters.div(240).toFixed(3),
           quantityLiters: row.signedDeltaLiters.toFixed(3),
           sourceType: row.sourceType,
           sourceId: row.sourceId,
@@ -209,40 +218,154 @@ export class AppController {
   }
 
   @UseGuards(SessionGuard)
-  @Get("tanker-receipts")
-  async receipts(@Req() request: AuthenticatedRequest) { const rows = await this.prisma.tankerReceipt.findMany({ include: { lines: { include: { fuel: true } } }, orderBy: { arrivedAt: "desc" } }); return { data: rows.map((row) => ({ ...row, lines: row.lines.map((line) => ({ ...line, actualLiters: line.actualLiters.toFixed(3), expectedLiters: line.expectedLiters?.toFixed(3) ?? null, unitPurchaseCost: request.actor?.role === "OWNER" ? line.unitPurchaseCost?.toFixed(4) ?? null : undefined })) })) }; }
+  @Get(["stock/receipts", "tanker-receipts"])
+  async receipts(@Req() request: AuthenticatedRequest) {
+    const rows = await this.prisma.tankerReceipt.findMany({ include: { lines: { include: { fuel: true } } }, orderBy: { arrivedAt: "desc" } });
+    return {
+      data: rows.map((row) => ({
+        ...row,
+        supplier: row.tankerReference,
+        lines: row.lines.map((line) => {
+          const fuusto = line.quantityFuusto ? line.quantityFuusto : line.actualLiters.div(240);
+          return {
+            ...line,
+            quantityFuusto: fuusto.toFixed(3),
+            litersPerFuustoSnapshot: line.litersPerFuustoSnapshot?.toFixed(6) ?? "240.000000",
+            actualLiters: line.actualLiters.toFixed(3),
+            expectedLiters: line.expectedLiters?.toFixed(3) ?? null,
+            unitPurchaseCost: request.actor?.role === "OWNER" ? line.unitPurchaseCost?.toFixed(4) ?? null : undefined
+          };
+        })
+      }))
+    };
+  }
 
   @UseGuards(SessionGuard)
-  @Get("tanker-receipts/:id")
+  @Get(["stock/receipts/:id", "tanker-receipts/:id"])
   async receipt(@Req() request: AuthenticatedRequest, @Param("id") id: string) {
     const row = await this.prisma.tankerReceipt.findUnique({ where: { id }, include: { lines: { include: { fuel: true } }, createdBy: true, postedBy: true } });
-    if (!row) throw new NotFoundException("Receipt not found");
+    if (!row) throw new NotFoundException("Stock receipt not found");
     return {
       data: {
         ...row,
-        lines: row.lines.map((line) => ({
-          ...line,
-          actualLiters: line.actualLiters.toFixed(3),
-          expectedLiters: line.expectedLiters?.toFixed(3) ?? null,
-          unitPurchaseCost: request.actor?.role === "OWNER" ? line.unitPurchaseCost?.toFixed(4) ?? null : undefined
-        }))
+        supplier: row.tankerReference,
+        lines: row.lines.map((line) => {
+          const fuusto = line.quantityFuusto ? line.quantityFuusto : line.actualLiters.div(240);
+          return {
+            ...line,
+            quantityFuusto: fuusto.toFixed(3),
+            litersPerFuustoSnapshot: line.litersPerFuustoSnapshot?.toFixed(6) ?? "240.000000",
+            actualLiters: line.actualLiters.toFixed(3),
+            expectedLiters: line.expectedLiters?.toFixed(3) ?? null,
+            unitPurchaseCost: request.actor?.role === "OWNER" ? line.unitPurchaseCost?.toFixed(4) ?? null : undefined
+          };
+        })
       }
     };
   }
 
   @UseGuards(SessionGuard)
-  @Post("tanker-receipts")
-  async createReceipt(@Req() request: AuthenticatedRequest, @Body() body: { tankerReference?: string; arrivedAt?: string; lines?: Array<{ fuelId?: string; actualLiters?: string; expectedLiters?: string; unitPurchaseCost?: string }> }) {
-    const actor = requireActor(request); if (!body.arrivedAt || !body.lines?.length) throw new BadRequestException("arrivedAt and at least one line are required");
-    const lines = body.lines.map((line) => { if (!line.fuelId || !line.actualLiters) throw new BadRequestException("Each receipt line needs fuelId and actualLiters"); return { fuelId: line.fuelId, actualLiters: positive(line.actualLiters, "actualLiters"), expectedLiters: line.expectedLiters ? positive(line.expectedLiters, "expectedLiters") : undefined, unitPurchaseCost: line.unitPurchaseCost && actor.role === "OWNER" ? positive(line.unitPurchaseCost, "unitPurchaseCost") : undefined }; });
-    const row = await this.prisma.tankerReceipt.create({ data: { receiptNo: documentNo("BR"), tankerReference: body.tankerReference, arrivedAt: new Date(body.arrivedAt), createdById: actor.id, lines: { create: lines } }, include: { lines: true } }); return { data: row };
+  @Post(["stock/receipts", "tanker-receipts"])
+  async createReceipt(
+    @Req() request: AuthenticatedRequest,
+    @Body()
+    body: {
+      supplier?: string;
+      tankerReference?: string;
+      arrivedAt?: string;
+      purchaseDate?: string;
+      notes?: string;
+      lines?: Array<{
+        fuelId?: string;
+        quantityFuusto?: string;
+        actualLiters?: string;
+        expectedLiters?: string;
+        unitPurchaseCost?: string;
+      }>;
+    }
+  ) {
+    const actor = requireActor(request);
+    const arrival = body.purchaseDate || body.arrivedAt;
+    if (!arrival || !body.lines?.length) throw new BadRequestException("arrivedAt/purchaseDate and at least one line are required");
+
+    const lines = body.lines.map((line) => {
+      if (!line.fuelId) throw new BadRequestException("Each receipt line needs fuelId");
+      if (!line.quantityFuusto && !line.actualLiters) throw new BadRequestException("Each line requires quantityFuusto or actualLiters");
+
+      let quantityFuustoDec: Prisma.Decimal;
+      let actualLitersDec: Prisma.Decimal;
+      const litersPerFuustoDec = dec("240.000000");
+
+      if (line.quantityFuusto) {
+        quantityFuustoDec = positive(line.quantityFuusto, "quantityFuusto");
+        actualLitersDec = quantityFuustoDec.mul(litersPerFuustoDec);
+      } else {
+        actualLitersDec = positive(line.actualLiters!, "actualLiters");
+        quantityFuustoDec = actualLitersDec.div(litersPerFuustoDec);
+      }
+
+      return {
+        fuelId: line.fuelId,
+        quantityFuusto: quantityFuustoDec,
+        litersPerFuustoSnapshot: litersPerFuustoDec,
+        actualLiters: actualLitersDec,
+        expectedLiters: line.expectedLiters ? positive(line.expectedLiters, "expectedLiters") : actualLitersDec,
+        unitPurchaseCost: line.unitPurchaseCost && actor.role === "OWNER" ? positive(line.unitPurchaseCost, "unitPurchaseCost") : undefined
+      };
+    });
+
+    const row = await this.prisma.tankerReceipt.create({
+      data: {
+        receiptNo: documentNo("REC"),
+        tankerReference: body.supplier || body.tankerReference,
+        arrivedAt: new Date(arrival),
+        notes: body.notes,
+        createdById: actor.id,
+        lines: { create: lines }
+      },
+      include: { lines: true }
+    });
+    return { data: row };
   }
 
   @UseGuards(SessionGuard)
-  @Post("tanker-receipts/:id/post")
+  @Post(["stock/receipts/:id/post", "tanker-receipts/:id/post"])
   async postReceipt(@Req() request: AuthenticatedRequest, @Param("id") id: string, @Headers("idempotency-key") headerKey?: string) {
-    const actor = requireActor(request); const key = requireIdempotencyKey(headerKey); const row = await this.prisma.tankerReceipt.findUnique({ where: { id }, include: { lines: true } }); if (!row) throw new NotFoundException("Receipt not found"); if (row.status === "POSTED") return { data: { id: row.id, status: row.status, replay: true } }; if (row.status !== "DRAFT") throw new BadRequestException("Only draft receipts can be posted");
-    await this.prisma.$transaction(async (tx) => { const claimed = await tx.tankerReceipt.updateMany({ where: { id, status: "DRAFT" }, data: { status: "POSTED", postedById: actor.id, postedAt: new Date(), postIdempotencyKey: key } }); if (claimed.count !== 1) throw new BadRequestException("Receipt was already posted"); for (const line of row.lines) { await tx.inventoryMovement.create({ data: { fuelId: line.fuelId, location: "WAREHOUSE", signedDeltaLiters: line.actualLiters, eventType: "RECEIPT", sourceType: "TankerReceiptLine", sourceId: row.id, sourceLineId: line.id, createdById: actor.id } }); await tx.stockBalance.update({ where: { fuelId_location: { fuelId: line.fuelId, location: "WAREHOUSE" } }, data: { balanceLiters: { increment: line.actualLiters }, version: { increment: 1 } } }); } await tx.auditEvent.create({ data: { actorId: actor.id, entityType: "TankerReceipt", entityId: id, action: "POSTED" } }); });
+    const actor = requireActor(request);
+    const key = requireIdempotencyKey(headerKey);
+    const row = await this.prisma.tankerReceipt.findUnique({ where: { id }, include: { lines: true } });
+    if (!row) throw new NotFoundException("Stock receipt not found");
+    if (row.status === "POSTED") return { data: { id: row.id, status: row.status, replay: true } };
+    if (row.status !== "DRAFT") throw new BadRequestException("Only draft receipts can be posted");
+
+    await this.prisma.$transaction(async (tx) => {
+      const claimed = await tx.tankerReceipt.updateMany({ where: { id, status: "DRAFT" }, data: { status: "POSTED", postedById: actor.id, postedAt: new Date(), postIdempotencyKey: key } });
+      if (claimed.count !== 1) throw new BadRequestException("Receipt was already posted");
+
+      for (const line of row.lines) {
+        await tx.inventoryMovement.create({
+          data: {
+            fuelId: line.fuelId,
+            location: "WAREHOUSE",
+            signedDeltaLiters: line.actualLiters,
+            eventType: "RECEIPT",
+            sourceType: "TankerReceiptLine",
+            sourceId: row.id,
+            sourceLineId: line.id,
+            createdById: actor.id
+          }
+        });
+        await tx.stockBalance.update({
+          where: { fuelId_location: { fuelId: line.fuelId, location: "WAREHOUSE" } },
+          data: { balanceLiters: { increment: line.actualLiters }, version: { increment: 1 } }
+        });
+      }
+
+      await tx.auditEvent.create({
+        data: { actorId: actor.id, entityType: "TankerReceipt", entityId: id, action: "POSTED" }
+      });
+    });
+
     return { data: { id, status: "POSTED" } };
   }
 

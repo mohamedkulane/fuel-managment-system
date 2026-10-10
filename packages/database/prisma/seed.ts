@@ -57,7 +57,7 @@ async function main(): Promise<void> {
   const pastDate = new Date("2026-01-01T00:00:00.000Z");
   const updateDate = new Date("2026-06-01T00:00:00.000Z");
 
-  // Diesel conversion: 20L/fuusto
+  // Diesel conversion: 240L/fuusto
   let dieselConv = await prisma.fuelUnitVersion.findFirst({
     where: { fuelId: diesel.id, salesUnitId: fuusto.id }
   });
@@ -66,14 +66,19 @@ async function main(): Promise<void> {
       data: {
         fuelId: diesel.id,
         salesUnitId: fuusto.id,
-        litersPerUnit: new Prisma.Decimal("20.000000"),
+        litersPerUnit: new Prisma.Decimal("240.000000"),
         effectiveFromUtc: pastDate,
         createdById: owner.id
       }
     });
+  } else {
+    await prisma.fuelUnitVersion.update({
+      where: { id: dieselConv.id },
+      data: { litersPerUnit: new Prisma.Decimal("240.000000") }
+    });
   }
 
-  // Petrol conversion: 20L/fuusto
+  // Petrol conversion: 240L/fuusto
   let petrolConv = await prisma.fuelUnitVersion.findFirst({
     where: { fuelId: petrol.id, salesUnitId: fuusto.id }
   });
@@ -82,10 +87,15 @@ async function main(): Promise<void> {
       data: {
         fuelId: petrol.id,
         salesUnitId: fuusto.id,
-        litersPerUnit: new Prisma.Decimal("20.000000"),
+        litersPerUnit: new Prisma.Decimal("240.000000"),
         effectiveFromUtc: pastDate,
         createdById: owner.id
       }
+    });
+  } else {
+    await prisma.fuelUnitVersion.update({
+      where: { id: petrolConv.id },
+      data: { litersPerUnit: new Prisma.Decimal("240.000000") }
     });
   }
 
