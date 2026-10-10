@@ -263,6 +263,7 @@ model TankerReceiptLine {
   expectedLiters          Decimal? @db.Decimal(18, 3)
   actualLiters            Decimal  @db.Decimal(18, 3)
   unitPurchaseCost        Decimal? @db.Decimal(20, 4)
+  totalPurchaseCost       Decimal? @db.Decimal(20, 4)
   receipt                 TankerReceipt @relation(fields: [receiptId], references: [id], onDelete: Restrict)
   fuel                    FuelType      @relation(fields: [fuelId], references: [id], onDelete: Restrict)
   @@index([fuelId])

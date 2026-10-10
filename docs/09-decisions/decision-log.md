@@ -29,5 +29,6 @@ Use this as a living ADR-lite. `CONFIRMED` items reflect user requirements, `PRO
 | D-023 | OWNER CONFIRMATION | Cost calculation | Proposed moving weighted average cost per fuel for owner-only profit; confirm before implementation. |
 | D-024 | OWNER CONFIRMATION | Offices/warehouses | One physical warehouse location in MVP; request design review if there are multiple. |
 | D-025 | OWNER CONFIRMATION | Order fulfillment | Partial delivery may be accepted now and remainder rescheduled/backordered; this design supports both. Confirm operational policy. |
+| D-026 | CONFIRMED | Optional Purchase Cost | Purchase cost entry on stock receiving is optional. Supports optional price per fuusto OR total purchase cost with reciprocal auto-calculation. Missing costs stored as null (never zero). If missing or valuation policy unapproved, display 'Profit unavailable — purchase cost not recorded.' Restricted to OWNER role. |
 
 When an answer arrives, update its row to `CONFIRMED`, document any changed contract and add tests. **Never fill unanswered owner decisions with convenient fake production data.**

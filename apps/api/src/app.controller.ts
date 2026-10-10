@@ -221,19 +221,22 @@ export class AppController {
   @Get(["stock/receipts", "tanker-receipts"])
   async receipts(@Req() request: AuthenticatedRequest) {
     const rows = await this.prisma.tankerReceipt.findMany({ include: { lines: { include: { fuel: true } } }, orderBy: { arrivedAt: "desc" } });
+    const isOwner = request.actor?.role === "OWNER";
     return {
       data: rows.map((row) => ({
         ...row,
         supplier: row.tankerReference,
         lines: row.lines.map((line) => {
           const fuusto = line.quantityFuusto ? line.quantityFuusto : line.actualLiters.div(240);
+          const totalCost = line.totalPurchaseCost ?? (line.unitPurchaseCost ? line.unitPurchaseCost.mul(fuusto) : null);
           return {
             ...line,
             quantityFuusto: fuusto.toFixed(3),
             litersPerFuustoSnapshot: line.litersPerFuustoSnapshot?.toFixed(6) ?? "240.000000",
             actualLiters: line.actualLiters.toFixed(3),
             expectedLiters: line.expectedLiters?.toFixed(3) ?? null,
-            unitPurchaseCost: request.actor?.role === "OWNER" ? line.unitPurchaseCost?.toFixed(4) ?? null : undefined
+            unitPurchaseCost: isOwner ? line.unitPurchaseCost?.toFixed(4) ?? null : undefined,
+            totalPurchaseCost: isOwner ? totalCost?.toFixed(4) ?? null : undefined
           };
         })
       }))
@@ -245,19 +248,22 @@ export class AppController {
   async receipt(@Req() request: AuthenticatedRequest, @Param("id") id: string) {
     const row = await this.prisma.tankerReceipt.findUnique({ where: { id }, include: { lines: { include: { fuel: true } }, createdBy: true, postedBy: true } });
     if (!row) throw new NotFoundException("Stock receipt not found");
+    const isOwner = request.actor?.role === "OWNER";
     return {
       data: {
         ...row,
         supplier: row.tankerReference,
         lines: row.lines.map((line) => {
           const fuusto = line.quantityFuusto ? line.quantityFuusto : line.actualLiters.div(240);
+          const totalCost = line.totalPurchaseCost ?? (line.unitPurchaseCost ? line.unitPurchaseCost.mul(fuusto) : null);
           return {
             ...line,
             quantityFuusto: fuusto.toFixed(3),
             litersPerFuustoSnapshot: line.litersPerFuustoSnapshot?.toFixed(6) ?? "240.000000",
             actualLiters: line.actualLiters.toFixed(3),
             expectedLiters: line.expectedLiters?.toFixed(3) ?? null,
-            unitPurchaseCost: request.actor?.role === "OWNER" ? line.unitPurchaseCost?.toFixed(4) ?? null : undefined
+            unitPurchaseCost: isOwner ? line.unitPurchaseCost?.toFixed(4) ?? null : undefined,
+            totalPurchaseCost: isOwner ? totalCost?.toFixed(4) ?? null : undefined
           };
         })
       }
@@ -281,6 +287,7 @@ export class AppController {
         actualLiters?: string;
         expectedLiters?: string;
         unitPurchaseCost?: string;
+        totalPurchaseCost?: string;
       }>;
     }
   ) {
@@ -304,13 +311,27 @@ export class AppController {
         quantityFuustoDec = actualLitersDec.div(litersPerFuustoDec);
       }
 
+      let unitPurchaseCostDec: Prisma.Decimal | undefined;
+      let totalPurchaseCostDec: Prisma.Decimal | undefined;
+
+      if (actor.role === "OWNER") {
+        if (line.unitPurchaseCost && line.unitPurchaseCost.trim() !== "") {
+          unitPurchaseCostDec = positive(line.unitPurchaseCost, "unitPurchaseCost");
+          totalPurchaseCostDec = line.totalPurchaseCost && line.totalPurchaseCost.trim() !== "" ? positive(line.totalPurchaseCost, "totalPurchaseCost") : unitPurchaseCostDec.mul(quantityFuustoDec);
+        } else if (line.totalPurchaseCost && line.totalPurchaseCost.trim() !== "") {
+          totalPurchaseCostDec = positive(line.totalPurchaseCost, "totalPurchaseCost");
+          unitPurchaseCostDec = totalPurchaseCostDec.div(quantityFuustoDec);
+        }
+      }
+
       return {
         fuelId: line.fuelId,
         quantityFuusto: quantityFuustoDec,
         litersPerFuustoSnapshot: litersPerFuustoDec,
         actualLiters: actualLitersDec,
         expectedLiters: line.expectedLiters ? positive(line.expectedLiters, "expectedLiters") : actualLitersDec,
-        unitPurchaseCost: line.unitPurchaseCost && actor.role === "OWNER" ? positive(line.unitPurchaseCost, "unitPurchaseCost") : undefined
+        unitPurchaseCost: unitPurchaseCostDec,
+        totalPurchaseCost: totalPurchaseCostDec
       };
     });
 
@@ -2234,7 +2255,7 @@ export class AppController {
         actualLiters: l.actualLiters.toFixed(3),
         expectedLiters: jsonDecimal(l.expectedLiters),
         unitPurchaseCost: isOwner ? jsonDecimal(l.unitPurchaseCost) : undefined,
-        totalPurchaseCost: isOwner && l.unitPurchaseCost ? l.actualLiters.mul(l.unitPurchaseCost).toFixed(4) : undefined
+        totalPurchaseCost: isOwner ? (l.totalPurchaseCost ? l.totalPurchaseCost.toFixed(4) : (l.unitPurchaseCost ? (l.quantityFuusto ? l.quantityFuusto.mul(l.unitPurchaseCost) : l.actualLiters.div(240).mul(l.unitPurchaseCost)).toFixed(4) : null)) : undefined
       }))
     );
 

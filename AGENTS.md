@@ -18,6 +18,7 @@ Build a **single-business** fuel wholesale/distribution web application for Dies
 10. Never use JavaScript floating-point `number` for financial arithmetic; use `Decimal`/Postgres `NUMERIC`; expose decimal values to API clients as strings.
 11. Financial and inventory mutations must be transactional, concurrency-safe, and server-authorized. No overselling, double-collection or duplicate invoice/payment posting on retries.
 12. Cost/profit data and price/master policy editing are OWNER-only by default. An office employee may create customers/orders, record actual delivery and collect payments as permitted. Permissions must be enforced in API AND export endpoints.
+13. **Optional Purchase Costs**: Purchase cost entry on stock receiving is optional. Supports optional price per fuusto OR total purchase cost, with reciprocal cost auto-calculation when provided. Missing purchase costs are stored as `null` in DB (never coerced to 0). If purchase cost is missing or valuation policy unapproved, display: "Profit unavailable — purchase cost not recorded." Do not invent costing methods (FIFO/Weighted Avg) without explicit approval.
 
 ## Chosen architecture
 - pnpm monorepo: `apps/web` (Next.js App Router + TypeScript), `apps/api` (NestJS REST + TypeScript), `packages/database` (PostgreSQL/Prisma), `packages/shared` (shared pure types/schemas, **no private backend business logic imported by client**).

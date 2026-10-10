@@ -15,6 +15,7 @@ type ReceiptLine = {
   actualLiters: string;
   expectedLiters: string | null;
   unitPurchaseCost?: string | null;
+  totalPurchaseCost?: string | null;
   fuel: { displayName: string };
 };
 
@@ -35,6 +36,8 @@ export default function ReceivePage() {
   const [showCreate, setShowCreate] = useState(false);
   const [selectedReceiptId, setSelectedReceiptId] = useState<string | null>(null);
   const [fuustoInput, setFuustoInput] = useState<string>("");
+  const [unitCostInput, setUnitCostInput] = useState<string>("");
+  const [totalCostInput, setTotalCostInput] = useState<string>("");
 
   const me = useQuery({ queryKey: ["me"], queryFn: () => api<Actor>("/auth/me") });
   const fuels = useQuery({ queryKey: ["fuels"], queryFn: () => api<Fuel[]>("/fuels") });
@@ -51,6 +54,8 @@ export default function ReceivePage() {
     onSuccess: async () => {
       setShowCreate(false);
       setFuustoInput("");
+      setUnitCostInput("");
+      setTotalCostInput("");
       await client.invalidateQueries({ queryKey: ["stock-receipts"] });
     }
   });
@@ -72,10 +77,47 @@ export default function ReceivePage() {
 
   const isOwner = me.data?.role === "OWNER";
 
+  function handleUnitCostChange(val: string) {
+    setUnitCostInput(val);
+    if (!val || isNaN(Number(val))) {
+      if (!val) setTotalCostInput("");
+      return;
+    }
+    const fuustoNum = Number(fuustoInput);
+    if (fuustoNum > 0) {
+      const calcTotal = Number(val) * fuustoNum;
+      setTotalCostInput(calcTotal.toFixed(2));
+    }
+  }
+
+  function handleTotalCostChange(val: string) {
+    setTotalCostInput(val);
+    if (!val || isNaN(Number(val))) {
+      if (!val) setUnitCostInput("");
+      return;
+    }
+    const fuustoNum = Number(fuustoInput);
+    if (fuustoNum > 0) {
+      const calcUnit = Number(val) / fuustoNum;
+      setUnitCostInput(calcUnit.toFixed(4));
+    }
+  }
+
+  function handleFuustoChange(val: string) {
+    setFuustoInput(val);
+    const fuustoNum = Number(val);
+    if (fuustoNum > 0 && unitCostInput && !isNaN(Number(unitCostInput))) {
+      setTotalCostInput((Number(unitCostInput) * fuustoNum).toFixed(2));
+    } else if (fuustoNum > 0 && totalCostInput && !isNaN(Number(totalCostInput))) {
+      setUnitCostInput((Number(totalCostInput) / fuustoNum).toFixed(4));
+    }
+  }
+
   function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const d = new FormData(e.currentTarget);
-    const cost = d.get("unitPurchaseCost");
+    const uCost = d.get("unitPurchaseCost");
+    const tCost = d.get("totalPurchaseCost");
     create.mutate({
       supplier: d.get("supplier"),
       purchaseDate: d.get("purchaseDate"),
@@ -84,7 +126,8 @@ export default function ReceivePage() {
         {
           fuelId: d.get("fuelId"),
           quantityFuusto: d.get("quantityFuusto"),
-          unitPurchaseCost: isOwner && cost ? String(cost) : undefined
+          unitPurchaseCost: isOwner && uCost && String(uCost).trim() !== "" ? String(uCost) : undefined,
+          totalPurchaseCost: isOwner && tCost && String(tCost).trim() !== "" ? String(tCost) : undefined
         }
       ]
     });
@@ -99,7 +142,7 @@ export default function ReceivePage() {
       <PageHeader
         eyebrow="Inventory purchasing"
         title="Fuel stock receiving"
-        description="Record incoming fuel stock purchases in fuusto (1 fuusto = 240 liters). Posting updates warehouse inventory."
+        description="Record incoming fuel stock purchases in fuusto (1 fuusto = 240 liters). Purchase costs are optional and Owner-restricted."
         actions={
           <button className="btn primary" onClick={() => setShowCreate(!showCreate)}>
             {showCreate ? "Close receiving form" : "+ Register stock purchase"}
@@ -148,6 +191,7 @@ export default function ReceivePage() {
                         <th>Quantity (Fuusto)</th>
                         <th>Canonical Liters (240 L/fuusto)</th>
                         {isOwner && <th>Unit Purchase Cost ($/fuusto)</th>}
+                        {isOwner && <th>Total Line Cost ($)</th>}
                       </tr>
                     </thead>
                     <tbody>
@@ -158,7 +202,8 @@ export default function ReceivePage() {
                             <td>{line.fuel.displayName}</td>
                             <td className="strong mono" style={{ fontSize: 14 }}>{fuustoVal} fuusto</td>
                             <td className="mono muted">{parseFloat(line.actualLiters).toLocaleString()} L</td>
-                            {isOwner && <td className="mono">{line.unitPurchaseCost ? `$${line.unitPurchaseCost}` : "—"}</td>}
+                            {isOwner && <td className="mono">{line.unitPurchaseCost ? `$${line.unitPurchaseCost}` : <span className="muted">Not recorded</span>}</td>}
+                            {isOwner && <td className="mono">{line.totalPurchaseCost ? `$${line.totalPurchaseCost}` : <span className="muted">Not recorded</span>}</td>}
                           </tr>
                         );
                       })}
@@ -219,18 +264,46 @@ export default function ReceivePage() {
                     required
                     placeholder="e.g. 50"
                     value={fuustoInput}
-                    onChange={(e) => setFuustoInput(e.target.value)}
+                    onChange={(e) => handleFuustoChange(e.target.value)}
                   />
                   <small className="muted" style={{ display: "block", marginTop: 4 }}>
                     Calculated liters: <b>{calculatedLitersPreview} L</b> (1 fuusto = 240 L)
                   </small>
                 </div>
+
                 {isOwner && (
-                  <div className="field">
-                    <label htmlFor="unitPurchaseCost">Unit Purchase Cost USD/Fuusto (Owner Only)</label>
-                    <input id="unitPurchaseCost" className="input" name="unitPurchaseCost" inputMode="decimal" placeholder="e.g. 192.0000" />
-                  </div>
+                  <>
+                    <div className="field">
+                      <label htmlFor="unitPurchaseCost">
+                        Unit Purchase Price USD / Fuusto <span className="muted">(Optional - Owner Only)</span>
+                      </label>
+                      <input
+                        id="unitPurchaseCost"
+                        className="input"
+                        name="unitPurchaseCost"
+                        inputMode="decimal"
+                        placeholder="e.g. 192.0000"
+                        value={unitCostInput}
+                        onChange={(e) => handleUnitCostChange(e.target.value)}
+                      />
+                    </div>
+                    <div className="field">
+                      <label htmlFor="totalPurchaseCost">
+                        Total Purchase Cost USD <span className="muted">(Optional - Owner Only)</span>
+                      </label>
+                      <input
+                        id="totalPurchaseCost"
+                        className="input"
+                        name="totalPurchaseCost"
+                        inputMode="decimal"
+                        placeholder="e.g. 9600.00"
+                        value={totalCostInput}
+                        onChange={(e) => handleTotalCostChange(e.target.value)}
+                      />
+                    </div>
+                  </>
                 )}
+
                 <div className="field full">
                   <label htmlFor="notes">Notes / Audit Remarks</label>
                   <input id="notes" className="input" name="notes" placeholder="e.g. Received at Mogadishu warehouse" />
@@ -245,7 +318,7 @@ export default function ReceivePage() {
           </Card>
 
           <Card>
-            <CardHead title="Stock Purchasing Rules" />
+            <CardHead title="Stock Purchasing & Cost Policy" />
             <div className="card-body">
               <p>
                 <b>01 · Purchasing in Fuusto</b>
@@ -258,9 +331,9 @@ export default function ReceivePage() {
                 1 fuusto is statically converted to <b>240 Liters</b> for canonical stock tracking.
               </p>
               <p>
-                <b>03 · Posting Stock</b>
+                <b>03 · Optional Purchase Cost</b>
                 <br />
-                Draft receipts do not increase inventory balance until posted. Posting atomically increments warehouse stock.
+                Purchase cost entry is completely <b>optional</b>. Entering either unit price per fuusto or total purchase cost automatically calculates the corresponding cost. Missing costs are stored as null (never zero).
               </p>
               <p>
                 <b>04 · Confidentiality</b>
@@ -291,7 +364,8 @@ export default function ReceivePage() {
                   <th>Fuel</th>
                   <th>Quantity (Fuusto)</th>
                   <th>Canonical Liters</th>
-                  {isOwner && <th>Purchase Cost / Fuusto</th>}
+                  {isOwner && <th>Cost / Fuusto</th>}
+                  {isOwner && <th>Total Line Cost</th>}
                   <th>Status</th>
                   <th style={{ textAlign: "right" }}>Actions</th>
                 </tr>
@@ -310,7 +384,12 @@ export default function ReceivePage() {
                     </td>
                     {isOwner && (
                       <td className="mono">
-                        {row.lines.map((x) => (x.unitPurchaseCost ? `$${x.unitPurchaseCost}` : "—")).join(", ")}
+                        {row.lines.map((x) => (x.unitPurchaseCost ? `$${x.unitPurchaseCost}` : <span className="muted" key={x.id}>—</span>)).join(", ")}
+                      </td>
+                    )}
+                    {isOwner && (
+                      <td className="mono">
+                        {row.lines.map((x) => (x.totalPurchaseCost ? `$${x.totalPurchaseCost}` : <span className="muted" key={x.id}>—</span>)).join(", ")}
                       </td>
                     )}
                     <td>
