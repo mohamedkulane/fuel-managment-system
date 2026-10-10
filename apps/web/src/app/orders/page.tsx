@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, mutationKey, type PaginatedResponse } from "../../lib/api";
+import { formatStatus, formatFuel } from "../../lib/format";
 import { MetricCard, LoadingState, Badge, Card, CardHead, Empty, ErrorState, PageHeader, Pagination } from "../../components/ui";
 
 type Order = {
@@ -52,20 +53,20 @@ export default function OrdersPage() {
   return (
     <main className="page orders-page">
       <PageHeader
-        eyebrow="Sales operations"
-        title="Sales orders"
-        description="Create orders with saved prices. Track fulfillment from request to delivery."
+        eyebrow="Hawgallada iibka"
+        title="Dalabyada"
+        description="Ka dhex samay dalabyada qiimayaasha la kaydiyay. La soco fulinta laga bilaabo codsiga ilaa gaarsiinta."
         actions={
           <Link className="btn primary" href="/orders/new">
-            Create order
+            Dalab Cusub
           </Link>
         }
       />
-      <div className="grid"><MetricCard label="Matching orders" value={rows.data ? (Array.isArray(rows.data) ? rows.data.length : rows.data.total) : "—"} note="Across the current search" icon={ClipboardList}/><MetricCard label="Drafts on this page" value={items.filter(o=>o.status==="DRAFT").length} note="Awaiting confirmation" icon={Clock3}/><MetricCard label="In progress on this page" value={items.filter(o=>["CONFIRMED","SCHEDULED","IN_PROGRESS"].includes(o.status)).length} note="Confirmed and active orders" icon={Users}/><MetricCard label="Fulfilled on this page" value={items.filter(o=>o.status==="FULFILLED").length} note="Accepted deliveries" icon={CircleCheck}/></div>
+      <div className="grid"><MetricCard label="Dalabyada ku habboon" value={rows.data ? (Array.isArray(rows.data) ? rows.data.length : rows.data.total) : "—"} note="Natiijada raadinta hadda" icon={ClipboardList}/><MetricCard label="Qabyo boggan" value={items.filter(o=>o.status==="DRAFT").length} note="Sugaya xaqiijin" icon={Clock3}/><MetricCard label="Socda boggan" value={items.filter(o=>["CONFIRMED","SCHEDULED","IN_PROGRESS"].includes(o.status)).length} note="Dalabyada la xaqiijiyay ee firfircoon" icon={Users}/><MetricCard label="La dhammeeyay boggan" value={items.filter(o=>o.status==="FULFILLED").length} note="Gaarsiinta la aqbalay" icon={CircleCheck}/></div>
       <Card>
         <CardHead
-          title="Order register"
-          description="Requested quantities remain historical after dispatch and acceptance"
+          title="Diiwaanka Dalabyada"
+          description="Tirada la codsaday waxay ahaanaysaa taariikh xataa ka dib dirista iyo aqbalada"
         />
         <div className="toolbar" style={{ marginBottom: 16 }}>
           <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", flex: 1 }}>
@@ -76,8 +77,8 @@ export default function OrdersPage() {
                 setSearch(e.target.value);
                 setPage(1);
               }}
-              placeholder="Search by order # or customer name…"
-              aria-label="Search orders"
+              placeholder="Ka raadi koodhka dalabka ama magaca macmiilka…"
+              aria-label="Raadi dalabyada"
               style={{ flex: 1, minWidth: "220px" }}
             />
             <select
@@ -88,14 +89,14 @@ export default function OrdersPage() {
                 setPage(1);
               }}
             >
-              <option value="">All Statuses</option>
-              <option value="DRAFT">Draft</option>
-              <option value="CONFIRMED">Confirmed</option>
-              <option value="SCHEDULED">Scheduled</option>
-              <option value="IN_PROGRESS">In Progress</option>
-              <option value="PARTIALLY_FULFILLED">Partially Fulfilled</option>
-              <option value="FULFILLED">Fulfilled</option>
-              <option value="CANCELLED">Cancelled</option>
+              <option value="">Dhammaan Xaaladaha</option>
+              <option value="DRAFT">Qabyo</option>
+              <option value="CONFIRMED">La Xaqiijiyay</option>
+              <option value="SCHEDULED">La Jadwaleeyay</option>
+              <option value="IN_PROGRESS">Wuu Socdaa</option>
+              <option value="PARTIALLY_FULFILLED">Qayb Ayaa La Fushiyay</option>
+              <option value="FULFILLED">La Dhammeeyay</option>
+              <option value="CANCELLED">La Baajiyay</option>
             </select>
           </div>
         </div>
@@ -107,12 +108,12 @@ export default function OrdersPage() {
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>Order</th>
-                  <th>Customer</th>
-                  <th>Requested</th>
-                  <th>Delivery date</th>
-                  <th>Status</th>
-                  <th style={{ textAlign: "right" }}>Actions</th>
+                  <th>Dalabka</th>
+                  <th>Macmiilka</th>
+                  <th>La Codsaday</th>
+                  <th>Taariikhda Gaarsiinta</th>
+                  <th>Xaaladda</th>
+                  <th style={{ textAlign: "right" }}>Hawgallada</th>
                 </tr>
               </thead>
               <tbody>
@@ -125,7 +126,7 @@ export default function OrdersPage() {
                     </td>
                     <td>{row.customer.name}</td>
                     <td>
-                      {row.lines.map((line) => `${line.fuel.displayName}: ${line.requestedUnits} fuusto`).join(", ")}
+                      {row.lines.map((line) => `${formatFuel(line.fuel.displayName)}: ${line.requestedUnits} Fuusto`).join(", ")}
                     </td>
                     <td>{row.requestedDeliveryDate?.slice(0, 10) ?? "—"}</td>
                     <td>
@@ -140,17 +141,17 @@ export default function OrdersPage() {
                             : "warn"
                         }
                       >
-                        {row.status}
+                        {formatStatus(row.status)}
                       </Badge>
                     </td>
                     <td style={{ textAlign: "right" }}>
-                      <Link className="btn small" href={`/orders/${row.id}`}>Details</Link> {row.status === "DRAFT" && (
+                      <Link className="btn small" href={`/orders/${row.id}`}>Faahfaahin</Link> {row.status === "DRAFT" && (
                         <button
                           className="btn primary small"
                           disabled={confirm.isPending}
                           onClick={() => confirm.mutate(row.id)}
                         >
-                          Confirm
+                          Xaqiiji
                         </button>
                       )}
                     </td>
@@ -158,7 +159,7 @@ export default function OrdersPage() {
                 ))}
               </tbody>
             </table>
-            {items.length === 0 && <Empty>No orders found.</Empty>}
+            {items.length === 0 && <Empty>Ma jiraan dalabyo loo helay.</Empty>}
             <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
           </div>
         )}
@@ -167,4 +168,5 @@ export default function OrdersPage() {
     </main>
   );
 }
+
 

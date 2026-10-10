@@ -1,7 +1,7 @@
 "use client";
 import { FinanceMetrics } from "../../components/finance-metrics";
-import { PageHeader, CardHead } from "../../components/ui";
-import { decimal } from "../../lib/format";
+import { PageHeader, CardHead, Badge } from "../../components/ui";
+import { decimal, formatStatus, formatFuel } from "../../lib/format";
 import { useState } from "react";
 import Link from "next/link";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -78,7 +78,7 @@ export default function InvoicesPage() {
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedUnbilledId) {
-      setFormError("Please select an unbilled delivery event to generate an invoice.");
+      setFormError("Fadlan dooro shidaal la gaarsiiyay oo aan wali biil loo jarayn.");
       return;
     }
     setFormError("");
@@ -91,14 +91,20 @@ export default function InvoicesPage() {
 
   return (
     <main className="page invoices-page">
-      <PageHeader eyebrow="Customer finance" title="Invoices" description="Billing follows accepted deliveries. Review posted invoices and outstanding amounts." actions={<button className="btn primary" onClick={() => setOpenModal(true)}>Generate invoice</button>} />
+      <PageHeader
+        eyebrow="Xisaabta Macaamiisha"
+        title="Biilasha"
+        description="Biilal bixintu waxay ka timaadaa shidaalka la gaarsiiyay ee macmiilku hoos u dhigay/aqbalay. Eeg biilasha la soo saaray iyo baaqiga harsan."
+        actions={<button className="btn primary" onClick={() => setOpenModal(true)}>Soo Saar Biil Cusub</button>}
+      />
 
       <FinanceMetrics kind="invoices" />
-      <section className="card"><CardHead title="Invoices register" description="Review records and open an account for details." />
+      <section className="card">
+        <CardHead title="Diiwaanka Biilasha" description="Eeg biilasha oo guji si aad u aragto faahfaahinta xisaabta." />
         <div className="filter-bar">
           <input
             type="search"
-            placeholder="Search by invoice # or customer..."
+            placeholder="Kala shaandhee lambarka biilka ama macmiilka..."
             value={search}
             onChange={(e) => {
               setSearch(e.target.value);
@@ -109,11 +115,11 @@ export default function InvoicesPage() {
 
           <div className="tabs">
             {[
-              ["", "All"],
-              ["UNPAID", "Unpaid"],
-              ["PARTIALLY_PAID", "Partially Paid"],
-              ["PAID", "Paid"],
-              ["REVERSED", "Reversed"]
+              ["", "Dhammaan"],
+              ["UNPAID", "Aan La Bixin"],
+              ["PARTIALLY_PAID", "Qayb La Bixiyay"],
+              ["PAID", "La Bixiyay"],
+              ["REVERSED", "La Celiyay"]
             ].map(([val, label]) => (
               <button
                 key={val}
@@ -132,24 +138,24 @@ export default function InvoicesPage() {
         {invoicesQuery.isLoading ? (
           <div className="skeleton tall" />
         ) : invoicesQuery.isError ? (
-          <div className="callout error">Failed to load invoices.</div>
+          <div className="callout error">Waa la ku guuldareystay soo rarida biilasha.</div>
         ) : !invoicesQuery.data?.items.length ? (
-          <div className="empty-state">No commercial invoices found.</div>
+          <div className="empty-state">Ma jiraan biilal laga helay diiwaanka.</div>
         ) : (
           <>
             <div className="table-wrap">
               <table className="data-table">
                 <thead>
                   <tr>
-                    <th>Invoice #</th>
-                    <th>Customer</th>
-                    <th>Issue Date</th>
-                    <th>Due Date</th>
-                    <th>Status</th>
-                    <th>Total Amount</th>
-                    <th>Paid</th>
-                    <th>Balance Due</th>
-                    <th>Actions</th>
+                    <th>Lambar Biil</th>
+                    <th>Macmiilka</th>
+                    <th>Taariikhda Bixinta</th>
+                    <th>Taariikhda Baaqiga</th>
+                    <th>Xaaladda</th>
+                    <th>Wadarta Guud</th>
+                    <th>La Bixiyay</th>
+                    <th>Deynta Harsan</th>
+                    <th>Hawlaha</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -167,26 +173,16 @@ export default function InvoicesPage() {
                       <td>{inv.issueDate.slice(0, 10)}</td>
                       <td>{inv.dueDate ? inv.dueDate.slice(0, 10) : "—"}</td>
                       <td>
-                        <span
-                          className={`badge ${
-                            inv.status === "PAID"
-                              ? "success"
-                              : inv.status === "PARTIALLY_PAID"
-                              ? "warning"
-                              : inv.status === "REVERSED"
-                              ? "danger"
-                              : "neutral"
-                          }`}
-                        >
-                          {inv.status.replace("_", " ")}
-                        </span>
+                        <Badge tone={inv.status === "PAID" ? "ok" : inv.status === "PARTIALLY_PAID" ? "warn" : inv.status === "REVERSED" ? "danger" : "neutral"}>
+                          {formatStatus(inv.status)}
+                        </Badge>
                       </td>
                       <td className="font-mono">${decimal(inv.totalAmount, 2)}</td>
                       <td className="font-mono text-emerald-400">${decimal(inv.paidAmount, 2)}</td>
                       <td className="font-mono text-amber-400 font-semibold">${decimal(inv.balanceDue, 2)}</td>
                       <td>
                         <Link href={`/invoices/${inv.id}`} className="btn ghost sm">
-                          View details
+                          Eeg faahfaahinta
                         </Link>
                       </td>
                     </tr>
@@ -204,16 +200,16 @@ export default function InvoicesPage() {
         )}
       </section>
 
-      <Modal isOpen={openModal} onClose={() => setOpenModal(false)} title="Generate Invoice from Accepted Delivery">
+      <Modal isOpen={openModal} onClose={() => setOpenModal(false)} title="Soo Saar Biil Shidaal La Gaarsiiyay">
         <form onSubmit={handleCreate} className="space-y-4">
           {formError && <div className="callout error">{formError}</div>}
 
           <div>
-            <label className="label">Select Unbilled Delivery Event *</label>
+            <label className="label">Dooro Shidaal La Gaarsiiyay oo aan Biil Loo Jarayn *</label>
             {unbilledQuery.isLoading ? (
               <div className="skeleton" />
             ) : !unbilledQuery.data?.length ? (
-              <div className="callout info">No unbilled accepted deliveries available for invoicing.</div>
+              <div className="callout info">Ma jiraan shidaal la gaarsiiyay oo diyaar u ah biil u jarid.</div>
             ) : (
               <div className="select-list space-y-2 max-h-60 overflow-y-auto border border-border rounded p-2">
                 {unbilledQuery.data.map((item) => (
@@ -235,11 +231,11 @@ export default function InvoicesPage() {
                       <div>
                         <strong>{item.customerName}</strong>
                         <div className="text-xs text-muted">
-                          Order {item.orderNo} | {item.fuel} ({item.salesUnit})
+                          Dalabka {item.orderNo} | {formatFuel(item.fuel)} ({item.salesUnit})
                         </div>
                       </div>
                       <div className="text-right">
-                        <div className="font-mono text-sm font-semibold">{item.acceptedUnits} units</div>
+                        <div className="font-mono text-sm font-semibold">{item.acceptedUnits} Fuusto</div>
                         <div className="text-xs text-emerald-400 font-mono">
                           ${decimal(item.estimatedTotal ?? "0", 2)}
                         </div>
@@ -252,30 +248,30 @@ export default function InvoicesPage() {
           </div>
 
           <div>
-            <label className="label">Payment Due Date (Optional)</label>
+            <label className="label">Taariikhda Bixinta Dambaysa (Waa Ikhtiyaari)</label>
             <input type="date" value={dueDateInput} onChange={(e) => setDueDateInput(e.target.value)} className="input" />
           </div>
 
           <div>
-            <label className="label">Invoice Notes (Optional)</label>
+            <label className="label">Xusuusin Biilka (Waa Ikhtiyaari)</label>
             <textarea
               value={notesInput}
               onChange={(e) => setNotesInput(e.target.value)}
-              placeholder="e.g. Terms 30 days..."
+              placeholder="tusaale: Heshiis 30 maalmood ah..."
               className="input"
             />
           </div>
 
           <div className="modal-actions">
             <button type="button" className="btn ghost" onClick={() => setOpenModal(false)}>
-              Cancel
+              Ka Noqo
             </button>
             <button
               type="submit"
               className="btn primary"
               disabled={createInvoiceMutation.isPending || !selectedUnbilledId}
             >
-              {createInvoiceMutation.isPending ? "Generating..." : "Generate Invoice"}
+              {createInvoiceMutation.isPending ? "Waa la soo saarayaa..." : "Soo Saar Biilka"}
             </button>
           </div>
         </form>

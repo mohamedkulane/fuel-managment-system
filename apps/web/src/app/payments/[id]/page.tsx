@@ -1,11 +1,11 @@
 "use client";
-import { decimal } from "../../../lib/format";
+import { decimal, formatStatus } from "../../../lib/format";
 import { useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, apiBase, type Actor } from "../../../lib/api";
-import { Modal, PageHeader } from "../../../components/ui";
+import { Modal, PageHeader, Badge } from "../../../components/ui";
 
 type PaymentDetail = {
   id: string;
@@ -68,7 +68,7 @@ export default function PaymentDetailPage() {
   if (paymentQuery.isError || !paymentQuery.data) {
     return (
       <main className="page detail-page">
-        <div className="callout error">Payment record not found.</div>
+        <div className="callout error">Diiwaanka lacag-bixinta ma jiraan.</div>
       </main>
     );
   }
@@ -77,36 +77,45 @@ export default function PaymentDetailPage() {
 
   return (
     <main className="page finance-page">
-<PageHeader eyebrow="Payment / detail" title={`Payment ${pay.paymentNo}`} description={pay.customer.name} actions={<div className="actions">
-          <a href={`${apiBase}/payments/${pay.id}/receipt-pdf`} target="_blank" rel="noreferrer" className="btn secondary">
-            Print Receipt PDF
-          </a>
+      <PageHeader
+        eyebrow="Lacag-bixinta / Faahfaahinta"
+        title={`Rasiidhka ${pay.paymentNo}`}
+        description={pay.customer.name}
+        actions={
+          <div className="actions">
+            <a href={`${apiBase}/payments/${pay.id}/receipt-pdf`} target="_blank" rel="noreferrer" className="btn secondary">
+              Soo Dejiso Rasiidhka (PDF)
+            </a>
 
-          {me.data?.role === "OWNER" && pay.status === "POSTED" && (
-            <button className="btn danger" onClick={() => setReverseModal(true)}>
-              Reverse Payment
-            </button>
-          )}
-        </div>} />
+            {me.data?.role === "OWNER" && pay.status === "POSTED" && (
+              <button className="btn danger" onClick={() => setReverseModal(true)}>
+                Kansal Lacag-bixinta
+              </button>
+            )}
+          </div>
+        }
+      />
 
       {/* KPI Summary */}
       <div className="grid finance-metrics">
         <div className="card">
-          <span className="text-muted text-xs">Total Received</span>
+          <span className="text-muted text-xs">Wadarta La Qabtay</span>
           <div className="text-2xl font-mono font-bold text-emerald-400">${decimal(pay.amount, 2)}</div>
         </div>
         <div className="card">
-          <span className="text-muted text-xs">Allocated to Invoices</span>
+          <span className="text-muted text-xs">Qadarka Biilasha Loo Qaybiyay</span>
           <div className="text-2xl font-mono font-bold">${decimal(pay.allocatedAmount, 2)}</div>
         </div>
         <div className="card">
-          <span className="text-muted text-xs">Unapplied Customer Credit</span>
+          <span className="text-muted text-xs">Lacagta Dheeraadka ah</span>
           <div className="text-2xl font-mono font-bold text-amber-400">${decimal(pay.unappliedAmount, 2)}</div>
         </div>
         <div className="card">
-          <span className="text-muted text-xs">Status</span>
+          <span className="text-muted text-xs">Xaaladda</span>
           <div>
-            <span className={`badge ${pay.status === "POSTED" ? "success" : "danger"}`}>{pay.status}</span>
+            <Badge tone={pay.status === "POSTED" ? "ok" : "danger"}>
+              {formatStatus(pay.status)}
+            </Badge>
           </div>
         </div>
       </div>
@@ -114,45 +123,45 @@ export default function PaymentDetailPage() {
       {/* Information Overview */}
       <section className="card grid detail-information">
         <div>
-          <h2 className="section-title">Customer Details</h2>
+          <h2 className="section-title">Xogta Macmiilka</h2>
           <div className="space-y-1 mt-2 text-sm">
             <div>
-              <strong>Customer:</strong>{" "}
+              <strong>Macmiilka:</strong>{" "}
               <Link href={`/customers/${pay.customer.id}`} className="link">
                 {pay.customer.name}
               </Link>
             </div>
             <div>
-              <strong>Account Code:</strong> {pay.customer.code}
+              <strong>Koodhka Macmiilka:</strong> {pay.customer.code}
             </div>
             {pay.customer.primaryPhone && (
               <div>
-                <strong>Phone:</strong> {pay.customer.primaryPhone}
+                <strong>Telefoonka:</strong> {pay.customer.primaryPhone}
               </div>
             )}
           </div>
         </div>
 
         <div>
-          <h2 className="section-title">Payment Information</h2>
+          <h2 className="section-title">Faahfaahinta Lacag-bixinta</h2>
           <div className="space-y-1 mt-2 text-sm">
             <div>
-              <strong>Payment Date:</strong> {pay.paymentDate.slice(0, 10)}
+              <strong>Taariikhda Bixinta:</strong> {pay.paymentDate.slice(0, 10)}
             </div>
             <div>
-              <strong>Payment Method:</strong> {pay.paymentMethod}
+              <strong>Qaabka Bixinta:</strong> {pay.paymentMethod}
             </div>
             {pay.reference && (
               <div>
-                <strong>Reference / Tx ID:</strong> {pay.reference}
+                <strong>Tixraaca / Lambar Transaksi:</strong> {pay.reference}
               </div>
             )}
             <div>
-              <strong>Collected By:</strong> {pay.recordedBy.displayName}
+              <strong>Qofka Qabtay:</strong> {pay.recordedBy.displayName}
             </div>
             {pay.notes && (
               <div>
-                <strong>Notes:</strong> {pay.notes}
+                <strong>Xusuusin:</strong> {pay.notes}
               </div>
             )}
           </div>
@@ -161,20 +170,20 @@ export default function PaymentDetailPage() {
 
       {/* Allocated Invoices Breakdown */}
       <section className="card space-y-3">
-        <h2 className="section-title">Allocated Invoices Breakdown</h2>
+        <h2 className="section-title">Faahfaahinta Biilasha Loo Qaybiyay</h2>
         {!pay.allocations.length ? (
           <div className="text-muted text-sm italic">
-            This payment has no invoice allocations. The full amount (${decimal(pay.unappliedAmount, 2)}) remains as unapplied customer credit.
+            Lacag-bixintan ma laha biilal loo qaybiyay. Wadarta guud (${decimal(pay.unappliedAmount, 2)}) waxay u taallaa lacag dheeraad ah (credit).
           </div>
         ) : (
           <div className="table-wrap">
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>Invoice #</th>
-                  <th>Invoice Total</th>
-                  <th>Allocated Amount</th>
-                  <th>Remaining Invoice Balance</th>
+                  <th>Lambar Biil</th>
+                  <th>Wadarta Biilka</th>
+                  <th>Qadarka Loo Qaybiyay</th>
+                  <th>Deynta Harsan ee Biilka</th>
                 </tr>
               </thead>
               <tbody>
@@ -197,12 +206,12 @@ export default function PaymentDetailPage() {
       </section>
 
       {/* Reversal Modal */}
-      <Modal isOpen={reverseModal} onClose={() => setReverseModal(false)} title="Reverse Customer Payment">
+      <Modal isOpen={reverseModal} onClose={() => setReverseModal(false)} title="Kansal Lacag-bixinta Macmiilka">
         <form
           onSubmit={(e) => {
             e.preventDefault();
             if (!reasonInput.trim()) {
-              setFormError("Reason is required");
+              setFormError("Fadlan geli sababta kansalaadda");
               return;
             }
             reverseMutation.mutate(reasonInput);
@@ -212,25 +221,25 @@ export default function PaymentDetailPage() {
           {formError && <div className="callout error">{formError}</div>}
 
           <div className="callout warning">
-            Reversing a payment will unallocate all applied invoice amounts, restore their balances due, and post an auditable counter-entry in the customer ledger. This action cannot be undone.
+            Kansalaadda lacag-bixintu waxay baabi'ineysaa dhammaan qaybintii biilasha, waxay soo celineysaa deyntii furaan, waxayna diiwaangelineysaa nidaamka xisaabta xaqiijinta (counter-entry). Tallaabadan dib looma noqon karo.
           </div>
 
           <div>
-            <label className="label">Reversal Reason *</label>
+            <label className="label">Sababta Kansalaadda *</label>
             <textarea
               value={reasonInput}
               onChange={(e) => setReasonInput(e.target.value)}
-              placeholder="e.g. Bounced check, returned funds, or recorded against wrong customer..."
+              placeholder="tusaale: Lacag dib loo celiyay ama loo qray macmiil meel kale ka tirsan..."
               className="input"
             />
           </div>
 
           <div className="modal-actions">
             <button type="button" className="btn ghost" onClick={() => setReverseModal(false)}>
-              Cancel
+              Ka Noqo
             </button>
             <button type="submit" className="btn danger" disabled={reverseMutation.isPending || !reasonInput.trim()}>
-              {reverseMutation.isPending ? "Reversing..." : "Confirm Reversal"}
+              {reverseMutation.isPending ? "Waa la kansalayay..." : "Xaqiiji Kansalaadda"}
             </button>
           </div>
         </form>

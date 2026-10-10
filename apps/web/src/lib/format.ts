@@ -1,4 +1,5 @@
 import Decimal from "decimal.js";
+import { formatStatus, formatFuel, formatRole } from "./i18n";
 
 /** Format exact decimal API strings without converting money to floating point. */
 export function decimal(value: string | undefined | null, places = 2): string {
@@ -9,3 +10,4 @@ export function decimal(value: string | undefined | null, places = 2): string {
 export function sum(values: string[]): string { return values.reduce((total, value) => total.plus(value), new Decimal(0)).toString(); }
 export function dateTime(value: string): string { return new Intl.DateTimeFormat("en-GB", { timeZone: "Africa/Mogadishu", dateStyle: "medium", timeStyle: "short" }).format(new Date(value)); }
 export function businessDate(): string { return new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Mogadishu", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date()); }
+export { formatStatus, formatFuel, formatRole };

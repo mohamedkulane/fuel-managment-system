@@ -1,7 +1,6 @@
 "use client";
 import { Fuel as FuelIcon, Pencil } from "lucide-react";
-import { decimal } from "../../lib/format";
-import { dateTime } from "../../lib/format";
+import { decimal, formatFuel, dateTime } from "../../lib/format";
 import { FormEvent, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, type Actor } from "../../lib/api";
@@ -23,6 +22,8 @@ type Price = {
   currencyCode: string;
   effectiveFromUtc: string;
   effectiveToUtc: string | null;
+  reason?: string | null;
+  createdByName?: string | null;
   fuel: { id: string; displayName: string };
   salesUnit: { id: string; name: string };
 };
@@ -70,17 +71,17 @@ export default function PricingPage() {
   return (
     <main className="page pricing-page">
       <PageHeader
-        eyebrow="Pricing & conversions"
-        title="Fuel pricing"
-        description="Manage Diesel and Petrol selling rates. Previously confirmed orders retain their prices."
+        eyebrow="Qiimaha Shidaalka & Cabbirrada"
+        title="Qiimaha Shidaalka"
+        description="Maamul qiimaha Naaftada iyo Basiinka. Dalabyadii hore ee la xaqiijiyay waxay haysanayaan qiimahoodii hore."
         actions={
           owner ? (
             <>
               <button className="btn" onClick={() => setMode("unit")}>
-                Configure Fuusto Liters
+                Ajiin Cabbirka Fuustada (Litir)
               </button>
               <button className="btn primary" onClick={() => setMode("price")}>
-                Update Selling Price
+                Cusboonaysii Qiimaha Iibka
               </button>
             </>
           ) : undefined
@@ -90,35 +91,69 @@ export default function PricingPage() {
       <div className="price-grid">
         {fuels.data?.map(fuel => {
           const current = prices.data?.filter(p => p.fuel.id === fuel.id && new Date(p.effectiveFromUtc).getTime() <= Date.now() && (!p.effectiveToUtc || new Date(p.effectiveToUtc).getTime() > Date.now())) ?? [];
-          return <Card className="price-card" key={fuel.id}><div className="metric-top"><Badge tone={current.length ? "ok" : "warn"}>{current.length ? "Current selling rate" : "Not configured"}</Badge><span className="metric-icon"><FuelIcon size={18} /></span></div><h2>{fuel.displayName}</h2>{prices.isError ? <ErrorState message={prices.error.message} retry={() => void prices.refetch()} /> : current.length ? current.map(price => <div key={price.id}><div className="price-value mono">{price.currencyCode} {decimal(price.unitPrice)}<small>/ {price.salesUnit.name}</small></div><div className="price-meta"><span>Effective {dateTime(price.effectiveFromUtc)}</span>{owner && <button className="btn dark small" onClick={() => setMode("price")}><Pencil size={13} />Change rate</button>}</div></div>) : <p className="muted">{prices.isLoading ? "Loading rates…" : "An owner must configure a selling price before confirming orders."}</p>}</Card>;
+          return (
+            <Card className="price-card" key={fuel.id}>
+              <div className="metric-top">
+                <Badge tone={current.length ? "ok" : "warn"}>
+                  {current.length ? "Qiimaha Iibka ee Hada Jira" : "Aan La Dejin"}
+                </Badge>
+                <span className="metric-icon"><FuelIcon size={18} /></span>
+              </div>
+              <h2>{formatFuel(fuel.displayName)}</h2>
+              {prices.isError ? (
+                <ErrorState message={prices.error.message} retry={() => void prices.refetch()} />
+              ) : current.length ? (
+                current.map(price => (
+                  <div key={price.id}>
+                    <div className="price-value mono">
+                      {price.currencyCode} ${decimal(price.unitPrice)}
+                      <small>/ {price.salesUnit.name}</small>
+                    </div>
+                    <div className="price-meta">
+                      <span>Dhaqangal: {dateTime(price.effectiveFromUtc)}</span>
+                      {owner && (
+                        <button className="btn dark small" onClick={() => setMode("price")}>
+                          <Pencil size={13} /> Wax Ka Beddel Qiimaha
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <p className="muted">
+                  {prices.isLoading ? "La soo rarayaa qiimaha…" : "Milkiilaha waa inuu dhigo qiimaha iibka ka hor inta aysan shaqaaluhu xaqiijin dalabyada."}
+                </p>
+              )}
+            </Card>
+          );
         })}
       </div>
       <div className="notice">
-        <b>Configurable Container Sizes:</b> Set the actual liters per fuusto before confirming orders. New versions never change historical quantities.
+        <b>Cabbirka Fuustada:</b> Dhig tirada litir ee fuustadiiba ka hor xaqiijinta dalabyada. Cabbirrada cusub ma beddelaan tiradii hore.
       </div>
 
       <Modal
         isOpen={Boolean(mode)}
         onClose={() => setMode(null)}
-        title={mode === "price" ? "Create Price Version (Owner Only)" : "Configure Fuusto Conversion Capacity (Owner Only)"}
+        title={mode === "price" ? "Beddel Qiimaha Iibka (Milkiilaha Kaliya)" : "Dhig Cabbirka Fuustada (Milkiilaha Kaliya)"}
       >
         <form onSubmit={submit}>
           <div className="form-grid">
             <div className="field">
-              <label htmlFor="fuelId">Fuel Type *</label>
+              <label htmlFor="fuelId">Nooca Shidaalka *</label>
               <select id="fuelId" className="select" name="fuelId" required>
-                <option value="">Select fuel</option>
+                <option value="">Dooro shidaal</option>
                 {fuels.data?.map((x) => (
                   <option key={x.id} value={x.id}>
-                    {x.displayName}
+                    {formatFuel(x.displayName)}
                   </option>
                 ))}
               </select>
             </div>
             <div className="field">
-              <label htmlFor="salesUnitId">Sales Unit *</label>
+              <label htmlFor="salesUnitId">Qaybta Iibka *</label>
               <select id="salesUnitId" className="select" name="salesUnitId" required>
-                <option value="">Select unit</option>
+                <option value="">Dooro qayb</option>
                 {units.data?.map((x) => (
                   <option key={x.id} value={x.id}>
                     {x.name}
@@ -127,33 +162,33 @@ export default function PricingPage() {
               </select>
             </div>
             <div className="field">
-              <label htmlFor="value">{mode === "price" ? "Price per Fuusto ($ USD) *" : "Liters per Fuusto *"}</label>
-              <input id="value" className="input" name="value" inputMode="decimal" placeholder={mode === "price" ? "Enter selling price" : "Enter confirmed capacity"} required />
+              <label htmlFor="value">{mode === "price" ? "Qiimaha Fuustadii ($ USD) *" : "Litirkiiba Fuusto *"}</label>
+              <input id="value" className="input" name="value" inputMode="decimal" placeholder={mode === "price" ? "Geli qiimaha iibka" : "Geli tirada litirka fuustada"} required />
             </div>
             <div className="field">
-              <label htmlFor="effectiveFromUtc">Effective Date & Time *</label>
+              <label htmlFor="effectiveFromUtc">Taariikhda & Waqtiga Dhaqangalinta *</label>
               <input id="effectiveFromUtc" className="input" name="effectiveFromUtc" type="datetime-local" required defaultValue={new Date().toISOString().slice(0, 16)} />
             </div>
             {mode === "price" && (
               <div className="field full">
-                <label htmlFor="reason">Update Reason</label>
-                <input id="reason" className="input" name="reason" placeholder="e.g. Inbound tanker price adjustment" />
+                <label htmlFor="reason">Sababta Wax ka Beddelka</label>
+                <input id="reason" className="input" name="reason" placeholder="tusaale: Isbeddelka qiimaha shidaalka soo galay" />
               </div>
             )}
           </div>
           {save.isError && <div className="notice warn" role="alert" style={{ marginTop: 16 }}>{(save.error as Error).message}</div>}
           <div className="form-actions">
             <button type="button" className="btn" onClick={() => setMode(null)}>
-              Cancel
+              Ka Noqo
             </button>
-            <SubmitButton busy={save.isPending}>Save Master Version</SubmitButton>
+            <SubmitButton busy={save.isPending}>Kaydi Qiimaha Cusub</SubmitButton>
           </div>
         </form>
       </Modal>
 
       <div className="two-col equal-cols">
         <Card>
-          <CardHead title="Fuusto Capacity History" description="Liters per Fuusto unit configuration history" />
+          <CardHead title="Taariikhda Cabbirka Fuustada" description="Taariikhda isbeddelka litirada ku jira fuustadiiba" />
           {versions.isError ? (
             <ErrorState message={(versions.error as Error).message} />
           ) : (
@@ -161,30 +196,30 @@ export default function PricingPage() {
               <table className="data-table">
                 <thead>
                   <tr>
-                    <th>Fuel</th>
-                    <th>Unit</th>
-                    <th>Capacity</th>
-                    <th>Effective Date</th>
+                    <th>Shidaalka</th>
+                    <th>Qaybta</th>
+                    <th>Cabbirka</th>
+                    <th>Taariikhda Dhaqangalinta</th>
                   </tr>
                 </thead>
                 <tbody>
                   {versions.data?.map((row) => (
                     <tr key={row.id}>
-                      <td className="strong">{row.fuel}</td>
+                      <td className="strong">{formatFuel(row.fuel)}</td>
                       <td>{row.unit}</td>
-                      <td className="strong mono">{row.litersPerUnit} L</td>
+                      <td className="strong mono">{row.litersPerUnit} Litir</td>
                       <td>{dateTime(row.effectiveFromUtc)}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-              {versions.data?.length === 0 && <Empty>No container capacity configured yet.</Empty>}
+              {versions.data?.length === 0 && <Empty>Wali ma jiraan cabbirro fuusto oo la dhigay.</Empty>}
             </div>
           )}
         </Card>
 
         <Card>
-          <CardHead title="Selling Price History" description="Active and historical selling price versions" />
+          <CardHead title="Taariikhda Qiimaha Iibka" description="Diiwaanka qiimayaashii hore iyo kuwa hadda dhaqangalka ah" />
           {prices.isError ? (
             <ErrorState message={(prices.error as Error).message} />
           ) : (
@@ -192,30 +227,34 @@ export default function PricingPage() {
               <table className="data-table">
                 <thead>
                   <tr>
-                    <th>Fuel</th>
-                    <th>Unit Price</th>
-                    <th>Effective Date</th>
-                    <th>Status</th>
+                    <th>Shidaalka</th>
+                    <th>Qiimaha / Fuusto</th>
+                    <th>Taariikhda Dhaqangalinta</th>
+                    <th>Cusboonaysiiyaha</th>
+                    <th>Sababta</th>
+                    <th>Xaaladda</th>
                   </tr>
                 </thead>
                 <tbody>
                   {prices.data?.map((row) => (
                     <tr key={row.id}>
-                      <td className="strong">{row.fuel.displayName}</td>
+                      <td className="strong">{formatFuel(row.fuel.displayName)}</td>
                       <td className="strong mono">
-                        {row.currencyCode} ${row.unitPrice}
+                        {row.currencyCode} ${row.unitPrice} / fuusto
                       </td>
                       <td>{dateTime(row.effectiveFromUtc)}</td>
+                      <td>{row.createdByName ?? "Nidaamka"}</td>
+                      <td className="muted">{row.reason ?? "—"}</td>
                       <td>
                         <Badge tone={row.effectiveToUtc ? "neutral" : "ok"}>
-                          {row.effectiveToUtc ? "Historical" : "Active"}
+                          {row.effectiveToUtc ? "Tii Hore" : "Dhaqangal"}
                         </Badge>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-              {prices.data?.length === 0 && <Empty>No prices configured yet.</Empty>}
+              {prices.data?.length === 0 && <Empty>Wali ma jiraan qiimayaal la dhigay.</Empty>}
             </div>
           )}
         </Card>

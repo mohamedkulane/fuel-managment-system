@@ -116,6 +116,7 @@ model User {
   recordedPayments Payment[] @relation("PaymentRecorder")
   createdAllocations PaymentAllocation[] @relation("AllocationCreator")
   reversedPayments PaymentReversal[] @relation("PaymentReverser")
+  approvedOrderDiscounts SalesOrder[] @relation("OrderDiscountApprover")
 }
 
 model Session {
@@ -283,6 +284,13 @@ model SalesOrder {
   confirmationIdempotencyKey String? @unique
   currencyCode String @default("USD")
   notes String?
+  subtotal Decimal? @db.Decimal(20, 4)
+  fixedDiscountAmount Decimal @db.Decimal(20, 4) @default(0)
+  totalAmount Decimal? @db.Decimal(20, 4)
+  discountReason String?
+  discountApprovedById String? @db.Uuid
+  discountApprovedAt DateTime?
+  discountApprovedBy User? @relation("OrderDiscountApprover", fields: [discountApprovedById], references: [id], onDelete: Restrict)
   customer Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
   createdBy User @relation("OrderCreator", fields: [createdById], references: [id], onDelete: Restrict)
   lines SalesOrderLine[]
@@ -435,6 +443,7 @@ model Invoice {
   dueDate                    DateTime?
   status                     InvoiceStatus @default(UNPAID)
   subtotal                   Decimal  @db.Decimal(20, 4)
+  discountAmount             Decimal  @db.Decimal(20, 4) @default(0)
   taxAmount                  Decimal  @db.Decimal(20, 4) @default(0)
   totalAmount                Decimal  @db.Decimal(20, 4)
   paidAmount                 Decimal  @db.Decimal(20, 4) @default(0)

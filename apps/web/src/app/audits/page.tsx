@@ -1,5 +1,5 @@
 "use client";
-import { dateTime } from "../../lib/format";
+import { dateTime, formatRole, formatStatus } from "../../lib/format";
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -55,7 +55,7 @@ export default function AuditsPage() {
   if (!isOwner) {
     return (
       <main className="page audits-page">
-        <ErrorState title="Access Restricted" message="System audit logs are strictly reserved for the Business Owner role (OWNER)." />
+        <ErrorState title="Xaqiijinta Ogolaanshada" message="Diiwaanka hawlaha nidaamka (audit logs) waxaa la ogol yahay oo kaliya Milkiilaha Vane (OWNER)." />
       </main>
     );
   }
@@ -63,16 +63,16 @@ export default function AuditsPage() {
   return (
     <main className="page audits-page">
       <PageHeader
-        eyebrow="Security & governance"
-        title="Activity & audit log"
-        description="Owner-only history of changes, approvals and financial reversals."
+        eyebrow="Amaanada & Maamulka"
+        title="Diiwaanka Hawlaha Nidaamka"
+        description="Diiwaanka Milkiilaha kaliya ee dhammaan isbeddelada, ogolaanshaha, iyo ka noqoshada xisaabaadka."
         actions={
           <>
             <button className="btn" onClick={() => handleExport("pdf")}>
-              Export PDF
+              Soo Dejiso PDF
             </button>
             <button className="btn primary" onClick={() => handleExport("xlsx")}>
-              Export Excel (.xlsx)
+              Soo Dejiso Excel (.xlsx)
             </button>
           </>
         }
@@ -82,67 +82,67 @@ export default function AuditsPage() {
       <Card className="filter-panel">
         <div style={{ display: "flex", flexWrap: "wrap", gap: 16, alignItems: "center" }}>
           <div>
-            <label style={{ display: "block", fontSize: 12, fontWeight: "bold", marginBottom: 4 }}>Entity Type:</label>
+            <label style={{ display: "block", fontSize: 12, fontWeight: "bold", marginBottom: 4 }}>Nooca Qaybta:</label>
             <select value={entityType} onChange={(e) => { setEntityType(e.target.value); setPage(1); }} className="input">
-              <option value="">All Entities</option>
-              <option value="Customer">Customer</option>
-              <option value="PriceVersion">PriceVersion</option>
-              <option value="FuelUnitVersion">FuelUnitVersion</option>
-              <option value="SalesOrder">SalesOrder</option>
-              <option value="TankerReceipt">TankerReceipt</option>
-              <option value="Dispatch">Dispatch</option>
-              <option value="DeliveryConfirmation">DeliveryConfirmation</option>
-              <option value="Invoice">Invoice</option>
-              <option value="Payment">Payment</option>
-              <option value="InventoryMovement">InventoryMovement</option>
-              <option value="User">User</option>
+              <option value="">Dhammaan Qaybaha</option>
+              <option value="Customer">Macmiilka (Customer)</option>
+              <option value="PriceVersion">Qiimaha Shidaalka (PriceVersion)</option>
+              <option value="FuelUnitVersion">Cabbirka Fuustada (FuelUnitVersion)</option>
+              <option value="SalesOrder">Dalabka Iibka (SalesOrder)</option>
+              <option value="TankerReceipt">Shidaal Soo Gelin (StockReceiving)</option>
+              <option value="Dispatch">Shidaal Dirid (Dispatch)</option>
+              <option value="DeliveryConfirmation">Xaqiijinta Gaarsiinta (Delivery)</option>
+              <option value="Invoice">Biilka (Invoice)</option>
+              <option value="Payment">Lacag-bixin (Payment)</option>
+              <option value="InventoryMovement">Dhaqdhaqaaqa Kaydka (Movement)</option>
+              <option value="User">Isticmaalaha (User)</option>
             </select>
           </div>
 
           <div>
-            <label style={{ display: "block", fontSize: 12, fontWeight: "bold", marginBottom: 4 }}>Action:</label>
+            <label style={{ display: "block", fontSize: 12, fontWeight: "bold", marginBottom: 4 }}>Hawsha:</label>
             <select value={action} onChange={(e) => { setAction(e.target.value); setPage(1); }} className="input">
-              <option value="">All Actions</option>
-              <option value="CREATED">CREATED</option>
-              <option value="UPDATED">UPDATED</option>
-              <option value="CONFIRMED">CONFIRMED</option>
-              <option value="POSTED">POSTED</option>
-              <option value="REVERSED">REVERSED</option>
-              <option value="ADJUSTED">ADJUSTED</option>
-              <option value="CANCELLED">CANCELLED</option>
+              <option value="">Dhammaan Hawlaha</option>
+              <option value="CREATED">Diiwaangelin (CREATED)</option>
+              <option value="UPDATED">Cusboonaysiin (UPDATED)</option>
+              <option value="CONFIRMED">Xaqiijin (CONFIRMED)</option>
+              <option value="POSTED">Dhimis/Posting (POSTED)</option>
+              <option value="REVERSED">Kansalaad (REVERSED)</option>
+              <option value="ADJUSTED">Saxid (ADJUSTED)</option>
+              <option value="CANCELLED">Ka Noqosho (CANCELLED)</option>
             </select>
           </div>
 
           <div>
-            <label style={{ display: "block", fontSize: 12, fontWeight: "bold", marginBottom: 4 }}>From Date:</label>
+            <label style={{ display: "block", fontSize: 12, fontWeight: "bold", marginBottom: 4 }}>Taariikhda Billaabashada:</label>
             <input type="date" value={fromDate} onChange={(e) => { setFromDate(e.target.value); setPage(1); }} className="input" />
           </div>
 
           <div>
-            <label style={{ display: "block", fontSize: 12, fontWeight: "bold", marginBottom: 4 }}>To Date:</label>
+            <label style={{ display: "block", fontSize: 12, fontWeight: "bold", marginBottom: 4 }}>Taariikhda Dhammaadka:</label>
             <input type="date" value={toDate} onChange={(e) => { setToDate(e.target.value); setPage(1); }} className="input" />
           </div>
 
           <button className="btn small" onClick={() => { setEntityType(""); setAction(""); setFromDate(""); setToDate(""); setPage(1); }} style={{ marginLeft: "auto" }}>
-            Reset Filters
+            Nadiifi Shaandheynta
           </button>
         </div>
       </Card>
 
       {/* Audit Log Table */}
       <Card>
-        <CardHead title="Recent system activity" description={`Showing ${audits.data?.items.length ?? 0} events of ${audits.data?.total ?? 0}`} />
+        <CardHead title="Diiwaanka Hawlihii Ugu Dambeeyay" description={`Muujinaya ${audits.data?.items.length ?? 0} ka mid ah ${audits.data?.total ?? 0}`} />
         {audits.isLoading ? <LoadingState /> : audits.isError ? <ErrorState message={audits.error.message} retry={() => void audits.refetch()} /> : <div className="table-wrap">
           <table className="data-table">
             <thead>
               <tr>
-                <th>Timestamp · Mogadishu</th>
-                <th>Actor</th>
-                <th>Entity</th>
-                <th>Entity ID</th>
-                <th>Action</th>
-                <th>Reason</th>
-                <th>Changes / Redacted Payload</th>
+                <th>Waqtiga · Muqdisho</th>
+                <th>Qofka Hawsha Qabtay</th>
+                <th>Qaybta</th>
+                <th>Lambarka Qaybta</th>
+                <th>Hawsha</th>
+                <th>Sababta</th>
+                <th>Isbeddelka / Xogta Redacted</th>
               </tr>
             </thead>
             <tbody>
@@ -153,20 +153,20 @@ export default function AuditsPage() {
                       {dateTime(event.createdAt)}
                     </td>
                     <td>
-                      <strong>{event.actor?.displayName ?? "System"}</strong>
-                      <div className="muted" style={{ fontSize: 11 }}>{event.actor?.role}</div>
+                      <strong>{event.actor?.displayName ?? "Nidaamka"}</strong>
+                      <div className="muted" style={{ fontSize: 11 }}>{event.actor?.role ? formatRole(event.actor.role) : ""}</div>
                     </td>
                     <td className="strong">{event.entityType}</td>
                     <td className="mono" style={{ fontSize: 12 }}>{event.entityId}</td>
                     <td>
                       <Badge tone={event.action === "REVERSED" ? "warn" : event.action === "POSTED" ? "ok" : "info"}>
-                        {event.action}
+                        {formatStatus(event.action)}
                       </Badge>
                     </td>
                     <td className="muted">{event.reason ?? "—"}</td>
                     <td style={{ fontSize: 11, maxWidth: 300, overflowX: "auto" }}>
                       {event.afterRedacted != null ? (
-                        <details className="audit-details"><summary>View changes</summary><pre>
+                        <details className="audit-details"><summary>Eeg Isbeddelka</summary><pre>
                           {JSON.stringify(event.afterRedacted)}
                         </pre></details>
                       ) : (
@@ -178,7 +178,7 @@ export default function AuditsPage() {
               ) : (
                 <tr>
                   <td colSpan={7} className="muted" style={{ textAlign: "center", padding: 24 }}>
-                    No audit events found matching the criteria.
+                    Ma jiraan hawlo lagu helay shaandheyntan.
                   </td>
                 </tr>
               )}

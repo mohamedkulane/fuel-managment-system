@@ -1,6 +1,6 @@
 "use client";
 import { PageHeader, CardHead } from "../../components/ui";
-import { decimal } from "../../lib/format";
+import { decimal, formatStatus } from "../../lib/format";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../../lib/api";
@@ -41,36 +41,36 @@ export default function DebtsPage() {
 
   return (
     <main className="page finance-page">
-      <PageHeader eyebrow="Customer finance" title="Accounts receivable" description="Follow outstanding balances, unapplied credits and customer exposure." actions={<Link href="/payments" className="btn primary">Receive payment</Link>} />
+      <PageHeader eyebrow="Maaliyadda macaamiisha" title="Xinta Deynta & Xisaabaadka" description="La soco deynta harsan, kireeditka aan la isticmaalin iyo meesha ay xisaabta macmiilka joogto." actions={<Link href="/payments" className="btn primary">Diiwaangeli Lacag-bixin</Link>} />
 
       {debtsQuery.isLoading ? (
         <div className="skeleton tall" />
       ) : debtsQuery.isError || !debtsQuery.data ? (
-        <div className="callout error">Failed to load financial debts summary.</div>
+        <div className="callout error">Cilad ayaa dhacday marka la rarayay xogta deynta.</div>
       ) : (
         <>
           {/* Global Summary KPI Cards */}
           <div className="grid finance-metrics">
             <div className="card">
-              <span className="text-muted text-xs">Total Outstanding Debt</span>
+              <span className="text-muted text-xs">Wadarta Deynta Harsan</span>
               <div className="text-2xl font-mono font-bold text-rose-400">
                 ${decimal(debtsQuery.data.totals.outstandingDebt, 2)}
               </div>
             </div>
             <div className="card">
-              <span className="text-muted text-xs">Unapplied Customer Credit</span>
+              <span className="text-muted text-xs">Kireeditka Macmiilka ee Aan La Isticmaalin</span>
               <div className="text-2xl font-mono font-bold text-amber-400">
                 ${decimal(debtsQuery.data.totals.unappliedCredit, 2)}
               </div>
             </div>
             <div className="card">
-              <span className="text-muted text-xs">Net Receivables Position</span>
+              <span className="text-muted text-xs">Xaaladda Netka ee Deynta</span>
               <div className="text-2xl font-mono font-bold text-emerald-400">
                 ${decimal(debtsQuery.data.totals.netPosition, 2)}
               </div>
             </div>
             <div className="card">
-              <span className="text-muted text-xs">Total Payments Collected</span>
+              <span className="text-muted text-xs">Wadarta Lacagaha La Ururiyay</span>
               <div className="text-2xl font-mono font-bold">
                 ${decimal(debtsQuery.data.totals.totalPaid, 2)}
               </div>
@@ -78,20 +78,20 @@ export default function DebtsPage() {
           </div>
 
           {/* Customer Receivables & Aging Table */}
-          <section className="card"><CardHead title="Accounts receivable" description="Review records and open an account for details." />
+          <section className="card"><CardHead title="Deynta Macaamiisha" description="Eeg diiwaannada oo fur koontada si aad u eegto faahfaahinta." />
             
             <div className="table-wrap">
               <table className="data-table">
                 <thead>
                   <tr>
-                    <th>Customer</th>
-                    <th>Account Status</th>
-                    <th>Total Invoiced</th>
-                    <th>Total Paid</th>
-                    <th>Outstanding Debt</th>
-                    <th>Unapplied Credit</th>
-                    <th>Net Balance</th>
-                    <th>Actions</th>
+                    <th>Macmiilka</th>
+                    <th>Xaaladda Koontada</th>
+                    <th>Wadarta Biilasha</th>
+                    <th>Wadarta La Bixiyay</th>
+                    <th>Deynta Harsan</th>
+                    <th>Kireeditka Aan La Isticmaalin</th>
+                    <th>Baalansiga Netka</th>
+                    <th>Hawgallada</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -109,7 +109,7 @@ export default function DebtsPage() {
                             c.status === "ACTIVE" ? "success" : c.status === "HOLD" ? "warning" : "neutral"
                           }`}
                         >
-                          {c.status}
+                          {formatStatus(c.status)}
                         </span>
                       </td>
                       <td className="font-mono">${decimal(c.totalInvoiced, 2)}</td>
@@ -119,7 +119,7 @@ export default function DebtsPage() {
                       <td className="font-mono font-bold text-sky-400">${decimal(c.netBalance, 2)}</td>
                       <td>
                         <Link href={`/customers/${c.customerId}`} className="btn ghost sm">
-                          View Statement
+                          Eeg Warbixinta
                         </Link>
                       </td>
                     </tr>
@@ -133,3 +133,4 @@ export default function DebtsPage() {
     </main>
   );
 }
+

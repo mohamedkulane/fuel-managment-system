@@ -1,9 +1,7 @@
 "use client";
 import Decimal from "decimal.js";
 import { Receipt, Wallet, CircleCheck, TrendingUp } from "lucide-react";
-import { sum } from "../../../lib/format";
-import { dateTime } from "../../../lib/format";
-import { decimal } from "../../../lib/format";
+import { sum, dateTime, decimal, formatStatus, formatFuel } from "../../../lib/format";
 
 import { FormEvent, useState } from "react";
 import { useParams } from "next/navigation";
@@ -175,24 +173,24 @@ export default function CustomerDetailPage() {
       <div className="print-only" style={{ marginBottom: 24, paddingBottom: 16, borderBottom: "2px solid #333" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
           <div>
-            <h1 style={{ fontSize: 24, margin: 0, fontWeight: "bold" }}>FUELDESK WHOLESALE SYSTEM</h1>
-            <p style={{ margin: "4px 0 0 0", fontSize: 13, color: "#555" }}>Official Customer Commercial & Financial Statement</p>
+            <h1 style={{ fontSize: 24, margin: 0, fontWeight: "bold" }}>SYSTEMKA JUMLADLAHA SHIDAALKA EE FUELDESK</h1>
+            <p style={{ margin: "4px 0 0 0", fontSize: 13, color: "#555" }}>Warbixinta Xisaabta Ganacsiga & Maaliyadda ee Macmiilka</p>
           </div>
           <div style={{ textAlign: "right", fontSize: 12 }}>
-            <div><strong>Statement Date:</strong> {new Date().toISOString().slice(0, 10)}</div>
-            <div><strong>Mogadishu Local Time (UTC+3)</strong></div>
+            <div><strong>Taariikhda Warbixinta:</strong> {new Date().toISOString().slice(0, 10)}</div>
+            <div><strong>Waqtiga Muqdisho (UTC+3)</strong></div>
           </div>
         </div>
       </div>
 
       {/* Top Header */}
       <PageHeader
-        eyebrow="Customer relationships"
-        title="Customer account"
+        eyebrow="Macaamiisha ganacsiga"
+        title="Koontada macmiilka"
         description={
           cust
-            ? `Customer Code: ${cust.code} · Primary Phone: ${cust.primaryPhone ?? "N/A"} · Registered: ${
-                cust.createdAt ? cust.createdAt.slice(0, 10) : "System Record"
+            ? `Koodhka Macmiilka: ${cust.code} · Telefoonka Koowaad: ${cust.primaryPhone ?? "Lama helin"} · Diiwaangelinta: ${
+                cust.createdAt ? cust.createdAt.slice(0, 10) : "Diiwaanka Systemka"
               }`
             : ""
         }
@@ -203,20 +201,20 @@ export default function CustomerDetailPage() {
               href={`${apiBase}/customers/${id}/statement/pdf`}
               target="_blank"
               rel="noreferrer"
-              title="Download official PDF statement document"
+              title="Soo dejiso warbixinta rasmiga ah ee PDF"
             >
-              Download PDF Statement
+              Soo Dejiso PDF Warbixinta
             </a>
-            <button className="btn" onClick={() => window.print()} title="Print browser view of financial statement">
-              Print Statement
+            <button className="btn" onClick={() => window.print()} title="Daabac warbixinta maaliyadda">
+              Daabac Warbixinta
             </button>
             {cust && (
               <button className="btn primary" onClick={() => setShowEdit(true)}>
-                Edit Customer
+                Wax Ka Beddel Macmiilka
               </button>
             )}
             <Link className="btn" href="/customers">
-              ← Back to Directory
+              ← Dib u laab Diiwaanka
             </Link>
           </div>
         }
@@ -225,31 +223,31 @@ export default function CustomerDetailPage() {
       {cust && (
         <>
           {/* Edit Customer Modal */}
-          <Modal isOpen={showEdit} onClose={() => setShowEdit(false)} title="Edit Customer Account Details">
+          <Modal isOpen={showEdit} onClose={() => setShowEdit(false)} title="Wax Ka Beddel Xogta Macmiilka">
             <form onSubmit={handleEditSubmit}>
               <div className="form-grid">
                 <div className="field">
-                  <label htmlFor="name">Customer Name *</label>
+                  <label htmlFor="name">Magaca macmiilka *</label>
                   <input id="name" className="input" name="name" defaultValue={cust.name} required />
                 </div>
                 <div className="field">
-                  <label htmlFor="phone">Primary Phone</label>
+                  <label htmlFor="phone">Telefoonka koowaad</label>
                   <input id="phone" className="input" name="phone" defaultValue={cust.primaryPhone ?? ""} />
                 </div>
                 <div className="field">
-                  <label htmlFor="status">Account Status</label>
+                  <label htmlFor="status">Xaaladda koontada</label>
                   <select id="status" className="select" name="status" defaultValue={cust.status}>
-                    <option value="ACTIVE">Active (Normal Trading)</option>
-                    <option value="HOLD">Account Hold (Restrict New Credit Orders)</option>
-                    <option value="INACTIVE">Inactive</option>
+                    <option value="ACTIVE">Firfircoon (Ganacsi Kawaad)</option>
+                    <option value="HOLD">La Hakiyay (Hakinta Dalabyada Deynta)</option>
+                    <option value="INACTIVE">Aan Firfircoonayn</option>
                   </select>
                 </div>
                 <div className="field full">
-                  <label htmlFor="address">Primary Delivery Address</label>
+                  <label htmlFor="address">Ciwaanka gaarsiinta koowaad</label>
                   <input id="address" className="input" name="address" defaultValue={cust.addresses[0]?.addressText ?? ""} />
                 </div>
                 <div className="field full">
-                  <label htmlFor="notes">Operational Notes</label>
+                  <label htmlFor="notes">Xusuus-qoor hawgalka</label>
                   <input id="notes" className="input" name="notes" defaultValue={cust.notes ?? ""} />
                 </div>
               </div>
@@ -260,28 +258,28 @@ export default function CustomerDetailPage() {
               )}
               <div className="form-actions">
                 <button type="button" className="btn" onClick={() => setShowEdit(false)}>
-                  Cancel
+                  Ka Noqo
                 </button>
-                <SubmitButton busy={updateCustomer.isPending}>Save Changes</SubmitButton>
+                <SubmitButton busy={updateCustomer.isPending}>Kaydi Beddelka</SubmitButton>
               </div>
             </form>
           </Modal>
 
-          <Card className="profile-identity"><div className="avatar">{cust.name.split(" ").slice(0,2).map(n => n[0]).join("")}</div><div><h2>{cust.name}</h2><p>{cust.code} · {cust.primaryPhone ?? "No phone recorded"} · <Badge tone={cust.status === "ACTIVE" ? "ok" : "warn"}>{cust.status}</Badge></p></div><div className="actions"><button className="btn" onClick={() => setShowEdit(true)}>Edit customer</button><Link className="btn primary" href="/orders/new">New order</Link></div></Card>
-          {financialQuery.isError ? <ErrorState message={financialQuery.error.message} retry={() => void financialQuery.refetch()} /> : financialQuery.isLoading ? <LoadingState label="Loading account balances…" /> : <div className="grid profile-metrics">
-            <MetricCard label="Total invoiced" value={`$${decimal(fin?.totalInvoiced)}`} note="Historical posted invoices" icon={Receipt} />
-            <MetricCard label="Total received" value={`$${decimal(fin?.totalPaid)}`} note="Posted payments" icon={Wallet} />
-            <MetricCard label="Outstanding debt" value={`$${decimal(fin?.outstandingDebt)}`} note="Open invoice amount" icon={TrendingUp} dark />
-            <MetricCard label="Unapplied credit" value={`$${decimal(fin?.unappliedCredit)}`} note="Not yet allocated" icon={CircleCheck} />
-            <MetricCard label="Net account position" value={`$${decimal(fin?.netPosition)}`} note="Debt less available credit" icon={Wallet} />
+          <Card className="profile-identity"><div className="avatar">{cust.name.split(" ").slice(0,2).map(n => n[0]).join("")}</div><div><h2>{cust.name}</h2><p>{cust.code} · {cust.primaryPhone ?? "Telefoon ma jiro"} · <Badge tone={cust.status === "ACTIVE" ? "ok" : "warn"}>{formatStatus(cust.status)}</Badge></p></div><div className="actions"><button className="btn" onClick={() => setShowEdit(true)}>Wax ka beddel macmiilka</button><Link className="btn primary" href="/orders/new">Dalab cusub</Link></div></Card>
+          {financialQuery.isError ? <ErrorState message={financialQuery.error.message} retry={() => void financialQuery.refetch()} /> : financialQuery.isLoading ? <LoadingState label="Raraya xisaabta macmiilka…" /> : <div className="grid profile-metrics">
+            <MetricCard label="Wadarta biilasha lagu jaray" value={`$${decimal(fin?.totalInvoiced)}`} note="Biilasha la diiwaangeliyay" icon={Receipt} />
+            <MetricCard label="Wadarta la helay" value={`$${decimal(fin?.totalPaid)}`} note="Lacagaha la diiwaangeliyay" icon={Wallet} />
+            <MetricCard label="Deynta harsan" value={`$${decimal(fin?.outstandingDebt)}`} note="Biilasha furan ee aan la bixin" icon={TrendingUp} dark />
+            <MetricCard label="Kireeditka aan la isticmaalin" value={`$${decimal(fin?.unappliedCredit)}`} note="Weli lacag la qaban" icon={CircleCheck} />
+            <MetricCard label="Xaaladda koontada ee netka ah" value={`$${decimal(fin?.netPosition)}`} note="Deynta ka dib kireeditka" icon={Wallet} />
           </div>}
-          <nav className="tabs-header no-print" aria-label="Customer account sections">
+          <nav className="tabs-header no-print" aria-label="Seefaha koontada macmiilka">
             {([
-              { id: "overview", label: "Overview" },
-              { id: "orders", label: "Orders & deliveries" },
-              { id: "invoices", label: "Invoices & debts" },
-              { id: "payments", label: "Payments" },
-              { id: "ledger", label: "Account ledger" }
+              { id: "overview", label: "Guudmar" },
+              { id: "orders", label: "Dalabyada & Gaarsiinta" },
+              { id: "invoices", label: "Biilasha & Deynta" },
+              { id: "payments", label: "Lacag-bixinnada" },
+              { id: "ledger", label: "Diiwaanka Xisaabta" }
             ] as const).map(tab => <button key={tab.id} className={activeTab === tab.id ? "active" : ""} aria-current={activeTab === tab.id ? "page" : undefined} onClick={() => setActiveTab(tab.id)}>{tab.label}</button>)}
           </nav>
 
@@ -314,33 +312,33 @@ function CustomerOverviewTab({ customer, fin }: { customer: Customer; fin?: Fina
       <div className="two-col">
         {/* Account Metadata */}
         <Card>
-          <CardHead title="Account details" description="Contact and delivery information" />
+          <CardHead title="Xogta koontada" description="Xiriirka iyo ciwaanka gaarsiinta" />
           <div className="card-body">
             <div className="grid grid-cols-2 gap-4" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
               <div>
-                <small className="muted" style={{ display: "block", fontSize: 12 }}>Customer Name</small>
+                <small className="muted" style={{ display: "block", fontSize: 12 }}>Magaca Macmiilka</small>
                 <strong>{customer.name}</strong>
               </div>
               <div>
-                <small className="muted" style={{ display: "block", fontSize: 12 }}>Customer Code</small>
+                <small className="muted" style={{ display: "block", fontSize: 12 }}>Koodhka Macmiilka</small>
                 <span className="mono strong">{customer.code}</span>
               </div>
               <div>
-                <small className="muted" style={{ display: "block", fontSize: 12 }}>Account Status</small>
+                <small className="muted" style={{ display: "block", fontSize: 12 }}>Xaaladda Koontada</small>
                 <Badge tone={customer.status === "ACTIVE" ? "ok" : customer.status === "HOLD" ? "warn" : "neutral"}>
-                  {customer.status}
+                  {formatStatus(customer.status)}
                 </Badge>
               </div>
               <div>
-                <small className="muted" style={{ display: "block", fontSize: 12 }}>Primary Phone</small>
+                <small className="muted" style={{ display: "block", fontSize: 12 }}>Telefoonka Koowaad</small>
                 <span>{customer.primaryPhone ?? "—"}</span>
               </div>
             </div>
 
             <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid var(--line)" }}>
-              <small className="muted" style={{ display: "block", fontSize: 12, marginBottom: 6 }}>Registered Delivery Addresses</small>
+              <small className="muted" style={{ display: "block", fontSize: 12, marginBottom: 6 }}>Ciwaannada Gaarsiinta ee Diiwaangashan</small>
               {customer.addresses.length === 0 ? (
-                <span className="muted">No explicit delivery addresses saved.</span>
+                <span className="muted">Weli ma jiraan ciwaanno gaarsiinta oo la kaydiyay.</span>
               ) : (
                 customer.addresses.map((addr) => (
                   <div key={addr.id} style={{ marginBottom: 8, fontSize: 13 }}>
@@ -352,7 +350,7 @@ function CustomerOverviewTab({ customer, fin }: { customer: Customer; fin?: Fina
 
             {customer.notes && (
               <div style={{ marginTop: 16, paddingTop: 12, borderTop: "1px solid var(--line)" }}>
-                <small className="muted" style={{ display: "block", fontSize: 12 }}>Operational Notes</small>
+                <small className="muted" style={{ display: "block", fontSize: 12 }}>Xusuus-qoor Hawgalka</small>
                 <p style={{ margin: "4px 0 0 0", fontSize: 13, lineHeight: 1.4 }}>{customer.notes}</p>
               </div>
             )}
@@ -361,29 +359,29 @@ function CustomerOverviewTab({ customer, fin }: { customer: Customer; fin?: Fina
 
         {/* Commercial Balance Breakdown */}
         <Card>
-          <CardHead title="Financial position" description="Authoritative ledger receivables vs credits" />
+          <CardHead title="Xaaladda maaliyadda" description="Xisaabta deynta iyo kireeditka" />
           <div className="card-body">
             <div className="table-wrap">
               <table className="data-table">
                 <tbody>
                   <tr>
-                    <td>Total Invoiced Revenue</td>
+                    <td>Wadarta Dakhliga Biilasha</td>
                     <td className="mono strong" style={{ textAlign: "right" }}>${decimal(fin?.totalInvoiced ?? "0", 2)}</td>
                   </tr>
                   <tr>
-                    <td>Total Payments Collected</td>
+                    <td>Wadarta Lacagaha La Ururiyay</td>
                     <td className="mono strong text-emerald-400" style={{ textAlign: "right" }}>${decimal(fin?.totalPaid ?? "0", 2)}</td>
                   </tr>
                   <tr>
-                    <td>Outstanding Open Invoices Debt</td>
+                    <td>Deynta Biilasha Furan ee Harsan</td>
                     <td className="mono strong" style={{ textAlign: "right", color: "var(--red)" }}>${decimal(fin?.outstandingDebt ?? "0", 2)}</td>
                   </tr>
                   <tr>
-                    <td>Unapplied Payments / Deposits</td>
+                    <td>Lacagaha Deposit-ka/Kireeditka Aan La Isticmaalin</td>
                     <td className="mono strong" style={{ textAlign: "right", color: "var(--amber)" }}>${decimal(fin?.unappliedCredit ?? "0", 2)}</td>
                   </tr>
                   <tr style={{ borderTop: "2px solid var(--line)", fontWeight: "bold" }}>
-                    <td>Net Account Balance</td>
+                    <td>Wadarta Netka ee Koontada</td>
                     <td className="mono strong" style={{ textAlign: "right", fontSize: 16 }}>${decimal(fin?.netPosition ?? "0", 2)}</td>
                   </tr>
                 </tbody>
@@ -395,16 +393,16 @@ function CustomerOverviewTab({ customer, fin }: { customer: Customer; fin?: Fina
 
       {/* Recent Orders Overview */}
       <Card>
-        <CardHead title="Recent Orders Overview" description="Latest 5 sales orders placed by customer" />
+        <CardHead title="Guudmarada Dalabyadii Ugu Dambeeyay" description="5-tii dalab ee ugu dambeeyay ee macmiilka" />
         <div className="table-wrap">
           <table className="data-table">
             <thead>
               <tr>
-                <th>Order #</th>
-                <th>Order Date</th>
-                <th>Fuel & Requested Units</th>
-                <th>Status</th>
-                <th style={{ textAlign: "right" }}>Action</th>
+                <th>Dalabka #</th>
+                <th>Taariikhda</th>
+                <th>Shidaalka & Tirada Fuustooyinka</th>
+                <th>Xaaladda</th>
+                <th style={{ textAlign: "right" }}>Hawgalka</th>
               </tr>
             </thead>
             <tbody>
@@ -414,20 +412,20 @@ function CustomerOverviewTab({ customer, fin }: { customer: Customer; fin?: Fina
                     <Link href={`/orders/${ord.id}`}>{ord.orderNo}</Link>
                   </td>
                   <td>{ord.orderDate.slice(0, 10)}</td>
-                  <td>{ord.lines.map((l) => `${l.fuel.displayName}: ${l.requestedUnits} fuusto`).join(", ")}</td>
+                  <td>{ord.lines.map((l) => `${formatFuel(l.fuel.displayName)}: ${l.requestedUnits} Fuusto`).join(", ")}</td>
                   <td>
                     <Badge tone={ord.status === "FULFILLED" ? "ok" : ord.status === "DRAFT" ? "neutral" : "info"}>
-                      {ord.status}
+                      {formatStatus(ord.status)}
                     </Badge>
                   </td>
                   <td style={{ textAlign: "right" }}>
-                    <Link className="btn small" href={`/orders/${ord.id}`}>View Details</Link>
+                    <Link className="btn small" href={`/orders/${ord.id}`}>Eeg Faahfaahinta</Link>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
-          {customer.orders.length === 0 && <Empty>No sales orders recorded for this customer yet.</Empty>}
+          {customer.orders.length === 0 && <Empty>Weli wax dalab ah lagama diiwaangelin macmiilkan.</Empty>}
         </div>
       </Card>
     </div>
@@ -457,25 +455,25 @@ function CustomerOrdersTab({ customerId }: { customerId: string }) {
 
   return (
     <Card>
-      <CardHead title="Customer Order History & Deliveries" description="Requested quantities, price snapshots, and conversion snapshots" />
+      <CardHead title="Taariikhda Dalabyada & Gaarsiinta Macmiilka" description="Tirada la codsaday, qiimaha la xaqiijiyay, iyo kuleetarrada" />
 
       <div className="toolbar" style={{ marginBottom: 16, display: "flex", gap: 12, flexWrap: "wrap" }}>
         <input
           className="input"
           value={search}
           onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-          placeholder="Search by order #..."
+          placeholder="Ka raadi koodhka dalabka..."
           style={{ flex: 1, minWidth: 200 }}
         />
         <select className="select" value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }}>
-          <option value="">All Statuses</option>
-          <option value="DRAFT">Draft</option>
-          <option value="CONFIRMED">Confirmed</option>
-          <option value="SCHEDULED">Scheduled</option>
-          <option value="IN_PROGRESS">In Progress</option>
-          <option value="PARTIALLY_FULFILLED">Partially Fulfilled</option>
-          <option value="FULFILLED">Fulfilled</option>
-          <option value="CANCELLED">Cancelled</option>
+          <option value="">Dhammaan Xaaladaha</option>
+          <option value="DRAFT">Qabyo</option>
+          <option value="CONFIRMED">La Xaqiijiyay</option>
+          <option value="SCHEDULED">La Jadwaleeyay</option>
+          <option value="IN_PROGRESS">Wuu Socdaa</option>
+          <option value="PARTIALLY_FULFILLED">Qayb Ayaa La Fushiyay</option>
+          <option value="FULFILLED">La Dhammeeyay</option>
+          <option value="CANCELLED">La Baajiyay</option>
         </select>
       </div>
 
@@ -486,13 +484,13 @@ function CustomerOrdersTab({ customerId }: { customerId: string }) {
           <table className="data-table">
             <thead>
               <tr>
-                <th>Order #</th>
-                <th>Order Date</th>
-                <th>Requested Fuel & Fuusto</th>
-                <th>Conversion Snapshot</th>
-                <th>Agreed Price Snapshot</th>
-                <th>Status</th>
-                <th style={{ textAlign: "right" }}>Actions</th>
+                <th>Dalabka #</th>
+                <th>Taariikhda</th>
+                <th>Shidaalka & Fuustooyinka</th>
+                <th>Kuleetarka Litarada</th>
+                <th>Qiimaha Fuustadii</th>
+                <th>Xaaladda</th>
+                <th style={{ textAlign: "right" }}>Hawgallada</th>
               </tr>
             </thead>
             <tbody>
@@ -507,37 +505,37 @@ function CustomerOrdersTab({ customerId }: { customerId: string }) {
                   <td>
                     {row.lines.map((l) => (
                       <div key={l.id}>
-                        {l.fuel.displayName}: <b>{l.requestedUnits} {l.salesUnit?.name ?? "fuusto"}</b>
+                        {formatFuel(l.fuel.displayName)}: <b>{l.requestedUnits} {l.salesUnit?.name ?? "fuusto"}</b>
                       </div>
                     ))}
                   </td>
                   <td>
                     {row.lines.map((l) => (
                       <div key={l.id} className="mono text-xs">
-                        {l.litersPerUnitSnapshot ? `${l.litersPerUnitSnapshot} L / unit` : "Unconfirmed"}
+                        {l.litersPerUnitSnapshot ? `${l.litersPerUnitSnapshot} L / fuusto` : "Aan la xaqiijin"}
                       </div>
                     ))}
                   </td>
                   <td>
                     {row.lines.map((l) => (
                       <div key={l.id} className="mono text-xs">
-                        {l.unitPriceSnapshot ? `$${decimal(l.unitPriceSnapshot, 2)}` : "Unconfirmed"}
+                        {l.unitPriceSnapshot ? `$${decimal(l.unitPriceSnapshot, 2)}` : "Aan la xaqiijin"}
                       </div>
                     ))}
                   </td>
                   <td>
                     <Badge tone={row.status === "FULFILLED" ? "ok" : row.status === "DRAFT" ? "neutral" : "info"}>
-                      {row.status}
+                      {formatStatus(row.status)}
                     </Badge>
                   </td>
                   <td style={{ textAlign: "right" }}>
-                    <Link className="btn small" href={`/orders/${row.id}`}>Order Details</Link>
+                    <Link className="btn small" href={`/orders/${row.id}`}>Faahfaahinta Dalabka</Link>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
-          {items.length === 0 && <Empty>No orders found for this customer.</Empty>}
+          {items.length === 0 && <Empty>Ma jiraan dalabyo loo helay macmiilkan.</Empty>}
           <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
         </div>
       )}
@@ -567,23 +565,23 @@ function CustomerInvoicesTab({ customerId }: { customerId: string }) {
 
   return (
     <Card>
-      <CardHead title="Customer Invoices & Commercial Receivables" description="Invoicing based exclusively on confirmed accepted delivery quantity" />
+      <CardHead title="Biilasha Macmiilka & Deynta Ganacsiga" description="Jarista biilka ee ku batay shidaalka la aqbalay ee la gaarsiiyay" />
 
       <div className="toolbar" style={{ marginBottom: 16, display: "flex", gap: 12, flexWrap: "wrap" }}>
         <input
           className="input"
           value={search}
           onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-          placeholder="Search by invoice #..."
+          placeholder="Ka raadi lambarka biilka..."
           style={{ flex: 1, minWidth: 200 }}
         />
         <select className="select" value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }}>
-          <option value="">All Invoice Statuses</option>
-          <option value="UNPAID">Unpaid</option>
-          <option value="PARTIALLY_PAID">Partially Paid</option>
-          <option value="PAID">Paid</option>
-          <option value="CANCELLED">Cancelled</option>
-          <option value="REVERSED">Reversed</option>
+          <option value="">Dhammaan Xaaladaha Biilasha</option>
+          <option value="UNPAID">Lama Bixin</option>
+          <option value="PARTIALLY_PAID">Qayb Ayaa Laga Bixiyay</option>
+          <option value="PAID">La Bixiyay</option>
+          <option value="CANCELLED">La Baajiyay</option>
+          <option value="REVERSED">Laga Noqday</option>
         </select>
       </div>
 
@@ -594,14 +592,14 @@ function CustomerInvoicesTab({ customerId }: { customerId: string }) {
           <table className="data-table">
             <thead>
               <tr>
-                <th>Invoice #</th>
-                <th>Issue Date</th>
-                <th>Due Date</th>
-                <th>Status</th>
-                <th>Total Invoiced</th>
-                <th>Paid Amount</th>
-                <th>Balance Due</th>
-                <th style={{ textAlign: "right" }}>Actions</th>
+                <th>Biilka #</th>
+                <th>Taariikhda Bixinta</th>
+                <th>Taariikhda Harsan</th>
+                <th>Xaaladda</th>
+                <th>Wadarta Biilka</th>
+                <th>Lacagta La Bixiyay</th>
+                <th>Deynta Harsan</th>
+                <th style={{ textAlign: "right" }}>Hawgallada</th>
               </tr>
             </thead>
             <tbody>
@@ -616,7 +614,7 @@ function CustomerInvoicesTab({ customerId }: { customerId: string }) {
                   <td>{inv.dueDate ? inv.dueDate.slice(0, 10) : "—"}</td>
                   <td>
                     <Badge tone={inv.status === "PAID" ? "ok" : inv.status === "PARTIALLY_PAID" ? "warn" : inv.status === "REVERSED" ? "danger" : "neutral"}>
-                      {inv.status.replace("_", " ")}
+                      {formatStatus(inv.status)}
                     </Badge>
                   </td>
                   <td className="mono font-bold">${decimal(inv.totalAmount, 2)}</td>
@@ -625,13 +623,13 @@ function CustomerInvoicesTab({ customerId }: { customerId: string }) {
                     ${decimal(inv.balanceDue, 2)}
                   </td>
                   <td style={{ textAlign: "right" }}>
-                    <Link className="btn small" href={`/invoices/${inv.id}`}>View Invoice</Link>
+                    <Link className="btn small" href={`/invoices/${inv.id}`}>Eeg Biilka</Link>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
-          {items.length === 0 && <Empty>No commercial invoices found for this customer.</Empty>}
+          {items.length === 0 && <Empty>Ma jiraan biilal ganacsi oo loo helay macmiilkan.</Empty>}
           <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
         </div>
       )}
@@ -661,23 +659,23 @@ function CustomerPaymentsTab({ customerId }: { customerId: string }) {
 
   return (
     <Card>
-      <CardHead title="Customer Payment History & Allocations" description="Receipts, partial installment allocations, and unapplied credits" />
+      <CardHead title="Taariikhda Lacag-bixinnada & Qaybinta Macmiilka" description="Rasiidhada, qayb-bixinta, iyo kireeditka aan la isticmaalin" />
 
       <div className="toolbar" style={{ marginBottom: 16, display: "flex", gap: 12, flexWrap: "wrap" }}>
         <input
           className="input"
           value={search}
           onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-          placeholder="Search by payment # or reference..."
+          placeholder="Ka raadi lambarka lacag-bixinta ama tixraaca..."
           style={{ flex: 1, minWidth: 200 }}
         />
         <select className="select" value={method} onChange={(e) => { setMethod(e.target.value); setPage(1); }}>
-          <option value="">All Payment Methods</option>
-          <option value="CASH">Cash</option>
-          <option value="BANK_TRANSFER">Bank Transfer</option>
+          <option value="">Dhammaan Hababka Bixinta</option>
+          <option value="CASH">Kaash</option>
+          <option value="BANK_TRANSFER">Xawaalad Bank</option>
           <option value="EVC_PLUS">EVC Plus</option>
           <option value="EDAHAB">eDahab</option>
-          <option value="OTHER">Other</option>
+          <option value="OTHER">Wadada Kale</option>
         </select>
       </div>
 
@@ -688,16 +686,16 @@ function CustomerPaymentsTab({ customerId }: { customerId: string }) {
           <table className="data-table">
             <thead>
               <tr>
-                <th>Payment #</th>
-                <th>Date</th>
-                <th>Method</th>
-                <th>Reference</th>
-                <th>Total Collected</th>
-                <th>Allocated to Invoices</th>
-                <th>Unapplied Credit</th>
-                <th>Status</th>
-                <th>Recorded By</th>
-                <th style={{ textAlign: "right" }}>Actions</th>
+                <th>Lacag-bixinta #</th>
+                <th>Taariikhda</th>
+                <th>Habka</th>
+                <th>Tixraaca</th>
+                <th>Wadarta La Ururiyay</th>
+                <th>Lagu Jaray Biilasha</th>
+                <th>Kireeditka Aan La Isticmaalin</th>
+                <th>Xaaladda</th>
+                <th>Wuxuu Diiwaangeliyay</th>
+                <th style={{ textAlign: "right" }}>Hawgallada</th>
               </tr>
             </thead>
             <tbody>
@@ -717,17 +715,17 @@ function CustomerPaymentsTab({ customerId }: { customerId: string }) {
                     ${decimal(p.unappliedAmount, 2)}
                   </td>
                   <td>
-                    <Badge tone={p.status === "POSTED" ? "ok" : "danger"}>{p.status}</Badge>
+                    <Badge tone={p.status === "POSTED" ? "ok" : "danger"}>{formatStatus(p.status)}</Badge>
                   </td>
                   <td>{p.recordedBy.displayName}</td>
                   <td style={{ textAlign: "right" }}>
-                    <Link className="btn small" href={`/payments/${p.id}`}>Receipt Details</Link>
+                    <Link className="btn small" href={`/payments/${p.id}`}>Faahfaahinta Rasiidhka</Link>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
-          {items.length === 0 && <Empty>No payment records found for this customer.</Empty>}
+          {items.length === 0 && <Empty>Ma jiraan diiwaanno lacag-bixin oo loo helay macmiilkan.</Empty>}
           <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
         </div>
       )}
@@ -771,12 +769,12 @@ function CustomerLedgerTab({ customerId, customerName, customerCode }: { custome
   return (
     <Card className="ledger-document">
       <CardHead
-        title={`Chronological Statement of Account — ${customerName}`}
-        description="Official financial subledger. Debits increase outstanding debt (+); Credits decrease debt (-)."
+        title={`Diiwaanka Xisaabta ee Taariikhda ah — ${customerName}`}
+        description="Diiwaanka rasmiga ah ee maaliyadda. Deynta (Debit +); Lacag-bixinta (Credit -)."
         action={
           <div style={{ display: "flex", gap: 8 }}>
             <button className="btn small" onClick={() => window.print()}>
-              Print View
+              Daabac
             </button>
             <a
               className="btn small primary"
@@ -784,7 +782,7 @@ function CustomerLedgerTab({ customerId, customerName, customerCode }: { custome
               target="_blank"
               rel="noreferrer"
             >
-              Download PDF
+              Soo Dejiso PDF
             </a>
           </div>
         }
@@ -793,7 +791,7 @@ function CustomerLedgerTab({ customerId, customerName, customerCode }: { custome
       {/* Date Range & Type Filter Toolbar */}
       <div className="toolbar no-print" style={{ marginBottom: 16, display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
         <div>
-          <label style={{ display: "block", fontSize: 12, fontWeight: 700, marginBottom: 4 }}>From Date (Mogadishu UTC+3):</label>
+          <label style={{ display: "block", fontSize: 12, fontWeight: 700, marginBottom: 4 }}>Ka soo bilaabato (Muqdisho UTC+3):</label>
           <input
             type="date"
             className="input"
@@ -802,7 +800,7 @@ function CustomerLedgerTab({ customerId, customerName, customerCode }: { custome
           />
         </div>
         <div>
-          <label style={{ display: "block", fontSize: 12, fontWeight: 700, marginBottom: 4 }}>To Date:</label>
+          <label style={{ display: "block", fontSize: 12, fontWeight: 700, marginBottom: 4 }}>Ku dhamaato:</label>
           <input
             type="date"
             className="input"
@@ -811,13 +809,13 @@ function CustomerLedgerTab({ customerId, customerName, customerCode }: { custome
           />
         </div>
         <div>
-          <label style={{ display: "block", fontSize: 12, fontWeight: 700, marginBottom: 4 }}>Entry Type Filter:</label>
+          <label style={{ display: "block", fontSize: 12, fontWeight: 700, marginBottom: 4 }}>Shaandhaynta Nooca Diiwaanka:</label>
           <select className="select" value={entryTypeFilter} onChange={(e) => setEntryTypeFilter(e.target.value)}>
-            <option value="">All Transaction Types</option>
-            <option value="INVOICE">Invoices (Debits)</option>
-            <option value="PAYMENT">Payments (Credits)</option>
-            <option value="REVERSAL">Reversals</option>
-            <option value="ADJUSTMENT">Adjustments</option>
+            <option value="">Dhammaan Hawgallada</option>
+            <option value="INVOICE">Biilasha (Deynta +)</option>
+            <option value="PAYMENT">Lacag-bixinnada (Kireeditka -)</option>
+            <option value="REVERSAL">Laga Noqday</option>
+            <option value="ADJUSTMENT">Wax Ka Beddelka</option>
           </select>
         </div>
       </div>
@@ -825,19 +823,19 @@ function CustomerLedgerTab({ customerId, customerName, customerCode }: { custome
       {/* Period Balance Summary Banner */}
       <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12, marginBottom: 16 }}>
         <div style={{ padding: 12, background: "var(--canvas)", border: "1px solid var(--line)", borderRadius: 8 }}>
-          <small className="muted" style={{ fontSize: 11, textTransform: "uppercase" }}>Period Opening Balance</small>
+          <small className="muted" style={{ fontSize: 11, textTransform: "uppercase" }}>Baalansiga Ugu Horreeya Xilliga</small>
           <div className="mono strong" style={{ fontSize: 16 }}>${openingBalance?.toFixed(2) ?? "—"}</div>
         </div>
         <div style={{ padding: 12, background: "var(--canvas)", border: "1px solid var(--line)", borderRadius: 8 }}>
-          <small className="muted" style={{ fontSize: 11, textTransform: "uppercase" }}>Period Total Debits (+)</small>
+          <small className="muted" style={{ fontSize: 11, textTransform: "uppercase" }}>Wadarta Deynta Xilliga (+)</small>
           <div className="mono strong" style={{ fontSize: 16, color: "var(--red)" }}>+${totalPeriodDebits.toFixed(2)}</div>
         </div>
         <div style={{ padding: 12, background: "var(--canvas)", border: "1px solid var(--line)", borderRadius: 8 }}>
-          <small className="muted" style={{ fontSize: 11, textTransform: "uppercase" }}>Period Total Credits (-)</small>
+          <small className="muted" style={{ fontSize: 11, textTransform: "uppercase" }}>Wadarta Lacag-bixinta Xilliga (-)</small>
           <div className="mono strong text-emerald-400" style={{ fontSize: 16 }}>-${totalPeriodCredits.toFixed(2)}</div>
         </div>
         <div style={{ padding: 12, background: "var(--lime-pale)", border: "1px solid var(--line)", borderRadius: 8 }}>
-          <small className="muted" style={{ fontSize: 11, textTransform: "uppercase" }}>Period Closing Balance</small>
+          <small className="muted" style={{ fontSize: 11, textTransform: "uppercase" }}>Baalansiga Ugu Dambeeya Xilliga</small>
           <div className="mono strong" style={{ fontSize: 16, color: "var(--petrol)" }}>${closingBalance?.toFixed(2) ?? "—"}</div>
         </div>
       </div>
@@ -850,12 +848,12 @@ function CustomerLedgerTab({ customerId, customerName, customerCode }: { custome
           <table className="data-table">
             <thead>
               <tr>
-                <th>Date & Time</th>
-                <th>Type</th>
-                <th>Reference #</th>
-                <th>Debit (+ Debt)</th>
-                <th>Credit (- Debt)</th>
-                <th style={{ textAlign: "right" }}>Running Balance</th>
+                <th>Taariikhda & Waqtiga</th>
+                <th>Nooca</th>
+                <th>Tixraaca #</th>
+                <th>Deynta (+ Debt)</th>
+                <th>Kireeditka (- Debt)</th>
+                <th style={{ textAlign: "right" }}>Baalansiga Harsan</th>
               </tr>
             </thead>
             <tbody>
@@ -874,7 +872,7 @@ function CustomerLedgerTab({ customerId, customerName, customerCode }: { custome
                           : "neutral"
                       }
                     >
-                      {e.entryType}
+                      {formatStatus(e.entryType)}
                     </Badge>
                   </td>
                   <td className="mono strong">{e.referenceNo}</td>
@@ -892,10 +890,11 @@ function CustomerLedgerTab({ customerId, customerName, customerCode }: { custome
             </tbody>
           </table>
           {filteredEntries.length === 0 && (
-            <Empty>No subledger transactions recorded for the selected period.</Empty>
+            <Empty>Ma jiraan hawgallo diiwaanka xisaabta ah oo la diiwaangeliyay xilliga la doortay.</Empty>
           )}
         </div>
       )}
     </Card>
   );
 }
+

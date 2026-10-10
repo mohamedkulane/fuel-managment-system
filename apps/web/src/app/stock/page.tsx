@@ -1,6 +1,6 @@
 "use client";
 import { Fuel as FuelIcon } from "lucide-react";
-import { decimal, dateTime } from "../../lib/format";
+import { decimal, dateTime, formatStatus, formatFuel } from "../../lib/format";
 import { FormEvent, useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -70,55 +70,55 @@ export default function StockPage() {
   return (
     <main className="page stock-page">
       <PageHeader
-        eyebrow="Inventory control"
-        title="Inventory overview"
-        description="Warehouse stock, in-transit fuel and movement history measured primarily in Fuusto (1 fuusto = 240 liters)."
+        eyebrow="Maamulka kaydka shidaalka"
+        title="Kaydka Shidaalka"
+        description="Kaydka bakhaarka, shidaalka jidka ku jira iyo taariikhda dhaqdhaqaaqa ee lagu qiyaaso fuustooyinka (1 fuusto = 240 litar)."
         actions={
           <>
             {isOwner && (
               <button className="btn" onClick={() => setShowAdjust(true)}>
-                Stock Adjustment
+                Wax Ka Beddelka Kaydka
               </button>
             )}
             <Link className="btn primary" href="/stock/receive">
-              + Receive stock purchase
+              + Shidaal Soo Gelin
             </Link>
           </>
         }
       />
 
-      <Modal isOpen={showAdjust} onClose={() => setShowAdjust(false)} title="Record Manual Stock Adjustment (Owner Only)">
+      <Modal isOpen={showAdjust} onClose={() => setShowAdjust(false)} title="Wax Ka Beddelka Kaydka (Milkiilaha Kaliya)">
         <form onSubmit={handleAdjustSubmit}>
           <div className="notice warn" style={{ marginBottom: 16 }}>
-            Adjustments alter physical warehouse stock. A detailed reason is required for audit verification.
+            Wax ka beddelku wuxuu beddelaa shidaalka bakhaarka ee rasmiga ah. Waxaa qasab ah sabab faahfaahsan oo audit ah.
           </div>
           <div className="form-grid">
             <div className="field">
-              <label htmlFor="fuelId">Fuel Type *</label>
+              <label htmlFor="fuelId">Nooca Shidaalka *</label>
               <select id="fuelId" className="select" name="fuelId" required>
-                <option value="">Select fuel type</option>
+                <option value="">Dooro nooca shidaalka</option>
                 {fuels.data?.map((f) => (
                   <option key={f.id} value={f.id}>
-                    {f.displayName}
+                    {formatFuel(f.displayName)}
                   </option>
                 ))}
               </select>
             </div>
             <div className="field">
-              <label htmlFor="delta">Signed Delta Liters * (+ / -)</label>
-              <input id="delta" className="input" name="delta" required placeholder="e.g. 12000 or -2400" inputMode="decimal" />
+              <label htmlFor="delta">Kala duwanaanshaha Litarada * (+ / -)</label>
+              <input id="delta" className="input" name="delta" required placeholder="tusaale: 12000 ama -2400" inputMode="decimal" />
             </div>
             <div className="field full">
-              <label htmlFor="reason">Mandatory Audit Reason *</label>
-              <input id="reason" className="input" name="reason" required placeholder="e.g. Tank calibration adjustment approved by owner" />
+              <label htmlFor="reason">Sababta Rasmiga ah ee Audit-ka *</label>
+              <input id="reason" className="input" name="reason" required placeholder="tusaale: Wax ka beddelka cabbirka taangiga ee uu milkiiluhu ogolaaday" />
             </div>
           </div>
           {adjust.isError && <div className="notice warn" role="alert" style={{ marginTop: 16 }}>{(adjust.error as Error).message}</div>}
           <div className="form-actions">
             <button type="button" className="btn" onClick={() => setShowAdjust(false)}>
-              Cancel
+              Ka Noqo
             </button>
-            <SubmitButton busy={adjust.isPending}>Post Adjustment</SubmitButton>
+            <SubmitButton busy={adjust.isPending}>Diiwaangeli Beddelka</SubmitButton>
           </div>
         </form>
       </Modal>
@@ -129,12 +129,13 @@ export default function StockPage() {
         <div className="grid">
           {balances.data?.map((row) => {
             const fuusto = row.balanceFuusto ?? (Number(row.balanceLiters) / 240).toFixed(3);
+            const locationLabel = row.location === "WAREHOUSE" ? "Bakhaarka" : row.location === "IN_TRANSIT" ? "Jidka Ku Jira" : row.location;
             return (
               <MetricCard
                 key={`${row.fuel}-${row.location}`}
-                label={`${row.fuelName} · ${row.location.replaceAll("_", " ")}`}
-                value={`${fuusto} fuusto`}
-                note={`${decimal(row.balanceLiters, 3)} canonical liters`}
+                label={`${formatFuel(row.fuelName)} · ${locationLabel}`}
+                value={`${fuusto} Fuusto`}
+                note={`${decimal(row.balanceLiters, 3)} litar oo sax ah`}
                 icon={FuelIcon}
                 dark={row.fuel === "DIESEL" && row.location === "WAREHOUSE"}
               />
@@ -144,7 +145,7 @@ export default function StockPage() {
       )}
 
       <Card>
-        <CardHead title="Stock Movement Ledger" description="Purchases, dispatches, acceptances, returns and adjustments measured in fuusto" />
+        <CardHead title="Diiwaanka Dhaqdhaqaaqa Kaydka" description="Shidaal soo gelinta, dirista, aqbalada, soo celinta iyo wax ka beddelka ee lagu cabbiro fuustooyinka" />
         <div className="toolbar">
           <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", width: "100%" }}>
             <select
@@ -152,10 +153,10 @@ export default function StockPage() {
               value={selectedFuel}
               onChange={(e) => { setSelectedFuel(e.target.value); setPage(1); }}
             >
-              <option value="">All Fuel Types</option>
+              <option value="">Dhammaan Noocyada Shidaalka</option>
               {fuels.data?.map((f) => (
                 <option key={f.id} value={f.id}>
-                  {f.displayName}
+                  {formatFuel(f.displayName)}
                 </option>
               ))}
             </select>
@@ -164,12 +165,12 @@ export default function StockPage() {
               value={selectedEvent}
               onChange={(e) => { setSelectedEvent(e.target.value); setPage(1); }}
             >
-              <option value="">All Movement Types</option>
-              <option value="RECEIPT">RECEIPT</option>
-              <option value="DISPATCH">DISPATCH</option>
-              <option value="ACCEPTED">ACCEPTED</option>
-              <option value="RETURN">RETURN</option>
-              <option value="ADJUSTMENT">ADJUSTMENT</option>
+              <option value="">Dhammaan Dhaqdhaqaaqyada</option>
+              <option value="RECEIPT">SOO GELIN</option>
+              <option value="DISPATCH">DIRIS</option>
+              <option value="ACCEPTED">LA AQBALAY</option>
+              <option value="RETURN">SOO CELIN</option>
+              <option value="ADJUSTMENT">WAX KA BEDDEL</option>
             </select>
           </div>
         </div>
@@ -181,22 +182,23 @@ export default function StockPage() {
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>Date & Time</th>
-                  <th>Fuel</th>
-                  <th>Movement Type</th>
-                  <th>Location</th>
-                  <th>Quantity (Fuusto)</th>
-                  <th>Canonical Liters</th>
-                  <th>Source Reference</th>
+                  <th>Taariikhda & Waqtiga</th>
+                  <th>Shidaalka</th>
+                  <th>Nooca Dhaqdhaqaaqa</th>
+                  <th>Goobta</th>
+                  <th>Tirada (Fuusto)</th>
+                  <th>Litarada Rasmiga ah</th>
+                  <th>Tixraaca Asalka</th>
                 </tr>
               </thead>
               <tbody>
                 {movementItems.map((row) => {
                   const fuustoQty = row.quantityFuusto ?? (Number(row.quantityLiters) / 240).toFixed(3);
+                  const locationText = row.location === "WAREHOUSE" ? "Bakhaarka" : row.location === "IN_TRANSIT" ? "Jidka Ku Jira" : row.location;
                   return (
                     <tr key={row.id}>
                       <td>{dateTime(row.occurredAt)}</td>
-                      <td>{row.fuelName}</td>
+                      <td>{formatFuel(row.fuelName)}</td>
                       <td>
                         <Badge
                           tone={
@@ -207,19 +209,19 @@ export default function StockPage() {
                               : "info"
                           }
                         >
-                          {row.eventType}
+                          {formatStatus(row.eventType)}
                         </Badge>
                       </td>
-                      <td>{row.location.replace("_", " ")}</td>
-                      <td className="mono strong" style={{ fontSize: 13 }}>{fuustoQty} fuusto</td>
+                      <td>{locationText}</td>
+                      <td className="mono strong" style={{ fontSize: 13 }}>{fuustoQty} Fuusto</td>
                       <td className="mono muted">{row.quantityLiters} L</td>
-                      <td>{row.sourceType}</td>
+                      <td>{formatStatus(row.sourceType)}</td>
                     </tr>
                   );
                 })}
               </tbody>
             </table>
-            {movementItems.length === 0 && <Empty>No posted stock movements found.</Empty>}
+            {movementItems.length === 0 && <Empty>Ma jiraan dhaqdhaqaaqyo kayd ah oo la diiwaangeliyay.</Empty>}
             <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
           </div>
         )}
@@ -227,3 +229,4 @@ export default function StockPage() {
     </main>
   );
 }
+

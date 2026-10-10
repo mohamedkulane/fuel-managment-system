@@ -4,6 +4,7 @@ import { FormEvent, useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, type PaginatedResponse } from "../../lib/api";
+import { formatStatus } from "../../lib/format";
 import { MetricCard, LoadingState, Badge, Card, CardHead, Empty, ErrorState, Modal, PageHeader, Pagination, SubmitButton } from "../../components/ui";
 
 type Customer = {
@@ -60,66 +61,66 @@ export default function CustomersPage() {
   return (
     <main className="page customers-page">
       <PageHeader
-        eyebrow="Customer relationships"
-        title="Customers"
-        description="Every account, contact and delivery address in one place."
-        actions={<button className="btn primary" onClick={() => setShowModal(true)}>Add customer</button>}
+        eyebrow="Macaamiisha ganacsiga"
+        title="Macaamiisha"
+        description="Macmiil kasta, xiriirka iyo ciwaanka gaarsiinta oo hal meel ku wada jira."
+        actions={<button className="btn primary" onClick={() => setShowModal(true)}>Kudhi Macmiil Cusub</button>}
       />
 
-      <div className="grid"><MetricCard label="Matching customers" value={query.data ? (Array.isArray(query.data) ? query.data.length : query.data.total) : "—"} note="Across the current search" icon={Users}/><MetricCard label="Active on this page" value={items.filter(c=>c.status==="ACTIVE").length} note="Accounts accepting orders" icon={CircleCheck}/><MetricCard label="On hold on this page" value={items.filter(c=>c.status==="HOLD").length} note="Restricted by the owner" icon={Clock3}/><MetricCard label="Directory page" value={page} note={`Of ${totalPages} pages`} icon={ClipboardList}/></div>
-      <Modal isOpen={showModal} onClose={() => setShowModal(false)} title="Create Operational Customer">
+      <div className="grid"><MetricCard label="Macaamiisha ku habboon" value={query.data ? (Array.isArray(query.data) ? query.data.length : query.data.total) : "—"} note="Natiijada raadinta hadda" icon={Users}/><MetricCard label="Firfircoon boggan" value={items.filter(c=>c.status==="ACTIVE").length} note="Koontooyinka dalabka laga qaban karo" icon={CircleCheck}/><MetricCard label="La hakiyay boggan" value={items.filter(c=>c.status==="HOLD").length} note="Xaddidaad uu milkiilaha saaray" icon={Clock3}/><MetricCard label="Bogga diiwaanka" value={page} note={`Bogga ${page} ee ${totalPages}`} icon={ClipboardList}/></div>
+      <Modal isOpen={showModal} onClose={() => setShowModal(false)} title="Diiwaangeli Macmiil Cusub">
         <form onSubmit={submit}>
           <div className="form-grid">
             <div className="field">
-              <label htmlFor="name">Customer name *</label>
-              <input id="name" className="input" name="name" required placeholder="e.g. Hassan Trading Co." />
+              <label htmlFor="name">Magaca macmiilka *</label>
+              <input id="name" className="input" name="name" required placeholder="tusaale: Shirkadda Xassan Trading" />
             </div>
             <div className="field">
-              <label htmlFor="phone">Primary phone</label>
+              <label htmlFor="phone">Telefoonka koowaad</label>
               <input id="phone" className="input" name="phone" placeholder="+252 61 XXX XXXX" />
             </div>
             <div className="field full">
-              <label htmlFor="address">Delivery address</label>
-              <input id="address" className="input" name="address" placeholder="Main Warehouse, Hodan District" />
+              <label htmlFor="address">Ciwaanka gaarsiinta</label>
+              <input id="address" className="input" name="address" placeholder="Bakhaarka Weyn, Degmada Hodan" />
             </div>
             <div className="field">
-              <label htmlFor="district">District</label>
+              <label htmlFor="district">Degmada</label>
               <input id="district" className="input" name="district" placeholder="Hodan" />
             </div>
             <div className="field">
-              <label htmlFor="city">City</label>
-              <input id="city" className="input" name="city" placeholder="Mogadishu" />
+              <label htmlFor="city">Magaalada</label>
+              <input id="city" className="input" name="city" placeholder="Muqdisho" />
             </div>
             <div className="field full">
-              <label htmlFor="notes">Operational notes</label>
-              <input id="notes" className="input" name="notes" placeholder="e.g. Preferred delivery in morning" />
+              <label htmlFor="notes">Xusuus-qoor hawgalka</label>
+              <input id="notes" className="input" name="notes" placeholder="tusaale: Wuxuu doorbidaa gaarsiinta subaxda" />
             </div>
           </div>
           {create.isError && <div className="notice warn" role="alert" style={{ marginTop: 16 }}>{(create.error as Error).message}</div>}
           <div className="form-actions">
-            <button type="button" className="btn" onClick={() => setShowModal(false)}>Cancel</button>
-            <SubmitButton busy={create.isPending}>Save Customer</SubmitButton>
+            <button type="button" className="btn" onClick={() => setShowModal(false)}>Ka Noqo</button>
+            <SubmitButton busy={create.isPending}>Kaydi Macmiilka</SubmitButton>
           </div>
         </form>
       </Modal>
 
       <Card>
-        <CardHead title="All Customers" description="Search by customer name, code, or phone" />
+        <CardHead title="Dhammaan Macaamiisha" description="Ka raadi magaca macmiilka, koodhka, ama telefoonka" />
         <div className="toolbar">
           <div style={{ display: "flex", gap: "10px", flex: 1, minWidth: "260px" }}>
             <input
               className="input"
               value={search}
               onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-              placeholder="Search customers by name, code or phone…"
-              aria-label="Search customers"
+              placeholder="Ka raadi magaca, koodhka ama telefoonka…"
+              aria-label="Raadi macaamiisha"
               style={{ width: "100%" }}
             />
             <select className="select" value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }}>
-              <option value="">All Statuses</option>
-              <option value="ACTIVE">Active</option>
-              <option value="HOLD">Account Hold</option>
-              <option value="INACTIVE">Inactive</option>
+              <option value="">Dhammaan Xaaladaha</option>
+              <option value="ACTIVE">Firfircoon</option>
+              <option value="HOLD">La Hakiyay</option>
+              <option value="INACTIVE">Aan Firfircoonayn</option>
             </select>
           </div>
         </div>
@@ -131,11 +132,11 @@ export default function CustomersPage() {
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>Customer</th>
-                  <th>Phone</th>
-                  <th>Primary Delivery Address</th>
-                  <th>Status</th>
-                  <th style={{ textAlign: "right" }}>Actions</th>
+                  <th>Macmiilka</th>
+                  <th>Telefoonka</th>
+                  <th>Ciwaanka Gaarsiinta Koowaad</th>
+                  <th>Xaaladda</th>
+                  <th style={{ textAlign: "right" }}>Hawgallada</th>
                 </tr>
               </thead>
               <tbody>
@@ -150,17 +151,17 @@ export default function CustomersPage() {
                     <td>{row.addresses[0]?.addressText ?? "—"}</td>
                     <td>
                       <Badge tone={row.status === "ACTIVE" ? "ok" : row.status === "HOLD" ? "warn" : "neutral"}>
-                        {row.status}
+                        {formatStatus(row.status)}
                       </Badge>
                     </td>
                     <td style={{ textAlign: "right" }}>
-                      <Link className="btn" href={`/customers/${row.id}`}>View Profile</Link>
+                      <Link className="btn" href={`/customers/${row.id}`}>Eeg Warbixinta</Link>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
-            {items.length === 0 && <Empty>No customers found matching search filter.</Empty>}
+            {items.length === 0 && <Empty>Ma jiraan macaamiil u dhigma raadinta.</Empty>}
             <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
           </div>
         )}
@@ -168,4 +169,5 @@ export default function CustomersPage() {
     </main>
   );
 }
+
 

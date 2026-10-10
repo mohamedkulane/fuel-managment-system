@@ -1,11 +1,204 @@
 "use client";
 import Decimal from "decimal.js";
-import { ShoppingBag, Boxes, Truck } from "lucide-react";
-import { dateTime, sum, decimal } from "../../../lib/format";
+import { ShoppingBag, Boxes, Truck, AlertCircle } from "lucide-react";
+import { dateTime, sum, decimal, formatStatus, formatFuel } from "../../../lib/format";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../../../lib/api";
 import { MetricCard, Badge, Card, CardHead, ErrorState, PageHeader } from "../../../components/ui";
-type Order={id:string;orderNo:string;status:string;addressSnapshot:string;customer:{name:string};lines:Array<{id:string;requestedUnits:string;requestedLitersSnapshot:string|null;litersPerUnitSnapshot:string|null;unitPriceSnapshot:string|null;currencyCode:string;fuel:{displayName:string};salesUnit:{name:string};dispatchLines:Array<{id:string;dispatchedUnits:string;confirmations:Array<{acceptedUnits:string;physicalReturnedLiters:string}>}>}>;events:Array<{id:string;kind:string;occurredAt:string}>};
-export default function OrderPage(){const {id}=useParams<{id:string}>();const query=useQuery({queryKey:["order",id],queryFn:()=>api<Order>(`/orders/${id}`)});if(query.isError)return <main className="page detail-page"><ErrorState message={(query.error as Error).message}/></main>;const row=query.data;return <main className="page detail-page"><PageHeader eyebrow="Order detail" title={row?.orderNo??"Loading order…"} description={row?`${row.customer.name} · ${row.addressSnapshot}`:""} actions={<Link className="btn" href="/orders">Back to orders</Link>}/>{row&&<><div className="notice">Status: <Badge tone="info">{row.status}</Badge>. Confirmed snapshots below never follow later master-price or conversion changes.</div><div className="grid team-metrics"><MetricCard label="Order value" value={row.lines.every(l=>l.unitPriceSnapshot != null) ? `$${decimal(sum(row.lines.map(l=>new Decimal(l.requestedUnits).times(l.unitPriceSnapshot!).toString())))}` : "Not confirmed"} note="Requested quantity at saved prices" icon={ShoppingBag}/><MetricCard label="Requested quantity" value={sum(row.lines.map(l=>l.requestedUnits))} note="Fuusto ordered" icon={Boxes}/><MetricCard label="Accepted quantity" value={sum(row.lines.flatMap(l=>l.dispatchLines.flatMap(d=>d.confirmations.map(c=>c.acceptedUnits))))} note="Customer-confirmed fuusto" icon={Truck}/></div><div className="two-col"><Card><CardHead title="Order items" description="Saved quantities, price and conversion snapshots."/><div className="table-wrap"><table className="data-table"><thead><tr><th>Fuel</th><th>Requested</th><th>Conversion snapshot</th><th>Price snapshot</th><th>Dispatched / accepted / returned</th></tr></thead><tbody>{row.lines.map(line=>{const dispatched=sum(line.dispatchLines.map(x=>x.dispatchedUnits));const accepted=sum(line.dispatchLines.flatMap(x=>x.confirmations).map(x=>x.acceptedUnits));const returnedL=sum(line.dispatchLines.flatMap(x=>x.confirmations).map(x=>x.physicalReturnedLiters));return <tr key={line.id}><td className="strong">{line.fuel.displayName}</td><td>{line.requestedUnits} fuusto</td><td>{line.litersPerUnitSnapshot?`${line.litersPerUnitSnapshot} L / fuusto`:"Not confirmed"}</td><td>{line.unitPriceSnapshot?`${line.currencyCode} ${line.unitPriceSnapshot}`:"Not confirmed"}</td><td>{dispatched} / {accepted} / {returnedL} L returned</td></tr>})}</tbody></table></div></Card><Card><CardHead title="Order timeline" description="Recorded events for this order."/><div className="card-body"><ol className="timeline">{row.events.map(event=><li key={event.id}><Badge tone="info">{event.kind}</Badge> <small>{dateTime(event.occurredAt)}</small></li>)}</ol></div></Card></div></>}</main>}
+
+type OrderLine = {
+  id: string;
+  requestedUnits: string;
+  requestedLitersSnapshot: string | null;
+  litersPerUnitSnapshot: string | null;
+  unitPriceSnapshot: string | null;
+  currentActiveUnitPrice?: string | null;
+  currencyCode: string;
+  fuel: { displayName: string };
+  salesUnit: { name: string };
+  dispatchLines: Array<{
+    id: string;
+    dispatchedUnits: string;
+    confirmations: Array<{ acceptedUnits: string; physicalReturnedLiters: string }>;
+  }>;
+};
+
+type Order = {
+  id: string;
+  orderNo: string;
+  status: string;
+  addressSnapshot: string;
+  subtotal: string | null;
+  fixedDiscountAmount: string;
+  totalAmount: string | null;
+  discountReason: string | null;
+  discountApprovedById: string | null;
+  discountApprovedByName: string | null;
+  customer: { name: string };
+  lines: OrderLine[];
+  events: Array<{ id: string; kind: string; occurredAt: string }>;
+};
+
+export default function OrderPage() {
+  const { id } = useParams<{ id: string }>();
+  const query = useQuery({ queryKey: ["order", id], queryFn: () => api<Order>(`/orders/${id}`) });
+
+  if (query.isError)
+    return (
+      <main className="page detail-page">
+        <ErrorState message={(query.error as Error).message} />
+      </main>
+    );
+
+  const row = query.data;
+
+  const isDraft = row?.status === "DRAFT";
+  const hasPriceChangeNotice = isDraft && row?.lines.some((l) => l.currentActiveUnitPrice);
+  const fixedDiscountNum = parseFloat(row?.fixedDiscountAmount || "0");
+  const hasDiscount = fixedDiscountNum > 0;
+
+  return (
+    <main className="page detail-page">
+      <PageHeader
+        eyebrow="Faahfaahinta dalabka"
+        title={row?.orderNo ?? "Raraya dalabka…"}
+        description={row ? `${row.customer.name} · ${row.addressSnapshot}` : ""}
+        actions={<Link className="btn" href="/orders">Dib u laab dalabyada</Link>}
+      />
+      {row && (
+        <>
+          {hasPriceChangeNotice && (
+            <div className="notice warn" style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 16 }}>
+              <AlertCircle size={18} />
+              <div>
+                <strong>Eegista Qiimaha Qabyada Ah:</strong> Qiimaha suuqa ee hadda firfircoon waa{" "}
+                <b>{row.lines.map((l) => `$${l.currentActiveUnitPrice} / fuusto ee ${formatFuel(l.fuel.displayName)}`).join(", ")}</b>.
+                Xaqiijinta dalabkan waxay si joogto ah u kaydin doontaa qiimayaashan.
+              </div>
+            </div>
+          )}
+
+          <div className="notice" style={{ marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div>
+              Xaaladda: <Badge tone={isDraft ? "warn" : "info"}>{formatStatus(row.status)}</Badge>. Qiimayaasha iyo kuleetarka la xaqiijiyay dib isulama beddelaan marka qiimaha guud uu beddelmo.
+            </div>
+            {hasDiscount && (
+              <div>
+                Lacag-dhimista Tooska ah: <Badge tone={row.discountApprovedById ? "ok" : "warn"}>
+                  {row.discountApprovedById ? `Waxaa ansixiyay ${row.discountApprovedByName}` : "Wuxuu sugayaa ansixinta Milkiilaha"}
+                </Badge>
+              </div>
+            )}
+          </div>
+
+          <div className="grid team-metrics">
+            <MetricCard
+              label="Qiimaha Dalabka (Net)"
+              value={
+                row.totalAmount != null
+                  ? `$${decimal(row.totalAmount)}`
+                  : row.lines.every((l) => l.unitPriceSnapshot != null)
+                  ? `$${decimal(new Decimal(sum(row.lines.map((l) => new Decimal(l.requestedUnits).times(l.unitPriceSnapshot!).toString()))).minus(fixedDiscountNum).toString())}`
+                  : row.lines.every((l) => l.currentActiveUnitPrice != null)
+                  ? `$${decimal(Decimal.max(0, new Decimal(sum(row.lines.map((l) => new Decimal(l.requestedUnits).times(l.currentActiveUnitPrice!).toString()))).minus(fixedDiscountNum)).toString())} (Kharashka qiyaasta ah)`
+                  : "Aan la xaqiijin"
+              }
+              note={hasDiscount ? `Wadarta ka hor dhimista minus $${decimal(row.fixedDiscountAmount)} lacag-dhimis` : "Tirada la codsaday ee qiimaha la xaqiijiyay"}
+              icon={ShoppingBag}
+            />
+            <MetricCard
+              label="Tirada la codsaday"
+              value={`${sum(row.lines.map((l) => l.requestedUnits))} Fuusto`}
+              note="Fuusto la dalbaday"
+              icon={Boxes}
+            />
+            <MetricCard
+              label="Tirada la aqbalay"
+              value={`${sum(row.lines.flatMap((l) => l.dispatchLines.flatMap((d) => d.confirmations.map((c) => c.acceptedUnits))))} Fuusto`}
+              note="Fuusto uu macmiilku xaqiijiyay"
+              icon={Truck}
+            />
+          </div>
+
+          <div className="two-col">
+            <Card>
+              <CardHead title="Shidaalka dalabka & lacag-dhimista" description="Tirada la codsaday, qiimaha la xaqiijiyay, iyo lacag-dhimista lagu heshiiyay." />
+              <div className="table-wrap">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Shidaalka</th>
+                      <th>La Codsaday</th>
+                      <th>Kuleetarka Litarada</th>
+                      <th>Qiimaha Fuustadii</th>
+                      <th>Loo diray / la aqbalay / lagu soo celiyay</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {row.lines.map((line) => {
+                      const dispatched = sum(line.dispatchLines.map((x) => x.dispatchedUnits));
+                      const accepted = sum(line.dispatchLines.flatMap((x) => x.confirmations).map((x) => x.acceptedUnits));
+                      const returnedL = sum(line.dispatchLines.flatMap((x) => x.confirmations).map((x) => x.physicalReturnedLiters));
+                      return (
+                        <tr key={line.id}>
+                          <td className="strong">{formatFuel(line.fuel.displayName)}</td>
+                          <td className="strong mono">{line.requestedUnits} Fuusto</td>
+                          <td>
+                            {line.litersPerUnitSnapshot
+                              ? `${line.litersPerUnitSnapshot} L / Fuusto`
+                              : <span className="muted">Wuxuu noqon doonaa 240 L/fuusto marka la xaqiijiyo</span>}
+                          </td>
+                          <td className="strong mono">
+                            {line.unitPriceSnapshot ? (
+                              `${line.currencyCode} $${line.unitPriceSnapshot}`
+                            ) : isDraft && line.currentActiveUnitPrice ? (
+                              <span className="notice-inline" style={{ fontSize: 13 }}>
+                                Qiyaas: ${line.currentActiveUnitPrice} / Fuusto
+                              </span>
+                            ) : (
+                              "Aan la xaqiijin"
+                            )}
+                          </td>
+                          <td className="mono muted">{dispatched} / {accepted} / {returnedL} L lagu soo celiyay</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              {hasDiscount && (
+                <div className="card-body border-t" style={{ borderTop: "1px solid rgba(255,255,255,0.1)", paddingTop: 16 }}>
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="font-semibold">Lacag-dhimista Tooska ah ee Order-ka:</span>
+                    <span className="font-mono text-emerald-400 font-bold">-${decimal(row.fixedDiscountAmount)}</span>
+                  </div>
+                  {row.discountReason && (
+                    <div className="text-xs text-muted mt-1">
+                      Sababta / Xusuusta: {row.discountReason}
+                    </div>
+                  )}
+                </div>
+              )}
+            </Card>
+
+            <Card>
+              <CardHead title="Taariikhda Hawlaha Dalabka" description="Diiwaanka hawlaha la diiwaangeliyay ee dalabkan." />
+              <div className="card-body">
+                <ol className="timeline">
+                  {row.events.map((event) => (
+                    <li key={event.id}>
+                      <Badge tone="info">{formatStatus(event.kind)}</Badge> <small>{dateTime(event.occurredAt)}</small>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            </Card>
+          </div>
+        </>
+      )}
+    </main>
+  );
+}
+

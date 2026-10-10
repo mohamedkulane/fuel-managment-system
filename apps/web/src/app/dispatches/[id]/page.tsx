@@ -1,5 +1,5 @@
 "use client";
-import { sum, decimal } from "../../../lib/format";
+import { sum, decimal, formatStatus, formatFuel } from "../../../lib/format";
 import { Boxes, Truck, CircleCheck } from "lucide-react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
@@ -65,24 +65,24 @@ export default function DispatchDetailPage() {
   return (
     <main className="page detail-page">
       <PageHeader
-        eyebrow="Dispatch details"
-        title={row?.dispatchNo ?? "Loading dispatch…"}
-        description={row ? `Status: ${row.status} · ${row.deliverySheet ? `Sheet: ${row.deliverySheet.sheetNo}` : "Direct Dispatch"}` : ""}
+        eyebrow="Faahfaahinta dirista"
+        title={row?.dispatchNo ?? "Raraya dirista…"}
+        description={row ? `Xaaladda: ${formatStatus(row.status)} · ${row.deliverySheet ? `Waraaqda: ${row.deliverySheet.sheetNo}` : "Diris Toos ah"}` : ""}
         actions={
           row ? (
             <>
               {row.status === "PREPARED" && (
                 <button className="btn primary" disabled={post.isPending} onClick={() => post.mutate()}>
-                  {post.isPending ? "Posting…" : "Post Physical Dispatch"}
+                  {post.isPending ? "Diiwaangelinaya…" : "Diiwaangeli Dirista Rasmiga Ah"}
                 </button>
               )}
               {["POSTED", "PARTIALLY_RECONCILED"].includes(row.status) && (
                 <Link className="btn primary" href={`/dispatches/${id}/reconcile`}>
-                  Reconcile Delivery
+                  Heshiisii Gaarsiinta
                 </Link>
               )}
               <Link className="btn" href="/dispatches">
-                Back to Dispatches
+                Dib u laab Dirisyada
               </Link>
             </>
           ) : undefined
@@ -93,22 +93,22 @@ export default function DispatchDetailPage() {
       {row && (
         <>
           <div className="notice warn">
-            <b>Physical dispatch:</b> Posting dispatch reduces Warehouse stock and increases In-Transit stock.
+            <b>Dirista rasmiga ah:</b> Diiwaangelinta diristu waxay dhintaa Kaydka Bakhaarka waxayna kordhisaa Kaydka Jidka Ku Jira.
           </div>
 
-          <div className="grid team-metrics"><MetricCard label="Dispatched liters" value={`${decimal(sum(row.lines.map(l=>l.dispatchedLiters)),3)} L`} note="Fuel physically dispatched" icon={Truck}/><MetricCard label="Accepted liters" value={`${decimal(sum(row.lines.flatMap(l=>l.confirmations.map(c=>c.acceptedLiters))),3)} L`} note="Confirmed customer acceptance" icon={CircleCheck}/><MetricCard label="Returned liters" value={`${decimal(sum(row.lines.flatMap(l=>l.confirmations.map(c=>c.physicalReturnedLiters))),3)} L`} note="Returned to warehouse" icon={Boxes}/></div>
+          <div className="grid team-metrics"><MetricCard label="Litarada loo diray" value={`${decimal(sum(row.lines.map(l=>l.dispatchedLiters)),3)} L`} note="Shidaalka rasmiga ah ee loo diray" icon={Truck}/><MetricCard label="Litarada la aqbalay" value={`${decimal(sum(row.lines.flatMap(l=>l.confirmations.map(c=>c.acceptedLiters))),3)} L`} note="Aqbalada macmiilka ee la xaqiijiyay" icon={CircleCheck}/><MetricCard label="Litarada lagu soo celiyay" value={`${decimal(sum(row.lines.flatMap(l=>l.confirmations.map(c=>c.physicalReturnedLiters))),3)} L`} note="Lagu soo celiyay bakhaarka" icon={Boxes}/></div>
           <Card>
-            <CardHead title="Dispatched Order Lines" description="Dispatched fuel quantities in fuusto and actual liters" />
+            <CardHead title="Xariijimaha Dalabyada Loo Diray" description="Tirada shidaalka loo diray ee fuustooyinka iyo litarada rasmiga ah" />
             <div className="table-wrap">
               <table className="data-table">
                 <thead>
                   <tr>
-                    <th>Order No</th>
-                    <th>Customer</th>
-                    <th>Fuel</th>
-                    <th>Dispatched Units</th>
-                    <th>Dispatched Liters</th>
-                    <th>Reconciled (Accepted / Returned)</th>
+                    <th>Dalabka #</th>
+                    <th>Macmiilka</th>
+                    <th>Shidaalka</th>
+                    <th>Tirada Loo Diray</th>
+                    <th>Litarada Loo Diray</th>
+                    <th>La Heshiisiyay (La Aqbalay / Lagu Soo Celiyay)</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -121,16 +121,16 @@ export default function DispatchDetailPage() {
                           <span className="strong">{line.orderLine.order.orderNo}</span>
                         </td>
                         <td>{line.orderLine.order.customer.name}</td>
-                        <td>{line.orderLine.fuel.displayName}</td>
-                        <td className="mono strong">{line.dispatchedUnits} fuusto</td>
+                        <td>{formatFuel(line.orderLine.fuel.displayName)}</td>
+                        <td className="mono strong">{line.dispatchedUnits} Fuusto</td>
                         <td className="mono">{line.dispatchedLiters} L</td>
                         <td>
                           {line.confirmations.length > 0 ? (
                             <Badge tone="ok">
-                              {totalAccepted} fuusto accepted / {totalReturned} L returned
+                              {totalAccepted} Fuusto la aqbalay / {totalReturned} L lagu soo celiyay
                             </Badge>
                           ) : (
-                            <Badge tone="warn">Unreconciled</Badge>
+                            <Badge tone="warn">Aan la heshiisiin</Badge>
                           )}
                         </td>
                       </tr>
@@ -145,3 +145,4 @@ export default function DispatchDetailPage() {
     </main>
   );
 }
+

@@ -19,72 +19,72 @@ type ReportCard = {
 const reports: ReportCard[] = [
   {
     id: "customers",
-    title: "Customer List & Financial Position",
+    title: "Diiwaanka Macaamiisha & Xaaladda Xisaabaadka",
     category: "Financial",
-    description: "Complete list of customers with status, total invoiced, total paid, debt due, and net position.",
+    description: "Liiska dhameystiran ee macaamiisha, xaaladda, wadarta biilasha, wadarta la bixiyay, deynta harsan iyo natiijada xisaabta.",
     endpoint: "/reports/customers"
   },
   {
     id: "debts",
-    title: "Accounts Receivable Debt Aging",
+    title: "Warbixinta Deynta Harsan (Aging Report)",
     category: "Financial",
-    description: "Detailed debt aging breakdown (Current, 31-60, 61-90, 90+ days) across all open customer accounts.",
+    description: "Kala qaybinta deynta harsan (Hadda, 31-60, 61-90, 90+ maalmood) ee dhammaan macaamiisha.",
     endpoint: "/reports/debts"
   },
   {
     id: "statement",
-    title: "Customer Statement of Account",
+    title: "Warbixinta Xisaabta Macmiilka (Statement)",
     category: "Financial",
-    description: "Chronological transaction subledger for an individual customer showing invoices, payments, and running balances.",
+    description: "Diiwaanka faahfaahsan ee dhaqdhaqaaqa xisaabta macmiilka (biilasha, lacag-bixinnada, iyo baaqiga harsan).",
     endpoint: "/reports/statement"
   },
   {
     id: "sales",
-    title: "Sales Orders & Unit Conversions",
+    title: "Warbixinta Dalabyada Iibka & Cabbirrada",
     category: "Operations",
-    description: "Sales order lines with fuusto requested units, snapshot liters, agreed unit prices, and line totals.",
+    description: "Safaf ka mid ah dalabyada iibka oo leh tirada fuustooyinka, litirada, qiimaha fuustadii, iyo wadarta.",
     endpoint: "/reports/sales"
   },
   {
     id: "collections",
-    title: "Payment Collections",
+    title: "Warbixinta Qabashada Lacagaha",
     category: "Financial",
-    description: "Payment receipts by method (Cash, EVC Plus, eDahab, Bank Transfer) with allocation and unapplied amounts.",
+    description: "Rasiidhada lacag-bixinnada ee qaababka kala duwan (Cash, EVC Plus, eDahab, Bank) iyo qaybinta biilasha.",
     endpoint: "/reports/collections"
   },
   {
     id: "inventory",
-    title: "Inventory Stock Balances & Movements",
+    title: "Warbixinta Kaydka Shidaalka & Dhaqdhaqaaqa",
     category: "Inventory",
-    description: "Canonical stock levels by location (Warehouse vs In-Transit) and historical movement ledger.",
+    description: "Heerka kaydka shidaalka ee Bakhaarka ama Wadada ku jira iyo diiwaanka dhaqdhaqaaqa.",
     endpoint: "/reports/inventory"
   },
   {
     id: "tanker-receipts",
-    title: "Fuel Stock Receipts & Purchases",
+    title: "Warbixinta Shidaal Soo Gelinta & Iibsiga",
     category: "Inventory",
-    description: "Inbound fuel stock purchases in fuusto with calculated liters and purchase costs (Owner only).",
+    description: "Shidaalka soo galay oo fuusto lagu iibsaday, litirada la xisaabiyay iyo qiimaha iibsiga (Milkiilaha kaliya).",
     endpoint: "/reports/tanker-receipts"
   },
   {
     id: "deliveries",
-    title: "Actual Delivery & Reconciliation",
+    title: "Warbixinta Shidaal Gaarsiinta & Dib-u-heshiisiinta",
     category: "Operations",
-    description: "Non-financial delivery manifest reconciliations showing dispatched, accepted, and physically returned fuel.",
+    description: "Warbixinta gaarsiinta shidaalka oo muujineysa tiradii la diray, tan la aqbalay, iyo shidaalka dib loo soo celiyay.",
     endpoint: "/reports/deliveries"
   },
   {
     id: "invoices",
-    title: "Invoices & Revenue Subledger",
+    title: "Warbixinta Biilasha & Dakhliga",
     category: "Financial",
-    description: "Confirmed commercial invoices with totals, paid amounts, balance due, and reversal statuses.",
+    description: "Biilasha la xaqiijiyay, wadarta guud, la bixiyay, deynta harsan, iyo xaaladaha kansalaadda.",
     endpoint: "/reports/invoices"
   },
   {
     id: "profitability",
-    title: "Financial Profitability Summary",
+    title: "Warbixinta Faaydada & Dakhliga",
     category: "Owner",
-    description: "Confirmed invoiced revenue vs total fuel stock purchase costs with cost allocation policy disclosures.",
+    description: "Wadarta dakhliga biilasha la soo saaray marka loo barbardhigo qiimaha shidaalka lagu soo iibsaday (Milkiilaha kaliya).",
     endpoint: "/reports/profitability",
     ownerOnly: true
   }
@@ -129,7 +129,7 @@ export default function ReportsHubPage() {
     let url = `${apiBase}${activeReport.endpoint}/${format}?fromDate=${fromDate}&toDate=${toDate}`;
     if (activeReport.id === "statement") {
       if (!selectedCustomerId) {
-        alert("Please select a customer to generate a statement report.");
+        alert("Fadlan dooro macmiil si aad u soo dejiso warbixinta xisaabta macmiilka.");
         return;
       }
       url += `&customerId=${selectedCustomerId}`;
@@ -140,32 +140,32 @@ export default function ReportsHubPage() {
   return (
     <main className="page reports-page">
       <PageHeader
-        eyebrow="Business insights"
-        title="Reports & exports"
-        description="Find the records you need. Export clear PDF and Excel reports."
+        eyebrow="Warbixinnada & Falanqaynta"
+        title="Warbixinnada & Soo Dejinta"
+        description="Ka hel diiwaanada aad u baahan tahay. Soo dejiso warbixinnada PDF ama Excel oo cad."
       />
 
       {/* Global Filter Bar */}
       <Card className="filter-panel">
         <div style={{ display: "flex", flexWrap: "wrap", gap: 16, alignItems: "center" }}>
           <div>
-            <label style={{ display: "block", fontSize: 12, fontWeight: "bold", marginBottom: 4 }}>Date Range From (Mogadishu UTC+3):</label>
+            <label style={{ display: "block", fontSize: 12, fontWeight: "bold", marginBottom: 4 }}>Taariikhda Billaabashada (Mogadishu UTC+3):</label>
             <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="input" />
           </div>
           <div>
-            <label style={{ display: "block", fontSize: 12, fontWeight: "bold", marginBottom: 4 }}>Date Range To:</label>
+            <label style={{ display: "block", fontSize: 12, fontWeight: "bold", marginBottom: 4 }}>Taariikhda Dhammaadka:</label>
             <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="input" />
           </div>
 
           {activeReport.id === "statement" && (
             <div>
-              <label style={{ display: "block", fontSize: 12, fontWeight: "bold", marginBottom: 4 }}>Select Customer for Statement:</label>
+              <label style={{ display: "block", fontSize: 12, fontWeight: "bold", marginBottom: 4 }}>Dooro Macmiilka Warbixinta:</label>
               <select
                 value={selectedCustomerId}
                 onChange={(e) => setSelectedCustomerId(e.target.value)}
                 className="input"
               >
-                <option value="">-- Choose Customer --</option>
+                <option value="">-- Dooro Macmiilka --</option>
                 {customers.data?.items.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name} ({c.code})
@@ -177,24 +177,40 @@ export default function ReportsHubPage() {
 
           <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
             <button className="btn" onClick={() => handleDownload("pdf")}>
-              <FileDown size={14} /> Export PDF
+              <FileDown size={14} /> Soo Dejiso PDF
             </button>
             <button className="btn primary" onClick={() => handleDownload("xlsx")}>
-              <FileSpreadsheet size={14} /> Export Excel
+              <FileSpreadsheet size={14} /> Soo Dejiso Excel
             </button>
           </div>
         </div>
       </Card>
 
       <div className="report-grid">
-        {reports.filter(r => !r.ownerOnly || isOwner).map(r => <button type="button" key={r.id} className={`report-option ${r.id === selectedReport ? "selected" : ""}`} aria-pressed={r.id === selectedReport} onClick={() => setSelectedReport(r.id)}><span className="report-icon"><BarChart3 size={19} /></span><strong>{r.title}</strong><p>{r.description}</p><span className="report-link">{r.id === selectedReport ? "Viewing report" : "View report"} <ArrowRight size={13} /></span>{r.ownerOnly && <Badge tone="warn">Owner only</Badge>}</button>)}
+        {reports.filter(r => !r.ownerOnly || isOwner).map(r => (
+          <button
+            type="button"
+            key={r.id}
+            className={`report-option ${r.id === selectedReport ? "selected" : ""}`}
+            aria-pressed={r.id === selectedReport}
+            onClick={() => setSelectedReport(r.id)}
+          >
+            <span className="report-icon"><BarChart3 size={19} /></span>
+            <strong>{r.title}</strong>
+            <p>{r.description}</p>
+            <span className="report-link">
+              {r.id === selectedReport ? "Eegaya warbixinta" : "Eeg warbixinta"} <ArrowRight size={13} />
+            </span>
+            {r.ownerOnly && <Badge tone="warn">Milkiilaha Kaliya</Badge>}
+          </button>
+        ))}
       </div>
 
       {/* Report Data Preview Section */}
       <Card>
         <CardHead
-          title={`Report Data Preview — ${activeReport.title}`}
-          description={`Records from the selected report · ${fromDate} to ${toDate}`}
+          title={`Kormeerka Warbixinta — ${activeReport.title}`}
+          description={`Diiwaanka taariikhda la shaandheeyay · ${fromDate} ilaa ${toDate}`}
           action={
             <div style={{ display: "flex", gap: 8 }}>
               <button className="btn small" onClick={() => handleDownload("pdf")}>

@@ -193,7 +193,19 @@ export class AppController {
 
   @UseGuards(SessionGuard)
   @Get("prices/history")
-  async priceHistory() { const rows = await this.prisma.priceVersion.findMany({ include: { fuel: true, salesUnit: true }, orderBy: { effectiveFromUtc: "desc" } }); return { data: rows.map((row) => ({ ...row, unitPrice: row.unitPrice.toFixed(4) })) }; }
+  async priceHistory() {
+    const rows = await this.prisma.priceVersion.findMany({
+      include: { fuel: true, salesUnit: true, createdBy: true },
+      orderBy: { effectiveFromUtc: "desc" }
+    });
+    return {
+      data: rows.map((row) => ({
+        ...row,
+        unitPrice: row.unitPrice.toFixed(4),
+        createdByName: row.createdBy?.displayName ?? "System"
+      }))
+    };
+  }
 
   @UseGuards(SessionGuard)
   @Post("prices")
@@ -512,8 +524,77 @@ export class AppController {
 
   @UseGuards(SessionGuard)
   @Post("orders")
-  async createOrder(@Req() request: AuthenticatedRequest, @Body() body: { customerId?: string; addressSnapshot?: string; requestedDeliveryDate?: string; notes?: string; lines?: Array<{ fuelId?: string; salesUnitId?: string; requestedUnits?: string }> }) {
-    const actor = requireActor(request); if (!body.customerId || !body.addressSnapshot || !body.lines?.length) throw new BadRequestException("customerId, addressSnapshot and lines are required"); const lines = body.lines.map((line) => { if (!line.fuelId || !line.salesUnitId || !line.requestedUnits) throw new BadRequestException("Each order line needs fuelId, salesUnitId and requestedUnits"); return { fuelId: line.fuelId, salesUnitId: line.salesUnitId, requestedUnits: positive(line.requestedUnits, "requestedUnits") }; }); const row = await this.prisma.salesOrder.create({ data: { orderNo: documentNo("SO"), customerId: body.customerId, addressSnapshot: body.addressSnapshot, requestedDeliveryDate: body.requestedDeliveryDate ? localDate(body.requestedDeliveryDate) : undefined, orderDate: new Date(), notes: body.notes, createdById: actor.id, lines: { create: lines } }, include: { lines: true } }); return { data: row };
+  async createOrder(
+    @Req() request: AuthenticatedRequest,
+    @Body() body: {
+      customerId?: string;
+      addressSnapshot?: string;
+      requestedDeliveryDate?: string;
+      notes?: string;
+      fixedDiscountAmount?: string;
+      discountReason?: string;
+      lines?: Array<{ fuelId?: string; salesUnitId?: string; requestedUnits?: string }>;
+    }
+  ) {
+    const actor = requireActor(request);
+    if (!body.customerId || !body.addressSnapshot || !body.lines?.length) {
+      throw new BadRequestException("customerId, addressSnapshot and lines are required");
+    }
+
+    const fixedDiscount = body.fixedDiscountAmount ? dec(body.fixedDiscountAmount) : dec("0");
+    if (fixedDiscount.lt(0)) {
+      throw new BadRequestException("Fixed discount amount cannot be negative");
+    }
+
+    const isOwner = actor.role === "OWNER";
+    const discountApprovedById = fixedDiscount.gt(0) && isOwner ? actor.id : null;
+    const discountApprovedAt = fixedDiscount.gt(0) && isOwner ? new Date() : null;
+
+    const lines = body.lines.map((line) => {
+      if (!line.fuelId || !line.salesUnitId || !line.requestedUnits) {
+        throw new BadRequestException("Each order line needs fuelId, salesUnitId and requestedUnits");
+      }
+      return { fuelId: line.fuelId, salesUnitId: line.salesUnitId, requestedUnits: positive(line.requestedUnits, "requestedUnits") };
+    });
+
+    const row = await this.prisma.salesOrder.create({
+      data: {
+        orderNo: documentNo("SO"),
+        customerId: body.customerId,
+        addressSnapshot: body.addressSnapshot,
+        requestedDeliveryDate: body.requestedDeliveryDate ? localDate(body.requestedDeliveryDate) : undefined,
+        orderDate: new Date(),
+        notes: body.notes,
+        fixedDiscountAmount: fixedDiscount,
+        discountReason: body.discountReason,
+        discountApprovedById,
+        discountApprovedAt,
+        createdById: actor.id,
+        lines: { create: lines }
+      },
+      include: { lines: true, discountApprovedBy: { select: { displayName: true } } }
+    });
+
+    if (fixedDiscount.gt(0)) {
+      await this.prisma.orderEvent.create({
+        data: {
+          orderId: row.id,
+          kind: discountApprovedById ? "DISCOUNT_APPROVED" : "DISCOUNT_REQUESTED",
+          newValues: { fixedDiscountAmount: fixedDiscount.toFixed(4), discountReason: body.discountReason },
+          actorId: actor.id
+        }
+      });
+    }
+
+    return {
+      data: {
+        ...row,
+        subtotal: jsonDecimal(row.subtotal),
+        fixedDiscountAmount: row.fixedDiscountAmount.toFixed(4),
+        totalAmount: jsonDecimal(row.totalAmount),
+        discountApprovedByName: row.discountApprovedBy?.displayName ?? null
+      }
+    };
   }
 
   @UseGuards(SessionGuard)
@@ -545,7 +626,7 @@ export class AppController {
     const [rows, total] = await Promise.all([
       this.prisma.salesOrder.findMany({
         where,
-        include: { customer: true, lines: { include: { fuel: true, salesUnit: true } } },
+        include: { customer: true, discountApprovedBy: { select: { displayName: true } }, lines: { include: { fuel: true, salesUnit: true } } },
         orderBy: { orderDate: "desc" },
         skip,
         take: limit
@@ -557,6 +638,10 @@ export class AppController {
       data: {
         items: rows.map((row) => ({
           ...row,
+          subtotal: jsonDecimal(row.subtotal),
+          fixedDiscountAmount: row.fixedDiscountAmount.toFixed(4),
+          totalAmount: jsonDecimal(row.totalAmount),
+          discountApprovedByName: row.discountApprovedBy?.displayName ?? null,
           lines: row.lines.map((line) => ({
             ...line,
             requestedUnits: line.requestedUnits.toFixed(3),
@@ -575,14 +660,227 @@ export class AppController {
 
   @UseGuards(SessionGuard)
   @Get("orders/:id")
-  async order(@Param("id") id: string) { const row = await this.prisma.salesOrder.findUnique({ where: { id }, include: { customer: true, lines: { include: { fuel: true, salesUnit: true, dispatchLines: { include: { confirmations: true } } } }, events: { orderBy: { occurredAt: "asc" } } } }); if (!row) throw new NotFoundException("Order not found"); return { data: { ...row, lines: row.lines.map((line) => ({ ...line, requestedUnits: line.requestedUnits.toFixed(3), requestedLitersSnapshot: jsonDecimal(line.requestedLitersSnapshot), litersPerUnitSnapshot: jsonDecimal(line.litersPerUnitSnapshot), unitPriceSnapshot: jsonDecimal(line.unitPriceSnapshot), dispatchLines: line.dispatchLines.map((dispatchLine) => ({ ...dispatchLine, dispatchedUnits: dispatchLine.dispatchedUnits.toFixed(3), dispatchedLiters: dispatchLine.dispatchedLiters.toFixed(3), confirmations: dispatchLine.confirmations.map((item) => ({ ...item, acceptedUnits: item.acceptedUnits.toFixed(3), acceptedLiters: item.acceptedLiters.toFixed(3), physicalReturnedLiters: item.physicalReturnedLiters.toFixed(3) })) })) })) } };
+  async order(@Param("id") id: string) {
+    const row = await this.prisma.salesOrder.findUnique({
+      where: { id },
+      include: {
+        customer: true,
+        discountApprovedBy: { select: { displayName: true } },
+        lines: { include: { fuel: true, salesUnit: true, dispatchLines: { include: { confirmations: true } } } },
+        events: { orderBy: { occurredAt: "asc" } }
+      }
+    });
+    if (!row) throw new NotFoundException("Order not found");
+
+    const now = new Date();
+    const formattedLines = await Promise.all(
+      row.lines.map(async (line) => {
+        let currentActiveUnitPrice: string | null = null;
+        if (row.status === "DRAFT") {
+          const activePrice = await this.prisma.priceVersion.findFirst({
+            where: {
+              fuelId: line.fuelId,
+              salesUnitId: line.salesUnitId,
+              effectiveFromUtc: { lte: now },
+              OR: [{ effectiveToUtc: null }, { effectiveToUtc: { gt: now } }]
+            },
+            orderBy: { effectiveFromUtc: "desc" }
+          });
+          if (activePrice) currentActiveUnitPrice = activePrice.unitPrice.toFixed(4);
+        }
+
+        return {
+          ...line,
+          requestedUnits: line.requestedUnits.toFixed(3),
+          requestedLitersSnapshot: jsonDecimal(line.requestedLitersSnapshot),
+          litersPerUnitSnapshot: jsonDecimal(line.litersPerUnitSnapshot),
+          unitPriceSnapshot: jsonDecimal(line.unitPriceSnapshot),
+          currentActiveUnitPrice,
+          dispatchLines: line.dispatchLines.map((dispatchLine) => ({
+            ...dispatchLine,
+            dispatchedUnits: dispatchLine.dispatchedUnits.toFixed(3),
+            dispatchedLiters: dispatchLine.dispatchedLiters.toFixed(3),
+            confirmations: dispatchLine.confirmations.map((item) => ({
+              ...item,
+              acceptedUnits: item.acceptedUnits.toFixed(3),
+              acceptedLiters: item.acceptedLiters.toFixed(3),
+              physicalReturnedLiters: item.physicalReturnedLiters.toFixed(3)
+            }))
+          }))
+        };
+      })
+    );
+
+    return {
+      data: {
+        ...row,
+        subtotal: jsonDecimal(row.subtotal),
+        fixedDiscountAmount: row.fixedDiscountAmount.toFixed(4),
+        totalAmount: jsonDecimal(row.totalAmount),
+        discountApprovedByName: row.discountApprovedBy?.displayName ?? null,
+        lines: formattedLines
+      }
+    };
+  }
+
+  @UseGuards(SessionGuard)
+  @Post("orders/:id/approve-discount")
+  async approveDiscount(
+    @Req() request: AuthenticatedRequest,
+    @Param("id") id: string,
+    @Body() body: { reason?: string }
+  ) {
+    const actor = requireOwner(request);
+    const row = await this.prisma.salesOrder.findUnique({ where: { id } });
+    if (!row) throw new NotFoundException("Order not found");
+    if (row.status !== "DRAFT") throw new BadRequestException("Discount approval is only applicable to draft orders");
+    if (!row.fixedDiscountAmount || row.fixedDiscountAmount.lte(0)) {
+      throw new BadRequestException("Order does not have a pending discount to approve");
+    }
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const now = new Date();
+      const saved = await tx.salesOrder.update({
+        where: { id },
+        data: {
+          discountApprovedById: actor.id,
+          discountApprovedAt: now,
+          discountReason: body.reason ?? row.discountReason
+        },
+        include: { discountApprovedBy: { select: { displayName: true } }, lines: true }
+      });
+      await tx.orderEvent.create({
+        data: {
+          orderId: id,
+          kind: "DISCOUNT_APPROVED",
+          newValues: { fixedDiscountAmount: saved.fixedDiscountAmount.toFixed(4), discountApprovedById: actor.id },
+          actorId: actor.id,
+          reason: body.reason
+        }
+      });
+      await tx.auditEvent.create({
+        data: {
+          actorId: actor.id,
+          entityType: "SalesOrder",
+          entityId: id,
+          action: "DISCOUNT_APPROVED",
+          reason: body.reason
+        }
+      });
+      return saved;
+    });
+
+    return {
+      data: {
+        ...updated,
+        subtotal: jsonDecimal(updated.subtotal),
+        fixedDiscountAmount: updated.fixedDiscountAmount.toFixed(4),
+        totalAmount: jsonDecimal(updated.totalAmount),
+        discountApprovedByName: updated.discountApprovedBy?.displayName ?? null
+      }
+    };
   }
 
   @UseGuards(SessionGuard)
   @Post("orders/:id/confirm")
   async confirmOrder(@Req() request: AuthenticatedRequest, @Param("id") id: string, @Headers("idempotency-key") headerKey?: string) {
-    const actor = requireActor(request); const key = requireIdempotencyKey(headerKey); const now = new Date(); const row = await this.prisma.salesOrder.findUnique({ where: { id }, include: { lines: true } }); if (!row) throw new NotFoundException("Order not found"); if (["CONFIRMED", "SCHEDULED", "IN_PROGRESS", "PARTIALLY_FULFILLED", "FULFILLED"].includes(row.status)) return { data: { id, status: row.status, replay: true } }; if (row.status !== "DRAFT") throw new BadRequestException("Only draft orders can be confirmed");
-    const updated = await this.prisma.$transaction(async (tx) => { for (const line of row.lines) { const unit = await tx.fuelUnitVersion.findFirst({ where: { fuelId: line.fuelId, salesUnitId: line.salesUnitId, effectiveFromUtc: { lte: now }, OR: [{ effectiveToUtc: null }, { effectiveToUtc: { gt: now } }] }, orderBy: { effectiveFromUtc: "desc" } }); const price = await tx.priceVersion.findFirst({ where: { fuelId: line.fuelId, salesUnitId: line.salesUnitId, effectiveFromUtc: { lte: now }, OR: [{ effectiveToUtc: null }, { effectiveToUtc: { gt: now } }] }, orderBy: { effectiveFromUtc: "desc" } }); if (!unit) throw new BadRequestException("Fuusto capacity is not configured for one or more lines"); if (!price) throw new BadRequestException("Price is not configured for one or more lines"); await tx.salesOrderLine.update({ where: { id: line.id }, data: { conversionVersionId: unit.id, litersPerUnitSnapshot: unit.litersPerUnit, requestedLitersSnapshot: line.requestedUnits.mul(unit.litersPerUnit), priceVersionId: price.id, unitPriceSnapshot: price.unitPrice, confirmedAt: now } }); } const claimed = await tx.salesOrder.updateMany({ where: { id, status: "DRAFT" }, data: { status: "CONFIRMED", confirmedAt: now, confirmedById: actor.id, confirmationIdempotencyKey: key } }); if (claimed.count !== 1) throw new BadRequestException("Order was already confirmed"); const saved = await tx.salesOrder.findUniqueOrThrow({ where: { id }, include: { lines: true } }); await tx.orderEvent.create({ data: { orderId: id, kind: "CONFIRMED", newValues: { status: "CONFIRMED" }, actorId: actor.id } }); await tx.auditEvent.create({ data: { actorId: actor.id, entityType: "SalesOrder", entityId: id, action: "CONFIRMED" } }); return saved; }); return { data: { ...updated, lines: updated.lines.map((line) => ({ ...line, requestedUnits: line.requestedUnits.toFixed(3), requestedLitersSnapshot: jsonDecimal(line.requestedLitersSnapshot), litersPerUnitSnapshot: jsonDecimal(line.litersPerUnitSnapshot), unitPriceSnapshot: jsonDecimal(line.unitPriceSnapshot) })) } };
+    const actor = requireActor(request);
+    const key = requireIdempotencyKey(headerKey);
+    const now = new Date();
+    const row = await this.prisma.salesOrder.findUnique({ where: { id }, include: { lines: true } });
+    if (!row) throw new NotFoundException("Order not found");
+    if (["CONFIRMED", "SCHEDULED", "IN_PROGRESS", "PARTIALLY_FULFILLED", "FULFILLED"].includes(row.status)) {
+      return { data: { id, status: row.status, replay: true } };
+    }
+    if (row.status !== "DRAFT") throw new BadRequestException("Only draft orders can be confirmed");
+
+    const isOwner = actor.role === "OWNER";
+    const fixedDiscount = row.fixedDiscountAmount ? row.fixedDiscountAmount : dec("0");
+
+    let discountApprovedById = row.discountApprovedById;
+    let discountApprovedAt = row.discountApprovedAt;
+
+    if (fixedDiscount.gt(0) && !discountApprovedById) {
+      if (isOwner) {
+        discountApprovedById = actor.id;
+        discountApprovedAt = now;
+      } else {
+        throw new ForbiddenException("Order fixed discount requires approval from OWNER before order confirmation.");
+      }
+    }
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      let orderSubtotal = dec("0");
+      for (const line of row.lines) {
+        const unit = await tx.fuelUnitVersion.findFirst({
+          where: { fuelId: line.fuelId, salesUnitId: line.salesUnitId, effectiveFromUtc: { lte: now }, OR: [{ effectiveToUtc: null }, { effectiveToUtc: { gt: now } }] },
+          orderBy: { effectiveFromUtc: "desc" }
+        });
+        const price = await tx.priceVersion.findFirst({
+          where: { fuelId: line.fuelId, salesUnitId: line.salesUnitId, effectiveFromUtc: { lte: now }, OR: [{ effectiveToUtc: null }, { effectiveToUtc: { gt: now } }] },
+          orderBy: { effectiveFromUtc: "desc" }
+        });
+        if (!unit) throw new BadRequestException("Fuusto capacity is not configured for one or more lines");
+        if (!price) throw new BadRequestException("Price is not configured for one or more lines");
+
+        const lineSubtotal = line.requestedUnits.mul(price.unitPrice);
+        orderSubtotal = orderSubtotal.add(lineSubtotal);
+
+        await tx.salesOrderLine.update({
+          where: { id: line.id },
+          data: {
+            conversionVersionId: unit.id,
+            litersPerUnitSnapshot: unit.litersPerUnit,
+            requestedLitersSnapshot: line.requestedUnits.mul(unit.litersPerUnit),
+            priceVersionId: price.id,
+            unitPriceSnapshot: price.unitPrice,
+            confirmedAt: now
+          }
+        });
+      }
+
+      if (fixedDiscount.gt(orderSubtotal)) {
+        throw new BadRequestException(`Fixed discount amount ($${fixedDiscount.toFixed(2)}) cannot exceed order subtotal ($${orderSubtotal.toFixed(2)})`);
+      }
+
+      const orderTotalAmount = orderSubtotal.sub(fixedDiscount);
+
+      const claimed = await tx.salesOrder.updateMany({
+        where: { id, status: "DRAFT" },
+        data: {
+          status: "CONFIRMED",
+          confirmedAt: now,
+          confirmedById: actor.id,
+          confirmationIdempotencyKey: key,
+          subtotal: orderSubtotal,
+          totalAmount: orderTotalAmount,
+          discountApprovedById,
+          discountApprovedAt
+        }
+      });
+      if (claimed.count !== 1) throw new BadRequestException("Order was already confirmed");
+      const saved = await tx.salesOrder.findUniqueOrThrow({ where: { id }, include: { lines: true, discountApprovedBy: { select: { displayName: true } } } });
+      await tx.orderEvent.create({ data: { orderId: id, kind: "CONFIRMED", newValues: { status: "CONFIRMED", subtotal: orderSubtotal.toFixed(4), fixedDiscountAmount: fixedDiscount.toFixed(4), totalAmount: orderTotalAmount.toFixed(4) }, actorId: actor.id } });
+      await tx.auditEvent.create({ data: { actorId: actor.id, entityType: "SalesOrder", entityId: id, action: "CONFIRMED" } });
+      return saved;
+    });
+
+    return {
+      data: {
+        ...updated,
+        subtotal: updated.subtotal?.toFixed(4) ?? null,
+        fixedDiscountAmount: updated.fixedDiscountAmount.toFixed(4),
+        totalAmount: updated.totalAmount?.toFixed(4) ?? null,
+        discountApprovedByName: updated.discountApprovedBy?.displayName ?? null,
+        lines: updated.lines.map((line) => ({
+          ...line,
+          requestedUnits: line.requestedUnits.toFixed(3),
+          requestedLitersSnapshot: jsonDecimal(line.requestedLitersSnapshot),
+          litersPerUnitSnapshot: jsonDecimal(line.litersPerUnitSnapshot),
+          unitPriceSnapshot: jsonDecimal(line.unitPriceSnapshot)
+        }))
+      }
+    };
   }
 
   @UseGuards(SessionGuard)
@@ -853,6 +1151,35 @@ export class AppController {
       const invoiceNo = documentNo("INV");
 
       const invoice = await this.prisma.$transaction(async (tx) => {
+        const salesOrder = await tx.salesOrder.findUniqueOrThrow({ where: { id: orderLine.orderId } });
+        const orderFixedDiscount = salesOrder.fixedDiscountAmount ?? dec("0");
+        let invoiceDiscount = dec("0");
+
+        if (orderFixedDiscount.gt(0)) {
+          const previousInvoices = await tx.invoice.findMany({
+            where: {
+              lines: {
+                some: {
+                  orderLine: { orderId: salesOrder.id }
+                }
+              }
+            }
+          });
+          const alreadyAppliedDiscount = previousInvoices.reduce((sum, inv) => sum.add(inv.discountAmount), dec("0"));
+          const rem = orderFixedDiscount.sub(alreadyAppliedDiscount);
+          const remainingOrderDiscount = rem.gt(0) ? rem : dec("0");
+
+          const requestedUnits = orderLine.requestedUnits;
+          const ratio = requestedUnits.gt(0) ? line.acceptedUnits.div(requestedUnits) : dec("1");
+          let allocatedDiscount = orderFixedDiscount.mul(ratio);
+          if (allocatedDiscount.gt(remainingOrderDiscount)) allocatedDiscount = remainingOrderDiscount;
+          if (allocatedDiscount.gt(lineTotal)) allocatedDiscount = lineTotal;
+          invoiceDiscount = allocatedDiscount;
+        }
+
+        const invoiceSubtotal = lineTotal;
+        const invoiceTotalAmount = lineTotal.sub(invoiceDiscount);
+
         const inv = await tx.invoice.create({
           data: {
             invoiceNo,
@@ -862,11 +1189,12 @@ export class AppController {
             issueDate: new Date(),
             dueDate: body.dueDate ? new Date(body.dueDate) : null,
             status: "UNPAID",
-            subtotal: lineTotal,
+            subtotal: invoiceSubtotal,
+            discountAmount: invoiceDiscount,
             taxAmount: dec("0"),
-            totalAmount: lineTotal,
+            totalAmount: invoiceTotalAmount,
             paidAmount: dec("0"),
-            balanceDue: lineTotal,
+            balanceDue: invoiceTotalAmount,
             currencyCode: orderLine.currencyCode || "USD",
             notes: body.notes,
             createdById: actor.id,
@@ -888,19 +1216,19 @@ export class AppController {
           include: { customer: true, lines: { include: { fuel: true, salesUnit: true } } }
         });
 
-        // Update Subledger
+        // Update Subledger using net invoice totalAmount
         const lastEntry = await tx.customerLedgerEntry.findFirst({
           where: { customerId: orderLine.order.customerId },
           orderBy: { occurredAt: "desc" }
         });
         const prevBalance = lastEntry ? lastEntry.runningBalance : dec("0");
-        const runningBalance = prevBalance.add(lineTotal);
+        const runningBalance = prevBalance.add(invoiceTotalAmount);
         await tx.customerLedgerEntry.create({
           data: {
             customerId: orderLine.order.customerId,
             entryType: "INVOICE",
             referenceNo: inv.invoiceNo,
-            debitAmount: lineTotal,
+            debitAmount: invoiceTotalAmount,
             creditAmount: dec("0"),
             runningBalance,
             sourceType: "Invoice",
@@ -929,6 +1257,7 @@ export class AppController {
       data: createdInvoices.map((inv) => ({
         ...inv,
         subtotal: inv.subtotal.toFixed(4),
+        discountAmount: inv.discountAmount.toFixed(4),
         taxAmount: inv.taxAmount.toFixed(4),
         totalAmount: inv.totalAmount.toFixed(4),
         paidAmount: inv.paidAmount.toFixed(4),
@@ -987,6 +1316,7 @@ export class AppController {
         items: rows.map((inv) => ({
           ...inv,
           subtotal: inv.subtotal.toFixed(4),
+          discountAmount: inv.discountAmount.toFixed(4),
           taxAmount: inv.taxAmount.toFixed(4),
           totalAmount: inv.totalAmount.toFixed(4),
           paidAmount: inv.paidAmount.toFixed(4),
@@ -1026,6 +1356,7 @@ export class AppController {
       data: {
         ...inv,
         subtotal: inv.subtotal.toFixed(4),
+        discountAmount: inv.discountAmount.toFixed(4),
         taxAmount: inv.taxAmount.toFixed(4),
         totalAmount: inv.totalAmount.toFixed(4),
         paidAmount: inv.paidAmount.toFixed(4),
@@ -1087,8 +1418,10 @@ export class AppController {
       );
     }
     doc.text("------------------------------------------------------------------");
-    doc.moveDown();
     doc.fontSize(11).text(`Subtotal: $${inv.subtotal.toFixed(4)}`);
+    if (inv.discountAmount && inv.discountAmount.gt(0)) {
+      doc.fontSize(11).text(`Fixed Order Discount: -$${inv.discountAmount.toFixed(4)}`);
+    }
     doc.text(`Tax: $${inv.taxAmount.toFixed(4)}`);
     doc.fontSize(12).text(`Total Amount: $${inv.totalAmount.toFixed(4)}`);
     doc.text(`Amount Paid: $${inv.paidAmount.toFixed(4)}`);

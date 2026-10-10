@@ -1,8 +1,8 @@
 "use client";
 import { FinanceMetrics } from "../../components/finance-metrics";
-import { PageHeader, CardHead } from "../../components/ui";
+import { PageHeader, CardHead, Badge } from "../../components/ui";
 import Decimal from "decimal.js";
-import { decimal } from "../../lib/format";
+import { decimal, formatStatus } from "../../lib/format";
 import { useState } from "react";
 import Link from "next/link";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -101,7 +101,7 @@ export default function PaymentsPage() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedCustomerId || !amountInput || !dateInput) {
-      setFormError("Customer, amount, and payment date are required.");
+      setFormError("Macmiilka, lacagta, iyo taariikhda bixinta waa in la buuxiyaa.");
       return;
     }
 
@@ -123,14 +123,20 @@ export default function PaymentsPage() {
 
   return (
     <main className="page payments-page">
-      <PageHeader eyebrow="Customer finance" title="Payment collections" description="Record customer payments and allocate them to invoices." actions={<button className="btn primary" onClick={() => setOpenModal(true)}>Record payment</button>} />
+      <PageHeader
+        eyebrow="Xisaabta Macaamiisha"
+        title="Lacag-bixinnada"
+        description="Diiwaangeli lacagaha ay bixiyeen macaamiishu oo u qaybi biilasha furan."
+        actions={<button className="btn primary" onClick={() => setOpenModal(true)}>Diiwaangeli Lacag-bixin</button>}
+      />
 
       <FinanceMetrics kind="payments" />
-      <section className="card"><CardHead title="Payment register" description="Review records and open an account for details." />
+      <section className="card">
+        <CardHead title="Diiwaanka Lacag-bixinnada" description="Eeg diiwaanka oo guji si aad u aragto faahfaahinta Rasiidhka." />
         <div className="filter-bar">
           <input
             type="search"
-            placeholder="Search by payment #, customer or ref..."
+            placeholder="Kala shaandhee lambarka rasiidhka, macmiilka ama tixraaca..."
             value={search}
             onChange={(e) => {
               setSearch(e.target.value);
@@ -141,9 +147,9 @@ export default function PaymentsPage() {
 
           <div className="tabs">
             {[
-              ["", "All Methods"],
-              ["CASH", "Cash"],
-              ["BANK_TRANSFER", "Bank Transfer"],
+              ["", "Dhammaan Qaababka"],
+              ["CASH", "Lacag Gacanta Ah (Cash)"],
+              ["BANK_TRANSFER", "Xawaalad Bank"],
               ["EVC_PLUS", "EVC Plus"],
               ["EDAHAB", "eDahab"]
             ].map(([val, label]) => (
@@ -164,25 +170,25 @@ export default function PaymentsPage() {
         {paymentsQuery.isLoading ? (
           <div className="skeleton tall" />
         ) : paymentsQuery.isError ? (
-          <div className="callout error">Failed to load payments history.</div>
+          <div className="callout error">Waa la ku guuldareystay soo rarida diiwaanka lacag-bixinnada.</div>
         ) : !paymentsQuery.data?.items.length ? (
-          <div className="empty-state">No payment records found.</div>
+          <div className="empty-state">Ma jiraan diiwaanno lacag-bixin oo laga helay.</div>
         ) : (
           <>
             <div className="table-wrap">
               <table className="data-table">
                 <thead>
                   <tr>
-                    <th>Payment #</th>
-                    <th>Customer</th>
-                    <th>Date</th>
-                    <th>Method</th>
-                    <th>Reference</th>
-                    <th>Total Amount</th>
-                    <th>Allocated</th>
-                    <th>Unapplied Credit</th>
-                    <th>Status</th>
-                    <th>Actions</th>
+                    <th>Lambar Rasiidh</th>
+                    <th>Macmiilka</th>
+                    <th>Taariikhda</th>
+                    <th>Qaabka Bixinta</th>
+                    <th>Tixraaca (Ref)</th>
+                    <th>Lacagta Bixinta</th>
+                    <th>Qadarka Loo Qaybiyay</th>
+                    <th>Lacagta Dheeraadka ah</th>
+                    <th>Xaaladda</th>
+                    <th>Hawlaha</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -206,11 +212,13 @@ export default function PaymentsPage() {
                       <td className="font-mono">${decimal(p.allocatedAmount, 2)}</td>
                       <td className="font-mono text-amber-400">${decimal(p.unappliedAmount, 2)}</td>
                       <td>
-                        <span className={`badge ${p.status === "POSTED" ? "success" : "danger"}`}>{p.status}</span>
+                        <Badge tone={p.status === "POSTED" ? "ok" : "danger"}>
+                          {formatStatus(p.status)}
+                        </Badge>
                       </td>
                       <td>
                         <Link href={`/payments/${p.id}`} className="btn ghost sm">
-                          View details
+                          Eeg faahfaahinta
                         </Link>
                       </td>
                     </tr>
@@ -229,12 +237,12 @@ export default function PaymentsPage() {
       </section>
 
       {/* Record Payment Modal */}
-      <Modal isOpen={openModal} onClose={() => setOpenModal(false)} title="Record Customer Payment">
+      <Modal isOpen={openModal} onClose={() => setOpenModal(false)} title="Diiwaangeli Lacag-bixin Macmiil">
         <form onSubmit={handleSubmit} className="space-y-4">
           {formError && <div className="callout error">{formError}</div>}
 
           <div>
-            <label className="label">Customer *</label>
+            <label className="label">Macmiilka *</label>
             <select
               value={selectedCustomerId}
               onChange={(e) => {
@@ -244,7 +252,7 @@ export default function PaymentsPage() {
               className="input"
               required
             >
-              <option value="">-- Select Customer --</option>
+              <option value="">-- Dooro Macmiilka --</option>
               {customersQuery.data?.items.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name} ({c.code})
@@ -255,7 +263,7 @@ export default function PaymentsPage() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="label">Payment Amount ($) *</label>
+              <label className="label">Lacagta La Bixiyay ($) *</label>
               <input
                 type="number"
                 step="0.01"
@@ -268,7 +276,7 @@ export default function PaymentsPage() {
               />
             </div>
             <div>
-              <label className="label">Payment Date *</label>
+              <label className="label">Taariikhda Bixinta *</label>
               <input
                 type="date"
                 value={dateInput}
@@ -281,27 +289,27 @@ export default function PaymentsPage() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="label">Payment Method *</label>
+              <label className="label">Qaabka Bixinta *</label>
               <select
                 value={methodInput}
                 onChange={(e) => setMethodInput(e.target.value as typeof methodInput)}
                 className="input"
                 required
               >
-                <option value="CASH">Cash</option>
-                <option value="BANK_TRANSFER">Bank Transfer</option>
+                <option value="CASH">Lacag Gacanta Ah (Cash)</option>
+                <option value="BANK_TRANSFER">Xawaalad Bank</option>
                 <option value="EVC_PLUS">EVC Plus</option>
                 <option value="EDAHAB">eDahab</option>
-                <option value="OTHER">Other</option>
+                <option value="OTHER">Koo Kale</option>
               </select>
             </div>
             <div>
-              <label className="label">Reference / Tx ID (Optional)</label>
+              <label className="label">Tixraaca / Lambar Transaksi (Waa Ikhtiyaari)</label>
               <input
                 type="text"
                 value={refInput}
                 onChange={(e) => setRefInput(e.target.value)}
-                placeholder="e.g. EVC-994433"
+                placeholder="tusaale: EVC-994433"
                 className="input"
               />
             </div>
@@ -310,14 +318,14 @@ export default function PaymentsPage() {
           {/* Manual Invoice Allocations optional list */}
           {selectedCustomerId && customerInvoicesQuery.data?.items.length ? (
             <div className="space-y-2 border-t border-border pt-3">
-              <label className="label">Allocate to Open Invoices (Optional — leave blank for FIFO auto-allocation)</label>
+              <label className="label">U Qaybi Biilasha Furan (Waa Ikhtiyaari — ka tag maran si loogu qaybiyo tan ugu horeysa)</label>
               <div className="space-y-2 max-h-48 overflow-y-auto border border-border rounded p-2">
                 {customerInvoicesQuery.data.items.map((inv) => (
                   <div key={inv.id} className="flex items-center justify-between text-sm p-2 rounded bg-card-hover">
                     <div>
                       <strong>{inv.invoiceNo}</strong> ({inv.issueDate.slice(0, 10)})
                       <div className="text-xs text-amber-400 font-mono">
-                        Balance Due: ${decimal(inv.balanceDue, 2)}
+                        Deynta Harsan: ${decimal(inv.balanceDue, 2)}
                       </div>
                     </div>
                     <div className="w-32">
@@ -343,21 +351,21 @@ export default function PaymentsPage() {
           ) : null}
 
           <div>
-            <label className="label">Notes (Optional)</label>
+            <label className="label">Xusuusin (Waa Ikhtiyaari)</label>
             <textarea
               value={notesInput}
               onChange={(e) => setNotesInput(e.target.value)}
-              placeholder="e.g. Partial payment for July delivery..."
+              placeholder="tusaale: Bixin qayb ka mid ah shidaalkii July..."
               className="input"
             />
           </div>
 
           <div className="modal-actions">
             <button type="button" className="btn ghost" onClick={() => setOpenModal(false)}>
-              Cancel
+              Ka Noqo
             </button>
             <button type="submit" className="btn primary" disabled={recordPaymentMutation.isPending || !selectedCustomerId}>
-              {recordPaymentMutation.isPending ? "Recording..." : "Record Payment"}
+              {recordPaymentMutation.isPending ? "Waa la diiwaangelinayaa..." : "Diiwaangeli Lacag-bixinta"}
             </button>
           </div>
         </form>

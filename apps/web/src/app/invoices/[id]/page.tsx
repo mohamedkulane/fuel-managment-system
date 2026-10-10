@@ -1,11 +1,11 @@
 "use client";
-import { decimal } from "../../../lib/format";
+import { decimal, formatStatus, formatFuel } from "../../../lib/format";
 import { useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, apiBase, type Actor } from "../../../lib/api";
-import { Modal, PageHeader } from "../../../components/ui";
+import { Modal, PageHeader, Badge } from "../../../components/ui";
 
 type InvoiceDetail = {
   id: string;
@@ -14,6 +14,7 @@ type InvoiceDetail = {
   dueDate: string | null;
   status: "UNPAID" | "PARTIALLY_PAID" | "PAID" | "CANCELLED" | "REVERSED";
   subtotal: string;
+  discountAmount: string;
   taxAmount: string;
   totalAmount: string;
   paidAmount: string;
@@ -79,7 +80,7 @@ export default function InvoiceDetailPage() {
   if (invoiceQuery.isError || !invoiceQuery.data) {
     return (
       <main className="page detail-page">
-        <div className="callout error">Invoice not found or could not be loaded.</div>
+        <div className="callout error">Biilka ma jiraan ama la soo rari waayay.</div>
       </main>
     );
   }
@@ -88,48 +89,45 @@ export default function InvoiceDetailPage() {
 
   return (
     <main className="page finance-page">
-<PageHeader eyebrow="Invoice / detail" title={`Invoice ${inv.invoiceNo}`} description={inv.customer.name} actions={<div className="actions">
-          <a href={`${apiBase}/invoices/${inv.id}/pdf`} target="_blank" rel="noreferrer" className="btn secondary">
-            Download PDF
-          </a>
+      <PageHeader
+        eyebrow="Biilka Macmiilka / Faahfaahinta"
+        title={`Biilka ${inv.invoiceNo}`}
+        description={inv.customer.name}
+        actions={
+          <div className="actions">
+            <a href={`${apiBase}/invoices/${inv.id}/pdf`} target="_blank" rel="noreferrer" className="btn secondary">
+              Soo Dejiso PDF
+            </a>
 
-          {me.data?.role === "OWNER" && inv.status !== "REVERSED" && (
-            <button className="btn danger" onClick={() => setReverseModal(true)}>
-              Reverse Invoice
-            </button>
-          )}
-        </div>} />
+            {me.data?.role === "OWNER" && inv.status !== "REVERSED" && (
+              <button className="btn danger" onClick={() => setReverseModal(true)}>
+                Kansal Biilka
+              </button>
+            )}
+          </div>
+        }
+      />
 
       {/* KPI Cards */}
       <div className="grid finance-metrics">
         <div className="card">
-          <span className="text-muted text-xs">Total Amount</span>
+          <span className="text-muted text-xs">Wadarta Guud</span>
           <div className="text-2xl font-mono font-bold">${decimal(inv.totalAmount, 2)}</div>
         </div>
         <div className="card">
-          <span className="text-muted text-xs">Paid Amount</span>
+          <span className="text-muted text-xs">La Bixiyay</span>
           <div className="text-2xl font-mono font-bold text-emerald-400">${decimal(inv.paidAmount, 2)}</div>
         </div>
         <div className="card">
-          <span className="text-muted text-xs">Balance Due</span>
+          <span className="text-muted text-xs">Deynta Harsan</span>
           <div className="text-2xl font-mono font-bold text-amber-400">${decimal(inv.balanceDue, 2)}</div>
         </div>
         <div className="card">
-          <span className="text-muted text-xs">Status</span>
+          <span className="text-muted text-xs">Xaaladda</span>
           <div>
-            <span
-              className={`badge ${
-                inv.status === "PAID"
-                  ? "success"
-                  : inv.status === "PARTIALLY_PAID"
-                  ? "warning"
-                  : inv.status === "REVERSED"
-                  ? "danger"
-                  : "neutral"
-              }`}
-            >
-              {inv.status.replace("_", " ")}
-            </span>
+            <Badge tone={inv.status === "PAID" ? "ok" : inv.status === "PARTIALLY_PAID" ? "warn" : inv.status === "REVERSED" ? "danger" : "neutral"}>
+              {formatStatus(inv.status)}
+            </Badge>
           </div>
         </div>
       </div>
@@ -137,40 +135,40 @@ export default function InvoiceDetailPage() {
       {/* Customer & Issue Information */}
       <section className="card grid detail-information">
         <div>
-          <h2 className="section-title">Customer Information</h2>
+          <h2 className="section-title">Xogta Macmiilka</h2>
           <div className="space-y-1 mt-2 text-sm">
             <div>
-              <strong>Name:</strong>{" "}
+              <strong>Magaca:</strong>{" "}
               <Link href={`/customers/${inv.customer.id}`} className="link">
                 {inv.customer.name}
               </Link>
             </div>
             <div>
-              <strong>Account Code:</strong> {inv.customer.code}
+              <strong>Koodhka Macmiilka:</strong> {inv.customer.code}
             </div>
             {inv.customer.primaryPhone && (
               <div>
-                <strong>Phone:</strong> {inv.customer.primaryPhone}
+                <strong>Telefoonka:</strong> {inv.customer.primaryPhone}
               </div>
             )}
           </div>
         </div>
 
         <div>
-          <h2 className="section-title">Invoice Details</h2>
+          <h2 className="section-title">Faahfaahinta Biilka</h2>
           <div className="space-y-1 mt-2 text-sm">
             <div>
-              <strong>Issue Date:</strong> {inv.issueDate.slice(0, 10)}
+              <strong>Taariikhda Bixinta:</strong> {inv.issueDate.slice(0, 10)}
             </div>
             <div>
-              <strong>Due Date:</strong> {inv.dueDate ? inv.dueDate.slice(0, 10) : "—"}
+              <strong>Taariikhda Baaqiga:</strong> {inv.dueDate ? inv.dueDate.slice(0, 10) : "—"}
             </div>
             <div>
-              <strong>Issued By:</strong> {inv.createdBy.displayName}
+              <strong>Qofka Soo Saaray:</strong> {inv.createdBy.displayName}
             </div>
             {inv.notes && (
               <div>
-                <strong>Notes:</strong> {inv.notes}
+                <strong>Xusuusin:</strong> {inv.notes}
               </div>
             )}
           </div>
@@ -179,30 +177,30 @@ export default function InvoiceDetailPage() {
 
       {/* Billed Fuel Items */}
       <section className="card space-y-3">
-        <h2 className="section-title">Billed Fuel Delivered</h2>
+        <h2 className="section-title">Shidaalka La Gaarsiiyay oo Biilka Loo Jaray</h2>
         <div className="table-wrap">
           <table className="data-table">
             <thead>
               <tr>
-                <th>Fuel</th>
-                <th>Container Unit</th>
-                <th>Accepted Units</th>
-                <th>Liters / Unit</th>
-                <th>Accepted Liters</th>
-                <th>Price Snapshot</th>
-                <th>Line Total</th>
+                <th>Shidaalka</th>
+                <th>Qaybta</th>
+                <th>Tirada Fuustooyinka</th>
+                <th>Litir / Fuusto</th>
+                <th>Litirada La Aqbalay</th>
+                <th>Qiimaha Fuustadii</th>
+                <th>Wadarta Safka</th>
               </tr>
             </thead>
             <tbody>
               {inv.lines.map((l) => (
                 <tr key={l.id}>
                   <td>
-                    <strong>{l.fuel.displayName}</strong>
+                    <strong>{formatFuel(l.fuel.displayName)}</strong>
                   </td>
                   <td>{l.salesUnit.name}</td>
-                  <td className="font-mono">{l.acceptedUnits}</td>
-                  <td className="font-mono">{decimal(l.litersPerUnitSnapshot, 2)} L</td>
-                  <td className="font-mono">{l.acceptedLiters} L</td>
+                  <td className="font-mono">{l.acceptedUnits} Fuusto</td>
+                  <td className="font-mono">{decimal(l.litersPerUnitSnapshot, 2)} Litir</td>
+                  <td className="font-mono">{l.acceptedLiters} Litir</td>
                   <td className="font-mono">${decimal(l.unitPriceSnapshot, 4)}</td>
                   <td className="font-mono font-semibold">${decimal(l.lineTotal, 2)}</td>
                 </tr>
@@ -210,23 +208,32 @@ export default function InvoiceDetailPage() {
             </tbody>
           </table>
         </div>
+        <div className="card-body border-t" style={{ borderTop: "1px solid rgba(255,255,255,0.1)", paddingTop: 16 }}>
+          <div className="flex flex-col items-end space-y-1 text-sm font-mono">
+            <div>Wadarta Ka Hor Dhimista: ${decimal(inv.subtotal, 2)}</div>
+            {parseFloat(inv.discountAmount || "0") > 0 && (
+              <div className="text-emerald-400 font-bold">Lacag-dhimis: -${decimal(inv.discountAmount, 2)}</div>
+            )}
+            <div className="text-base font-bold">Wadarta La Bixinayo: ${decimal(inv.totalAmount, 2)}</div>
+          </div>
+        </div>
       </section>
 
       {/* Payment Allocations */}
       <section className="card space-y-3">
-        <h2 className="section-title">Payment Allocations History</h2>
+        <h2 className="section-title">Diiwaanka Qaybinta Lacag-bixinnada</h2>
         {!inv.allocations.length ? (
-          <div className="text-muted text-sm italic">No payments allocated to this invoice yet.</div>
+          <div className="text-muted text-sm italic">Wali ma jiraan lacago loo qaybiyay biilkan.</div>
         ) : (
           <div className="table-wrap">
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>Payment #</th>
-                  <th>Payment Date</th>
-                  <th>Method</th>
-                  <th>Allocated Amount</th>
-                  <th>Recorded Date</th>
+                  <th>Lambar Rasiidh</th>
+                  <th>Taariikhda Bixinta</th>
+                  <th>Qaabka Bixinta</th>
+                  <th>Qadarka Loo Qaybiyay</th>
+                  <th>Taariikhda Diiwaangelinta</th>
                 </tr>
               </thead>
               <tbody>
@@ -250,12 +257,12 @@ export default function InvoiceDetailPage() {
       </section>
 
       {/* Reversal Modal */}
-      <Modal isOpen={reverseModal} onClose={() => setReverseModal(false)} title="Reverse Commercial Invoice">
+      <Modal isOpen={reverseModal} onClose={() => setReverseModal(false)} title="Kansal Biilka Macmiilka">
         <form
           onSubmit={(e) => {
             e.preventDefault();
             if (!reasonInput.trim()) {
-              setFormError("Reason is required");
+              setFormError("Fadlan geli sababta kansalaadda");
               return;
             }
             reverseMutation.mutate(reasonInput);
@@ -265,25 +272,25 @@ export default function InvoiceDetailPage() {
           {formError && <div className="callout error">{formError}</div>}
 
           <div className="callout warning">
-            Reversing an invoice will cancel its balance and post an auditable counter-entry in the customer ledger. This action cannot be undone.
+            Kansalaadda biilku waxay baabi'ineysaa baaqiga biilka iyada oo diiwaangelinaysa nidaamka xisaabta xaqiijinta (counter-entry). Tallaabadan dib looma noqon karo.
           </div>
 
           <div>
-            <label className="label">Reversal Reason *</label>
+            <label className="label">Sababta Kansalaadda *</label>
             <textarea
               value={reasonInput}
               onChange={(e) => setReasonInput(e.target.value)}
-              placeholder="e.g. Invoiced incorrect customer or duplicate entry..."
+              placeholder="tusaale: Biil loo jaray macmiil meel kale ka tirsan ama la meel dhigay laba jeer..."
               className="input"
             />
           </div>
 
           <div className="modal-actions">
             <button type="button" className="btn ghost" onClick={() => setReverseModal(false)}>
-              Cancel
+              Ka Noqo
             </button>
             <button type="submit" className="btn danger" disabled={reverseMutation.isPending || !reasonInput.trim()}>
-              {reverseMutation.isPending ? "Reversing..." : "Confirm Reversal"}
+              {reverseMutation.isPending ? "Waa la kansalayay..." : "Xaqiiji Kansalaadda"}
             </button>
           </div>
         </form>
