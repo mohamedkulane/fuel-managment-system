@@ -297,6 +297,7 @@ model SalesOrder {
   events OrderEvent[]
   createdAt DateTime @default(now())
   @@index([customerId, orderDate])
+  @@index([discountApprovedById])
 }
 
 model SalesOrderLine {

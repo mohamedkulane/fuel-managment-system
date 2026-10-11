@@ -8,14 +8,6 @@ import { Badge, Card, CardHead, Empty, ErrorState, Modal, PageHeader, SubmitButt
 
 type Fuel = { id: string; code: string; displayName: string };
 type UnitMaster = { id: string; code: string; name: string };
-type UnitVersion = {
-  id: string;
-  fuel: string;
-  unit: string;
-  litersPerUnit: string;
-  effectiveFromUtc: string;
-  effectiveToUtc?: string | null;
-};
 type Price = {
   id: string;
   unitPrice: string;
@@ -30,12 +22,11 @@ type Price = {
 
 export default function PricingPage() {
   const client = useQueryClient();
-  const [mode, setMode] = useState<"price" | "unit" | null>(null);
+  const [mode, setMode] = useState<"price" | null>(null);
 
   const me = useQuery({ queryKey: ["me"], queryFn: () => api<Actor>("/auth/me") });
   const fuels = useQuery({ queryKey: ["fuels"], queryFn: () => api<Fuel[]>("/fuels") });
   const units = useQuery({ queryKey: ["sales-units"], queryFn: () => api<UnitMaster[]>("/sales-units") });
-  const versions = useQuery({ queryKey: ["units"], queryFn: () => api<UnitVersion[]>("/units") });
   const prices = useQuery({ queryKey: ["prices"], queryFn: () => api<Price[]>("/prices/history") });
 
   const save = useMutation({
@@ -43,10 +34,7 @@ export default function PricingPage() {
       api(path, { method: "POST", body: JSON.stringify(body) }),
     onSuccess: async () => {
       setMode(null);
-      await Promise.all([
-        client.invalidateQueries({ queryKey: ["prices"] }),
-        client.invalidateQueries({ queryKey: ["units"] })
-      ]);
+      await client.invalidateQueries({ queryKey: ["prices"] });
     }
   });
 
@@ -59,11 +47,7 @@ export default function PricingPage() {
       salesUnitId: d.get("salesUnitId"),
       effectiveFromUtc: dateInput ? new Date(String(dateInput)).toISOString() : new Date().toISOString()
     };
-    save.mutate(
-      mode === "price"
-        ? { path: "/prices", body: { ...common, unitPrice: d.get("value"), reason: d.get("reason") } }
-        : { path: "/units", body: { ...common, litersPerUnit: d.get("value") } }
-    );
+    save.mutate({ path: "/prices", body: { ...common, unitPrice: d.get("value"), reason: d.get("reason") } });
   }
 
   const owner = me.data?.role === "OWNER";
@@ -76,14 +60,9 @@ export default function PricingPage() {
         description="Maamul qiimaha Naaftada iyo Basiinka. Dalabyadii hore ee la xaqiijiyay waxay haysanayaan qiimahoodii hore."
         actions={
           owner ? (
-            <>
-              <button className="btn" onClick={() => setMode("unit")}>
-                Ajiin Cabbirka Fuustada (Litir)
-              </button>
-              <button className="btn primary" onClick={() => setMode("price")}>
-                Cusboonaysii Qiimaha Iibka
-              </button>
-            </>
+            <button className="btn primary" onClick={() => setMode("price")}>
+              Cusboonaysii Qiimaha Iibka
+            </button>
           ) : undefined
         }
       />
@@ -129,13 +108,13 @@ export default function PricingPage() {
         })}
       </div>
       <div className="notice">
-        <b>Cabbirka Fuustada:</b> Dhig tirada litir ee fuustadiiba ka hor xaqiijinta dalabyada. Cabbirrada cusub ma beddelaan tiradii hore.
+        <b>Cabbirka Fuustada:</b> 1 fuusto = 240 litir. Tani waa xeer ganacsi oo joogto ah; dalab kasta wuxuu kaydiyaa cabbirkan marka la xaqiijiyo.
       </div>
 
       <Modal
         isOpen={Boolean(mode)}
         onClose={() => setMode(null)}
-        title={mode === "price" ? "Beddel Qiimaha Iibka (Milkiilaha Kaliya)" : "Dhig Cabbirka Fuustada (Milkiilaha Kaliya)"}
+        title="Beddel Qiimaha Iibka (Milkiilaha Kaliya)"
       >
         <form onSubmit={submit}>
           <div className="form-grid">
@@ -162,19 +141,17 @@ export default function PricingPage() {
               </select>
             </div>
             <div className="field">
-              <label htmlFor="value">{mode === "price" ? "Qiimaha Fuustadii ($ USD) *" : "Litirkiiba Fuusto *"}</label>
-              <input id="value" className="input" name="value" inputMode="decimal" placeholder={mode === "price" ? "Geli qiimaha iibka" : "Geli tirada litirka fuustada"} required />
+              <label htmlFor="value">Qiimaha Fuustadii ($ USD) *</label>
+              <input id="value" className="input" name="value" inputMode="decimal" placeholder="Geli qiimaha iibka" required />
             </div>
             <div className="field">
               <label htmlFor="effectiveFromUtc">Taariikhda & Waqtiga Dhaqangalinta *</label>
               <input id="effectiveFromUtc" className="input" name="effectiveFromUtc" type="datetime-local" required defaultValue={new Date().toISOString().slice(0, 16)} />
             </div>
-            {mode === "price" && (
-              <div className="field full">
-                <label htmlFor="reason">Sababta Wax ka Beddelka</label>
-                <input id="reason" className="input" name="reason" placeholder="tusaale: Isbeddelka qiimaha shidaalka soo galay" />
-              </div>
-            )}
+            <div className="field full">
+              <label htmlFor="reason">Sababta Wax ka Beddelka</label>
+              <input id="reason" className="input" name="reason" placeholder="tusaale: Isbeddelka qiimaha shidaalka soo galay" />
+            </div>
           </div>
           {save.isError && <div className="notice warn" role="alert" style={{ marginTop: 16 }}>{(save.error as Error).message}</div>}
           <div className="form-actions">
@@ -186,38 +163,7 @@ export default function PricingPage() {
         </form>
       </Modal>
 
-      <div className="two-col equal-cols">
-        <Card>
-          <CardHead title="Taariikhda Cabbirka Fuustada" description="Taariikhda isbeddelka litirada ku jira fuustadiiba" />
-          {versions.isError ? (
-            <ErrorState message={(versions.error as Error).message} />
-          ) : (
-            <div className="table-wrap">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Shidaalka</th>
-                    <th>Qaybta</th>
-                    <th>Cabbirka</th>
-                    <th>Taariikhda Dhaqangalinta</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {versions.data?.map((row) => (
-                    <tr key={row.id}>
-                      <td className="strong">{formatFuel(row.fuel)}</td>
-                      <td>{row.unit}</td>
-                      <td className="strong mono">{row.litersPerUnit} Litir</td>
-                      <td>{dateTime(row.effectiveFromUtc)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              {versions.data?.length === 0 && <Empty>Wali ma jiraan cabbirro fuusto oo la dhigay.</Empty>}
-            </div>
-          )}
-        </Card>
-
+      <div>
         <Card>
           <CardHead title="Taariikhda Qiimaha Iibka" description="Diiwaanka qiimayaashii hore iyo kuwa hadda dhaqangalka ah" />
           {prices.isError ? (

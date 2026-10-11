@@ -1,6 +1,7 @@
 "use client";
 
-import { dateTime, formatStatus, formatFuel } from "../../../lib/format";
+import Decimal from "decimal.js";
+import { dateTime, decimal, formatStatus, formatFuel } from "../../../lib/format";
 import { FormEvent, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, mutationKey, type Actor } from "../../../lib/api";
@@ -77,39 +78,51 @@ export default function ReceivePage() {
 
   const isOwner = me.data?.role === "OWNER";
 
+  function validDecimal(value: string): Decimal | null {
+    if (!value.trim()) return null;
+    try {
+      const result = new Decimal(value);
+      return result.isFinite() && result.greaterThan(0) ? result : null;
+    } catch {
+      return null;
+    }
+  }
+
   function handleUnitCostChange(val: string) {
     setUnitCostInput(val);
-    if (!val || isNaN(Number(val))) {
+    const unitCost = validDecimal(val);
+    if (!unitCost) {
       if (!val) setTotalCostInput("");
       return;
     }
-    const fuustoNum = Number(fuustoInput);
-    if (fuustoNum > 0) {
-      const calcTotal = Number(val) * fuustoNum;
-      setTotalCostInput(calcTotal.toFixed(2));
+    const fuusto = validDecimal(fuustoInput);
+    if (fuusto) {
+      setTotalCostInput(unitCost.mul(fuusto).toFixed(2));
     }
   }
 
   function handleTotalCostChange(val: string) {
     setTotalCostInput(val);
-    if (!val || isNaN(Number(val))) {
+    const totalCost = validDecimal(val);
+    if (!totalCost) {
       if (!val) setUnitCostInput("");
       return;
     }
-    const fuustoNum = Number(fuustoInput);
-    if (fuustoNum > 0) {
-      const calcUnit = Number(val) / fuustoNum;
-      setUnitCostInput(calcUnit.toFixed(4));
+    const fuusto = validDecimal(fuustoInput);
+    if (fuusto) {
+      setUnitCostInput(totalCost.div(fuusto).toFixed(4));
     }
   }
 
   function handleFuustoChange(val: string) {
     setFuustoInput(val);
-    const fuustoNum = Number(val);
-    if (fuustoNum > 0 && unitCostInput && !isNaN(Number(unitCostInput))) {
-      setTotalCostInput((Number(unitCostInput) * fuustoNum).toFixed(2));
-    } else if (fuustoNum > 0 && totalCostInput && !isNaN(Number(totalCostInput))) {
-      setUnitCostInput((Number(totalCostInput) / fuustoNum).toFixed(4));
+    const fuusto = validDecimal(val);
+    const unitCost = validDecimal(unitCostInput);
+    const totalCost = validDecimal(totalCostInput);
+    if (fuusto && unitCost) {
+      setTotalCostInput(unitCost.mul(fuusto).toFixed(2));
+    } else if (fuusto && totalCost) {
+      setUnitCostInput(totalCost.div(fuusto).toFixed(4));
     }
   }
 
@@ -133,9 +146,7 @@ export default function ReceivePage() {
     });
   }
 
-  const calculatedLitersPreview = fuustoInput && !isNaN(Number(fuustoInput))
-    ? (Number(fuustoInput) * 240).toLocaleString()
-    : "0";
+  const calculatedLitersPreview = validDecimal(fuustoInput)?.mul(240).toFixed(3) ?? "0.000";
 
   return (
     <main className="page receive-page">
@@ -196,14 +207,14 @@ export default function ReceivePage() {
                     </thead>
                     <tbody>
                       {receiptDetail.data.lines.map((line) => {
-                        const fuustoVal = line.quantityFuusto ?? (Number(line.actualLiters) / 240).toFixed(3);
+                        const fuustoVal = line.quantityFuusto ?? new Decimal(line.actualLiters).div(240).toFixed(3);
                         return (
                           <tr key={line.id}>
                             <td>{formatFuel(line.fuel.displayName)}</td>
                             <td className="strong mono" style={{ fontSize: 14 }}>{fuustoVal} Fuusto</td>
-                            <td className="mono muted">{parseFloat(line.actualLiters).toLocaleString()} L</td>
-                            {isOwner && <td className="mono">{line.unitPurchaseCost ? `$${line.unitPurchaseCost}` : <span className="muted">Aan la diiwaangelin</span>}</td>}
-                            {isOwner && <td className="mono">{line.totalPurchaseCost ? `$${line.totalPurchaseCost}` : <span className="muted">Aan la diiwaangelin</span>}</td>}
+                            <td className="mono muted">{decimal(line.actualLiters, 3)} L</td>
+                            {isOwner && <td className="mono">{line.unitPurchaseCost ? `$${decimal(line.unitPurchaseCost, 4)}` : <span className="muted">Aan la diiwaangelin</span>}</td>}
+                            {isOwner && <td className="mono">{line.totalPurchaseCost ? `$${decimal(line.totalPurchaseCost, 2)}` : <span className="muted">Aan la diiwaangelin</span>}</td>}
                           </tr>
                         );
                       })}
@@ -260,6 +271,9 @@ export default function ReceivePage() {
                     id="quantityFuusto"
                     className="input"
                     name="quantityFuusto"
+                    type="number"
+                    min="1"
+                    step="1"
                     inputMode="decimal"
                     required
                     placeholder="tusaale: 50"
@@ -377,19 +391,19 @@ export default function ReceivePage() {
                     <td>{row.supplier ?? row.tankerReference ?? "—"}</td>
                     <td>{row.lines.map((x) => formatFuel(x.fuel.displayName)).join(", ")}</td>
                     <td className="strong mono" style={{ fontSize: 13 }}>
-                      {row.lines.map((x) => `${x.quantityFuusto ?? (Number(x.actualLiters) / 240).toFixed(3)} Fuusto`).join(", ")}
+                      {row.lines.map((x) => `${x.quantityFuusto ?? new Decimal(x.actualLiters).div(240).toFixed(3)} Fuusto`).join(", ")}
                     </td>
                     <td className="mono muted">
-                      {row.lines.map((x) => `${parseFloat(x.actualLiters).toLocaleString()} L`).join(", ")}
+                      {row.lines.map((x) => `${decimal(x.actualLiters, 3)} L`).join(", ")}
                     </td>
                     {isOwner && (
                       <td className="mono">
-                        {row.lines.map((x) => (x.unitPurchaseCost ? `$${x.unitPurchaseCost}` : <span className="muted" key={x.id}>—</span>)).join(", ")}
+                        {row.lines.map((x) => (x.unitPurchaseCost ? `$${decimal(x.unitPurchaseCost, 4)}` : "—")).join(", ")}
                       </td>
                     )}
                     {isOwner && (
                       <td className="mono">
-                        {row.lines.map((x) => (x.totalPurchaseCost ? `$${x.totalPurchaseCost}` : <span className="muted" key={x.id}>—</span>)).join(", ")}
+                        {row.lines.map((x) => (x.totalPurchaseCost ? `$${decimal(x.totalPurchaseCost, 2)}` : "—")).join(", ")}
                       </td>
                     )}
                     <td>

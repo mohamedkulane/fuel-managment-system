@@ -49,12 +49,12 @@ describe("Phase 3 Invoicing, Credit, Debt & Payment Integration Suite", () => {
     const diesel = await prisma.fuelType.upsert({ where: { code: "DIESEL" }, update: {}, create: { code: "DIESEL", displayName: "Diesel / Naafto" } });
     dieselId = diesel.id;
 
-    const unit = await prisma.salesUnit.create({ data: { code: `FUUSTO_P3_${suffix}`, name: "Fuusto P3 20L" } });
+    const unit = await prisma.salesUnit.create({ data: { code: `FUUSTO_P3_${suffix}`, name: "Fuusto P3 240L" } });
     unitId = unit.id;
 
     const effective = new Date(Date.now() - 3600_000).toISOString();
     await prisma.fuelUnitVersion.create({
-      data: { fuelId: diesel.id, salesUnitId: unit.id, litersPerUnit: new Prisma.Decimal("20"), effectiveFromUtc: new Date(effective), createdById: owner.id }
+      data: { fuelId: diesel.id, salesUnitId: unit.id, litersPerUnit: new Prisma.Decimal("240"), effectiveFromUtc: new Date(effective), createdById: owner.id }
     });
     await prisma.priceVersion.create({
       data: { fuelId: diesel.id, salesUnitId: unit.id, unitPrice: new Prisma.Decimal("120"), effectiveFromUtc: new Date(effective), createdById: owner.id }
@@ -128,7 +128,7 @@ describe("Phase 3 Invoicing, Credit, Debt & Payment Integration Suite", () => {
           {
             dispatchLineId: dispatch.lines[0]!.id,
             acceptedUnits: "18",
-            physicalReturnedLiters: "40",
+            physicalReturnedLiters: "480",
             commercialDisposition: "CANCEL_REMAINDER",
             discrepancyReason: "2 fuusto damaged and physically returned"
           }

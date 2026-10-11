@@ -16,7 +16,8 @@
     "typecheck": "tsc -p tsconfig.json",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
-    "prisma:seed": "tsx prisma/seed.ts"
+    "prisma:seed": "tsx prisma/seed.ts",
+    "prisma:clean": "tsx prisma/clean.ts"
   },
   "dependencies": {
     "@prisma/client": "6.16.2",

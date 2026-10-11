@@ -49,12 +49,12 @@ describe("Phase 2 Complete Workflow & Inventory Ledger Suite", () => {
     const diesel = await prisma.fuelType.upsert({ where: { code: "DIESEL" }, update: {}, create: { code: "DIESEL", displayName: "Diesel / Naafto" } });
     dieselId = diesel.id;
 
-    const unit = await prisma.salesUnit.create({ data: { code: `FUUSTO_P2_${suffix}`, name: "Fuusto Standard 20L" } });
+    const unit = await prisma.salesUnit.create({ data: { code: `FUUSTO_P2_${suffix}`, name: "Fuusto Standard 240L" } });
     unitId = unit.id;
 
     const effective = new Date(Date.now() - 3600_000).toISOString();
     await prisma.fuelUnitVersion.create({
-      data: { fuelId: diesel.id, salesUnitId: unit.id, litersPerUnit: new Prisma.Decimal("20"), effectiveFromUtc: new Date(effective), createdById: owner.id }
+      data: { fuelId: diesel.id, salesUnitId: unit.id, litersPerUnit: new Prisma.Decimal("240"), effectiveFromUtc: new Date(effective), createdById: owner.id }
     });
     await prisma.priceVersion.create({
       data: { fuelId: diesel.id, salesUnitId: unit.id, unitPrice: new Prisma.Decimal("120"), effectiveFromUtc: new Date(effective), createdById: owner.id }
@@ -117,7 +117,7 @@ describe("Phase 2 Complete Workflow & Inventory Ledger Suite", () => {
 
     expect(confirmed.status).toBe("CONFIRMED");
     expect(confirmed.lines[0]?.unitPriceSnapshot).toContain("120.0000");
-    expect(confirmed.lines[0]?.litersPerUnitSnapshot).toBe("20.000000");
+    expect(confirmed.lines[0]?.litersPerUnitSnapshot).toBe("240.000000");
 
     // Updating master price does NOT affect confirmed order snapshot
     const futureDate = new Date(Date.now() + 300_000).toISOString();
@@ -182,7 +182,7 @@ describe("Phase 2 Complete Workflow & Inventory Ledger Suite", () => {
       body: JSON.stringify({ deliverySheetId: sheet.id, lines: [{ orderLineId: order.lines[0]!.id, dispatchedUnits: "20" }] })
     });
 
-    // Post Dispatch (20 fuusto * 20 L = 400 L dispatched)
+    // Post Dispatch (20 fuusto * 240 L = 4,800 L dispatched)
     const postDispatchKey = randomUUID();
     await request(`/dispatches/${dispatch.id}/post`, { method: "POST", headers: { "idempotency-key": postDispatchKey } });
 
@@ -190,10 +190,10 @@ describe("Phase 2 Complete Workflow & Inventory Ledger Suite", () => {
     const balancesAfterDispatch = await request<Array<{ fuel: string; location: string; balanceLiters: string }>>("/stock/balances");
     const warehousePostDispatch = balancesAfterDispatch.find((b) => b.fuel === "DIESEL" && b.location === "WAREHOUSE")?.balanceLiters;
     const transitPostDispatch = balancesAfterDispatch.find((b) => b.fuel === "DIESEL" && b.location === "IN_TRANSIT")?.balanceLiters;
-    expect(warehousePostDispatch).toBe("9600.000");
-    expect(transitPostDispatch).toBe("400.000");
+    expect(warehousePostDispatch).toBe("5200.000");
+    expect(transitPostDispatch).toBe("4800.000");
 
-    // Reconcile: 18 accepted (360 L), 2 returned (40 L)
+    // Reconcile: 18 accepted (4,320 L), 2 returned (480 L)
     const reconcileKey = randomUUID();
     await request(`/dispatches/${dispatch.id}/reconcile`, {
       method: "POST",
@@ -203,7 +203,7 @@ describe("Phase 2 Complete Workflow & Inventory Ledger Suite", () => {
           {
             dispatchLineId: dispatch.lines[0]!.id,
             acceptedUnits: "18",
-            physicalReturnedLiters: "40",
+            physicalReturnedLiters: "480",
             commercialDisposition: "CANCEL_REMAINDER",
             discrepancyReason: "2 fuusto damaged and physically returned to warehouse"
           }
@@ -211,12 +211,12 @@ describe("Phase 2 Complete Workflow & Inventory Ledger Suite", () => {
       })
     });
 
-    // Final Stock Balances: Warehouse = 9600 + 40 = 9640 L, In Transit = 400 - 400 = 0 L
+    // Final Stock Balances: Warehouse = 5,200 + 480 = 5,680 L, In Transit = 4,800 - 4,800 = 0 L
     const finalBalances = await request<Array<{ fuel: string; location: string; balanceLiters: string }>>("/stock/balances");
     const finalWarehouse = finalBalances.find((b) => b.fuel === "DIESEL" && b.location === "WAREHOUSE")?.balanceLiters;
     const finalTransit = finalBalances.find((b) => b.fuel === "DIESEL" && b.location === "IN_TRANSIT")?.balanceLiters;
 
-    expect(finalWarehouse).toBe("9640.000");
+    expect(finalWarehouse).toBe("5680.000");
     expect(finalTransit).toBe("0.000");
 
     // Check Order Status

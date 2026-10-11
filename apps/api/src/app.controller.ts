@@ -160,6 +160,7 @@ export class AppController {
     const actor = requireOwner(request);
     if (!body.fuelId || !body.salesUnitId || !body.litersPerUnit || !body.effectiveFromUtc) throw new BadRequestException("fuelId, salesUnitId, litersPerUnit and effectiveFromUtc are required");
     const liters = positive(body.litersPerUnit, "litersPerUnit");
+    if (!liters.eq(240)) throw new BadRequestException("1 FUUSTO is fixed at 240 liters");
     const effective = new Date(body.effectiveFromUtc);
     if (Number.isNaN(effective.getTime())) throw new BadRequestException("Invalid effectiveFromUtc");
     const overlap = await this.prisma.fuelUnitVersion.findFirst({
@@ -317,10 +318,12 @@ export class AppController {
 
       if (line.quantityFuusto) {
         quantityFuustoDec = positive(line.quantityFuusto, "quantityFuusto");
+        if (!quantityFuustoDec.isInteger()) throw new BadRequestException("Stock purchase quantityFuusto must be a whole number");
         actualLitersDec = quantityFuustoDec.mul(litersPerFuustoDec);
       } else {
         actualLitersDec = positive(line.actualLiters!, "actualLiters");
         quantityFuustoDec = actualLitersDec.div(litersPerFuustoDec);
+        if (!quantityFuustoDec.isInteger()) throw new BadRequestException("Stock purchases must be whole fuusto containers of 240 liters");
       }
 
       let unitPurchaseCostDec: Prisma.Decimal | undefined;
@@ -2566,8 +2569,8 @@ export class AppController {
   }
 
   @UseGuards(SessionGuard)
-  @Get("reports/tanker-receipts")
-  async reportsTankerReceipts(@Req() request: AuthenticatedRequest, @Query("fromDate") fromDate?: string, @Query("toDate") toDate?: string) {
+  @Get(["reports/stock-receipts", "reports/tanker-receipts"])
+  async reportsStockReceipts(@Req() request: AuthenticatedRequest, @Query("fromDate") fromDate?: string, @Query("toDate") toDate?: string) {
     const isOwner = request.actor?.role === "OWNER";
     const start = fromDate ? new Date(`${fromDate}T00:00:00.000Z`) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const end = toDate ? new Date(`${toDate}T23:59:59.999Z`) : new Date();
@@ -2581,12 +2584,13 @@ export class AppController {
     const items = receipts.flatMap((r) =>
       r.lines.map((l) => ({
         receiptNo: r.receiptNo,
-        tankerReference: r.tankerReference ?? "—",
-        arrivedAt: r.arrivedAt.toISOString().slice(0, 10),
+        supplierReference: r.tankerReference ?? "—",
+        purchaseDate: r.arrivedAt.toISOString().slice(0, 10),
         status: r.status,
         fuelName: l.fuel.displayName,
+        quantityFuusto: (l.quantityFuusto ?? l.actualLiters.div(240)).toFixed(3),
+        litersPerFuusto: (l.litersPerFuustoSnapshot ?? dec("240")).toFixed(3),
         actualLiters: l.actualLiters.toFixed(3),
-        expectedLiters: jsonDecimal(l.expectedLiters),
         unitPurchaseCost: isOwner ? jsonDecimal(l.unitPurchaseCost) : undefined,
         totalPurchaseCost: isOwner ? (l.totalPurchaseCost ? l.totalPurchaseCost.toFixed(4) : (l.unitPurchaseCost ? (l.quantityFuusto ? l.quantityFuusto.mul(l.unitPurchaseCost) : l.actualLiters.div(240).mul(l.unitPurchaseCost)).toFixed(4) : null)) : undefined
       }))
@@ -2596,48 +2600,50 @@ export class AppController {
   }
 
   @UseGuards(SessionGuard)
-  @Get("reports/tanker-receipts/pdf")
-  async reportsTankerReceiptsPdf(@Req() request: AuthenticatedRequest, @Query("fromDate") fromDate: string | undefined, @Query("toDate") toDate: string | undefined, @Res() response: Response) {
+  @Get(["reports/stock-receipts/pdf", "reports/tanker-receipts/pdf"])
+  async reportsStockReceiptsPdf(@Req() request: AuthenticatedRequest, @Query("fromDate") fromDate: string | undefined, @Query("toDate") toDate: string | undefined, @Res() response: Response) {
     const isOwner = request.actor?.role === "OWNER";
-    const data = await this.reportsTankerReceipts(request, fromDate, toDate);
+    const data = await this.reportsStockReceipts(request, fromDate, toDate);
     const columns: ColumnDef[] = [
       { header: "Receipt No", key: "receiptNo", width: 14 },
-      { header: "Tanker Ref", key: "tankerReference", width: 14 },
-      { header: "Arrived", key: "arrivedAt", width: 12 },
+      { header: "Supplier / Reference", key: "supplierReference", width: 18 },
+      { header: "Purchased", key: "purchaseDate", width: 12 },
       { header: "Fuel", key: "fuelName", width: 14 },
-      { header: "Liters Received", key: "actualLiters", format: "decimal", align: "right" },
+      { header: "Quantity (Fuusto)", key: "quantityFuusto", format: "decimal", align: "right" },
+      { header: "Liters", key: "actualLiters", format: "decimal", align: "right" },
       ...(isOwner
         ? [
-            { header: "Cost/Liter ($)", key: "unitPurchaseCost", format: "currency" as const, align: "right" as const },
+            { header: "Cost/Fuusto ($)", key: "unitPurchaseCost", format: "currency" as const, align: "right" as const },
             { header: "Total Cost ($)", key: "totalPurchaseCost", format: "currency" as const, align: "right" as const }
           ]
         : []),
       { header: "Status", key: "status", width: 12 }
     ];
-    const pdfBuffer = await exportToPdf({ title: "Inbound Booyad Tanker Receipts Report", columns, rows: data.data.items });
+    const pdfBuffer = await exportToPdf({ title: "Fuel Stock Purchases Report", columns, rows: data.data.items });
     response.type("application/pdf").send(pdfBuffer);
   }
 
   @UseGuards(SessionGuard)
-  @Get("reports/tanker-receipts/xlsx")
-  async reportsTankerReceiptsXlsx(@Req() request: AuthenticatedRequest, @Query("fromDate") fromDate: string | undefined, @Query("toDate") toDate: string | undefined, @Res() response: Response) {
+  @Get(["reports/stock-receipts/xlsx", "reports/tanker-receipts/xlsx"])
+  async reportsStockReceiptsXlsx(@Req() request: AuthenticatedRequest, @Query("fromDate") fromDate: string | undefined, @Query("toDate") toDate: string | undefined, @Res() response: Response) {
     const isOwner = request.actor?.role === "OWNER";
-    const data = await this.reportsTankerReceipts(request, fromDate, toDate);
+    const data = await this.reportsStockReceipts(request, fromDate, toDate);
     const columns: ColumnDef[] = [
       { header: "Receipt No", key: "receiptNo", width: 14 },
-      { header: "Tanker Ref", key: "tankerReference", width: 14 },
-      { header: "Arrived", key: "arrivedAt", width: 12 },
+      { header: "Supplier / Reference", key: "supplierReference", width: 18 },
+      { header: "Purchased", key: "purchaseDate", width: 12 },
       { header: "Fuel", key: "fuelName", width: 14 },
-      { header: "Liters Received", key: "actualLiters", format: "decimal", align: "right" },
+      { header: "Quantity (Fuusto)", key: "quantityFuusto", format: "decimal", align: "right" },
+      { header: "Liters", key: "actualLiters", format: "decimal", align: "right" },
       ...(isOwner
         ? [
-            { header: "Cost/Liter ($)", key: "unitPurchaseCost", format: "currency" as const, align: "right" as const },
+            { header: "Cost/Fuusto ($)", key: "unitPurchaseCost", format: "currency" as const, align: "right" as const },
             { header: "Total Cost ($)", key: "totalPurchaseCost", format: "currency" as const, align: "right" as const }
           ]
         : []),
       { header: "Status", key: "status", width: 12 }
     ];
-    const xlsxBuffer = await exportToExcel({ title: "Inbound Booyad Tanker Receipts Report", columns, rows: data.data.items });
+    const xlsxBuffer = await exportToExcel({ title: "Fuel Stock Purchases Report", columns, rows: data.data.items });
     response.type("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet").send(xlsxBuffer);
   }
 
@@ -2793,7 +2799,7 @@ export class AppController {
     const start = fromDate ? new Date(`${fromDate}T00:00:00.000Z`) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const end = toDate ? new Date(`${toDate}T23:59:59.999Z`) : new Date();
 
-    const [invoices, tankerLines] = await Promise.all([
+    const [invoices, stockReceiptLines] = await Promise.all([
       this.prisma.invoice.findMany({
         where: { issueDate: { gte: start, lte: end }, status: { not: "REVERSED" } },
         include: { lines: { include: { fuel: true } } }
@@ -2809,11 +2815,13 @@ export class AppController {
       totalRevenue = totalRevenue.add(inv.totalAmount);
     }
 
-    let totalBooyadPurchaseCost = dec("0");
-    for (const line of tankerLines) {
-      if (line.unitPurchaseCost) {
-        totalBooyadPurchaseCost = totalBooyadPurchaseCost.add(line.actualLiters.mul(line.unitPurchaseCost));
-      }
+    let totalStockPurchaseCost = dec("0");
+    let missingPurchaseCostCount = 0;
+    for (const line of stockReceiptLines) {
+      const quantityFuusto = line.quantityFuusto ?? line.actualLiters.div(240);
+      const lineCost = line.totalPurchaseCost ?? (line.unitPurchaseCost ? line.unitPurchaseCost.mul(quantityFuusto) : null);
+      if (lineCost) totalStockPurchaseCost = totalStockPurchaseCost.add(lineCost);
+      else missingPurchaseCostCount += 1;
     }
 
     return {
@@ -2824,12 +2832,14 @@ export class AppController {
           invoiceCount: invoices.length
         },
         purchaseCosts: {
-          totalBooyadPurchaseCost: totalBooyadPurchaseCost.toFixed(4),
-          tankerLinesCount: tankerLines.length
+          totalStockPurchaseCost: totalStockPurchaseCost.toFixed(4),
+          stockReceiptLinesCount: stockReceiptLines.length,
+          missingPurchaseCostCount
         },
         disclosures: {
           policyStatus: "COST_PROFIT_FORMULA_UNCONFIRMED",
-          costAllocationMethod: "Pending decision log D-022 (FIFO vs Weighted Avg per fuel type). Direct unit margin calculations require owner-confirmed costing policy.",
+          costAllocationMethod: "Pending decision log D-023 (FIFO vs Weighted Avg per fuel type). Direct unit margin calculations require owner-confirmed costing policy.",
+          profitabilityAvailability: "Profit unavailable — purchase cost not recorded.",
           revenueBasis: "Confirmed accepted delivered quantities (D-023)."
         }
       }
@@ -2843,14 +2853,14 @@ export class AppController {
     const data = await this.reportsProfitability(request, fromDate, toDate);
     const rows = [
       { metric: "Confirmed Invoiced Revenue", amount: data.data.revenue.confirmedInvoicedRevenue, count: data.data.revenue.invoiceCount },
-      { metric: "Total Booyad Tanker Purchase Cost", amount: data.data.purchaseCosts.totalBooyadPurchaseCost, count: data.data.purchaseCosts.tankerLinesCount }
+      { metric: "Total Recorded Stock Purchase Cost", amount: data.data.purchaseCosts.totalStockPurchaseCost, count: data.data.purchaseCosts.stockReceiptLinesCount }
     ];
     const columns: ColumnDef[] = [
       { header: "Financial Category", key: "metric", width: 30 },
       { header: "Total Amount ($)", key: "amount", format: "currency", align: "right" },
       { header: "Document Count", key: "count", align: "right" }
     ];
-    const pdfBuffer = await exportToPdf({ title: "Financial Revenue & Tanker Purchase Summary (Owner Only)", columns, rows });
+    const pdfBuffer = await exportToPdf({ title: "Financial Revenue & Stock Purchase Summary (Owner Only)", columns, rows });
     response.type("application/pdf").send(pdfBuffer);
   }
 
@@ -2861,14 +2871,14 @@ export class AppController {
     const data = await this.reportsProfitability(request, fromDate, toDate);
     const rows = [
       { metric: "Confirmed Invoiced Revenue", amount: data.data.revenue.confirmedInvoicedRevenue, count: data.data.revenue.invoiceCount },
-      { metric: "Total Booyad Tanker Purchase Cost", amount: data.data.purchaseCosts.totalBooyadPurchaseCost, count: data.data.purchaseCosts.tankerLinesCount }
+      { metric: "Total Recorded Stock Purchase Cost", amount: data.data.purchaseCosts.totalStockPurchaseCost, count: data.data.purchaseCosts.stockReceiptLinesCount }
     ];
     const columns: ColumnDef[] = [
       { header: "Financial Category", key: "metric", width: 30 },
       { header: "Total Amount ($)", key: "amount", format: "currency", align: "right" },
       { header: "Document Count", key: "count", align: "right" }
     ];
-    const xlsxBuffer = await exportToExcel({ title: "Financial Revenue & Tanker Purchase Summary (Owner Only)", columns, rows });
+    const xlsxBuffer = await exportToExcel({ title: "Financial Revenue & Stock Purchase Summary (Owner Only)", columns, rows });
     response.type("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet").send(xlsxBuffer);
   }
 

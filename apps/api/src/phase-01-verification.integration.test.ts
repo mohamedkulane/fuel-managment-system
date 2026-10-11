@@ -159,42 +159,42 @@ describe("Phase 1 Complete Acceptance Verification Suite", () => {
     expect(list.limit).toBe(5);
   });
 
-  it("5. Verifies Tanker Receipt Creation and Atomic Posting", async () => {
+  it("5. Verifies Fuel Stock Purchase Creation and Atomic Posting", async () => {
     const fuels = await request<Array<{ id: string; code: string }>>("/fuels");
     const diesel = fuels.find((f) => f.code === "DIESEL")!;
 
     const beforeStock = await request<Array<{ fuel: string; location: string; balanceLiters: string }>>("/stock/balances");
     const initialWarehouse = parseFloat(beforeStock.find((b) => b.fuel === "DIESEL" && b.location === "WAREHOUSE")?.balanceLiters ?? "0");
 
-    const receipt = await request<{ id: string }>("/tanker-receipts", {
+    const receipt = await request<{ id: string }>("/stock/receipts", {
       method: "POST",
-      body: JSON.stringify({ tankerReference: "TANKER-VERIFY-1", arrivedAt: new Date().toISOString(), lines: [{ fuelId: diesel.id, actualLiters: "5000", unitPurchaseCost: "0.85" }] })
+      body: JSON.stringify({ supplier: "SUPPLIER-VERIFY-1", purchaseDate: new Date().toISOString(), lines: [{ fuelId: diesel.id, quantityFuusto: "20", unitPurchaseCost: "204" }] })
     });
 
     // Post Receipt
     const postKey = randomUUID();
-    await request(`/tanker-receipts/${receipt.id}/post`, { method: "POST", headers: { "idempotency-key": postKey } });
+    await request(`/stock/receipts/${receipt.id}/post`, { method: "POST", headers: { "idempotency-key": postKey } });
 
     const afterStock = await request<Array<{ fuel: string; location: string; balanceLiters: string }>>("/stock/balances");
     const newWarehouse = parseFloat(afterStock.find((b) => b.fuel === "DIESEL" && b.location === "WAREHOUSE")?.balanceLiters ?? "0");
-    expect(newWarehouse - initialWarehouse).toBe(5000);
+    expect(newWarehouse - initialWarehouse).toBe(4800);
   });
 
-  it("6. Verifies Duplicate Tanker Posting Protection (Idempotency)", async () => {
+  it("6. Verifies Duplicate Stock Purchase Posting Protection (Idempotency)", async () => {
     const fuels = await request<Array<{ id: string; code: string }>>("/fuels");
     const diesel = fuels.find((f) => f.code === "DIESEL")!;
 
-    const receipt = await request<{ id: string }>("/tanker-receipts", {
+    const receipt = await request<{ id: string }>("/stock/receipts", {
       method: "POST",
-      body: JSON.stringify({ arrivedAt: new Date().toISOString(), lines: [{ fuelId: diesel.id, actualLiters: "1000" }] })
+      body: JSON.stringify({ purchaseDate: new Date().toISOString(), lines: [{ fuelId: diesel.id, quantityFuusto: "5" }] })
     });
 
     const key = randomUUID();
-    const firstPost = await request<{ status: string }>(`/tanker-receipts/${receipt.id}/post`, { method: "POST", headers: { "idempotency-key": key } });
+    const firstPost = await request<{ status: string }>(`/stock/receipts/${receipt.id}/post`, { method: "POST", headers: { "idempotency-key": key } });
     expect(firstPost.status).toBe("POSTED");
 
     // Replay post with same idempotency key or already posted receipt
-    const secondPost = await request<{ status: string; replay?: boolean }>(`/tanker-receipts/${receipt.id}/post`, { method: "POST", headers: { "idempotency-key": key } });
+    const secondPost = await request<{ status: string; replay?: boolean }>(`/stock/receipts/${receipt.id}/post`, { method: "POST", headers: { "idempotency-key": key } });
     expect(secondPost.replay).toBe(true);
   });
 
@@ -236,7 +236,7 @@ describe("Phase 1 Complete Acceptance Verification Suite", () => {
     // Create unit conversion
     await request("/units", {
       method: "POST",
-      body: JSON.stringify({ fuelId: diesel.id, salesUnitId: customUnit.id, litersPerUnit: "20", effectiveFromUtc: pastDate })
+      body: JSON.stringify({ fuelId: diesel.id, salesUnitId: customUnit.id, litersPerUnit: "240", effectiveFromUtc: pastDate })
     });
 
     // Create price version

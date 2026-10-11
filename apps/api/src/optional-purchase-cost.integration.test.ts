@@ -134,5 +134,10 @@ describe("Optional Purchase Cost & Reciprocal Auto-Calculation Integration Suite
     const receiptsOwner = await request<Array<{ lines: Array<{ unitPurchaseCost?: string }> }>>("/stock/receipts", {}, ownerCookie);
     const hasAnyCost = receiptsOwner.some((r) => r.lines.some((l) => l.unitPurchaseCost !== undefined && l.unitPurchaseCost !== null));
     expect(hasAnyCost).toBe(true);
+
+    const ownerReport = await request<{ items: Array<Record<string, unknown>> }>("/reports/stock-receipts", {}, ownerCookie);
+    const officeReport = await request<{ items: Array<Record<string, unknown>> }>("/reports/stock-receipts", {}, officeCookie);
+    expect(ownerReport.items.some((line) => line.unitPurchaseCost !== undefined)).toBe(true);
+    expect(JSON.stringify(officeReport)).not.toMatch(/unitPurchaseCost|totalPurchaseCost/);
   });
 });

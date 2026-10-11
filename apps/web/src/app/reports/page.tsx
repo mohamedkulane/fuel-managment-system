@@ -60,11 +60,11 @@ const reports: ReportCard[] = [
     endpoint: "/reports/inventory"
   },
   {
-    id: "tanker-receipts",
+    id: "stock-receipts",
     title: "Warbixinta Shidaal Soo Gelinta & Iibsiga",
     category: "Inventory",
     description: "Shidaalka soo galay oo fuusto lagu iibsaday, litirada la xisaabiyay iyo qiimaha iibsiga (Milkiilaha kaliya).",
-    endpoint: "/reports/tanker-receipts"
+    endpoint: "/reports/stock-receipts"
   },
   {
     id: "deliveries",

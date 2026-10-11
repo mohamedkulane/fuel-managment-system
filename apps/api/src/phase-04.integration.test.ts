@@ -63,12 +63,12 @@ describe("Phase 4 Dashboard, Reporting, Analytics & Production Readiness Integra
     const diesel = await prisma.fuelType.upsert({ where: { code: "DIESEL" }, update: {}, create: { code: "DIESEL", displayName: "Diesel / Naafto" } });
     dieselId = diesel.id;
 
-    const unit = await prisma.salesUnit.create({ data: { code: `FUUSTO_P4_${suffix}`, name: "Fuusto P4 20L" } });
+    const unit = await prisma.salesUnit.create({ data: { code: `FUUSTO_P4_${suffix}`, name: "Fuusto P4 240L" } });
     unitId = unit.id;
 
     const effective = new Date(Date.now() - 3600_000).toISOString();
     await prisma.fuelUnitVersion.create({
-      data: { fuelId: diesel.id, salesUnitId: unit.id, litersPerUnit: new Prisma.Decimal("20"), effectiveFromUtc: new Date(effective), createdById: owner.id }
+      data: { fuelId: diesel.id, salesUnitId: unit.id, litersPerUnit: new Prisma.Decimal("240"), effectiveFromUtc: new Date(effective), createdById: owner.id }
     });
     await prisma.priceVersion.create({
       data: { fuelId: diesel.id, salesUnitId: unit.id, unitPrice: new Prisma.Decimal("100"), effectiveFromUtc: new Date(effective), createdById: owner.id }
@@ -86,6 +86,9 @@ describe("Phase 4 Dashboard, Reporting, Analytics & Production Readiness Integra
       data: { code: `CUS-P4-${suffix}`, name: "P4 Mogadishu Enterprise", primaryPhone: "+252619998877", createdById: owner.id }
     });
     customerId = customer.id;
+    await prisma.auditEvent.create({
+      data: { actorId: owner.id, entityType: "Phase4Fixture", entityId: customer.id, action: "CREATED" }
+    });
 
     app = await NestFactory.create(AppModule, { logger: ["error"] });
     app.use(cookieParser());
@@ -210,11 +213,11 @@ describe("Phase 4 Dashboard, Reporting, Analytics & Production Readiness Integra
     expect(xlsx.status).toBe(200);
   });
 
-  it("16. Tanker Receipts: Purchase costs included for OWNER, redacted for OFFICE_EMPLOYEE", async () => {
-    const ownerRes = await request<{ items: any[] }>("/reports/tanker-receipts", {}, ownerCookie);
+  it("16. Stock purchases: Purchase costs included for OWNER, redacted for OFFICE_EMPLOYEE", async () => {
+    const ownerRes = await request<{ items: any[] }>("/reports/stock-receipts", {}, ownerCookie);
     expect(ownerRes.items).toBeDefined();
 
-    const officeRes = await request<{ items: any[] }>("/reports/tanker-receipts", {}, officeCookie);
+    const officeRes = await request<{ items: any[] }>("/reports/stock-receipts", {}, officeCookie);
     expect(officeRes.items).toBeDefined();
     for (const item of officeRes.items) {
       expect(item.unitPurchaseCost).toBeUndefined();
