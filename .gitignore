@@ -7,4 +7,5 @@ coverage/
 prisma/*.db
 *.tsbuildinfo
 .edge-qa-profile/
+backups/*.dump
 

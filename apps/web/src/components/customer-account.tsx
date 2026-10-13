@@ -1,54 +1,98 @@
 "use client";
+
 import { useState, type FormEvent } from "react";
 import { useParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Decimal from "decimal.js";
-import { Receipt, Wallet } from "lucide-react";
-import { ActionButton, FormLabel } from "./controls";
+import { Banknote, Clock3, PackageCheck, Receipt, ShieldAlert, Wallet } from "lucide-react";
+import { ActionButton, ActionLink, FormLabel } from "./controls";
 import { PdfButton } from "./pdf-button";
 import { PaymentDialog } from "./simple-forms";
-import { CustomerOrdersTab, CustomerPaymentsTab } from "./customer-history";
 import { Badge, Card, CardHead, Empty, ErrorState, LoadingState, MetricCard, Modal, PageHeader, SubmitButton } from "./ui";
-import { api } from "../lib/api";
-import { dateTime, decimal, businessDate } from "../lib/format";
-import { payableDebt } from "../lib/payment-validation";
+import { api, ApiError, mutationKey, type Actor } from "../lib/api";
+import { businessDate, dateTime, decimal, formatFuel, formatStatus } from "../lib/format";
 import { notifyError, notifySuccess } from "../lib/toast";
 
 type Customer = { id: string; name: string; primaryPhone: string | null; status: string; notes: string | null; addresses: { addressText: string }[] };
-type Financial = { totalInvoiced: string; totalPaid: string; outstandingDebt: string; unappliedCredit: string };
-type Statement = { openingBalance: string; closingBalance: string; entries: { id: string; occurredAt: string; entryType: string; debitAmount: string; creditAmount: string; runningBalance: string }[] };
-function balance(value: string) { const amount = new Decimal(value); return amount.lt(0) ? `Lacag u taalla $${amount.abs().toFixed(2)}` : `$${amount.toFixed(2)}`; }
+type AccountPayment = { id: string; paymentNo: string; displayReference: string; paymentDate: string; method: string; amount: string; status: "POSTED" | "REVERSED"; relationLabel: string; relatedOrders: { id: string; orderNo: string }[]; recordedBy: string; reversalReason: string | null; reversedAt: string | null };
+type OrderPayment = { id: string; paymentId: string; date: string; amount: string; method: string; status: "POSTED" | "REVERSED"; reference: string; kind: string; recordedBy: string; reversalReason: string | null };
+type AccountOrder = { id: string; orderNo: string; orderDate: string; status: string; fuel: string; requestedFuusto: string; acceptedFuusto: string; agreedTotal: string; deliveredTotal: string; paidOnOrder: string; pendingRemaining: string; debt: string; moneyToReview: string; stage: "PENDING" | "PARTIAL" | "DELIVERED"; payments: OrderPayment[] };
+type Account = {
+  customer: { id: string; code: string; name: string; phone: string | null; location: string | null; status: string };
+  summary: { totalSales: string; totalPaid: string; appliedToDeliveredSales: string; remainingDebt: string; pendingOrderRemaining: string; orderPaymentsAwaitingDelivery: string; moneyToReview: string; openingBalance: string; closingBalance: string };
+  orders: AccountOrder[];
+  payments: AccountPayment[];
+};
+
+const isPositive = (value: string | undefined) => new Decimal(value ?? "0").gt(0);
+const statusTone = (status: string) => status === "REVERSED" || status === "CANCELLED" ? "danger" : status === "FULFILLED" || status === "PAID" ? "ok" : status === "DRAFT" ? "warn" : "info";
+
+function OrderCards({ orders, compact = false }: { orders: AccountOrder[]; compact?: boolean }) {
+  if (!orders.length) return <Empty>No orders found.</Empty>;
+  return <div className="account-orders">{orders.map(order => {
+    const pending = new Decimal(order.pendingRemaining).gt(0);
+    return <article className="account-order-card" key={order.id}>
+      <div className="account-order-head"><div><ActionLink href={`/orders/${order.id}`} className="strong">{order.orderNo}</ActionLink><p>{new Date(order.orderDate).toLocaleDateString("en-GB")} · {formatFuel(order.fuel)} · {order.requestedFuusto} Fuusto</p></div><Badge tone={statusTone(order.status)}>{formatStatus(order.status)}</Badge></div>
+      <div className="account-order-grid">
+        <div><span>Agreed Total</span><b>${decimal(order.agreedTotal)}</b></div>
+        <div><span>Delivered</span><b>{order.acceptedFuusto} Fuusto · ${decimal(order.deliveredTotal)}</b></div>
+        <div><span>Paid on Order</span><b>${decimal(order.paidOnOrder)}</b></div>
+        <div className={pending ? "pending" : "debt"}><span>{pending ? "Order Remaining" : "Debt"}</span><b>${decimal(pending ? order.pendingRemaining : order.debt)}</b></div>
+      </div>
+      {isPositive(order.moneyToReview) && <p className="notice warn"><ShieldAlert size={16} /> Owner review needed: ${decimal(order.moneyToReview)}</p>}
+      {!compact && <details className="order-payment-disclosure"><summary>View Payments ({order.payments.length})</summary>{!order.payments.length ? <p className="muted">No payments on this order.</p> : <div className="payment-mini-list">{order.payments.map(payment => <div key={payment.id}><span>{dateTime(payment.date)} · {payment.kind}</span><strong>${decimal(payment.amount)}</strong><Badge tone={statusTone(payment.status)}>{formatStatus(payment.status)}</Badge><small>{payment.reference}{payment.reversalReason ? ` · ${payment.reversalReason}` : ""}</small></div>)}</div>}</details>}
+    </article>;
+  })}</div>;
+}
 
 export default function CustomerAccount() {
-  const { id } = useParams<{ id: string }>(); const client = useQueryClient();
-  const [tab, setTab] = useState<"ledger" | "orders" | "payments">("ledger");
-  const [edit, setEdit] = useState(false); const [pay, setPay] = useState(false);
+  const { id } = useParams<{ id: string }>();
+  const client = useQueryClient();
+  const [tab, setTab] = useState<"account" | "orders" | "payments">("account");
+  const [edit, setEdit] = useState(false);
+  const [pay, setPay] = useState(false);
+  const [reverse, setReverse] = useState<AccountPayment | null>(null);
   const [from, setFrom] = useState(() => new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Mogadishu", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(Date.now() - 89 * 86400000)));
   const [to, setTo] = useState(businessDate);
+  const accountRange = new URLSearchParams();
+  if (from) accountRange.set("fromDate", from);
+  if (to) accountRange.set("toDate", to);
+  const accountRangeQuery = accountRange.toString();
   const customer = useQuery({ queryKey: ["customer", id], queryFn: () => api<Customer>(`/customers/${id}`) });
-  const financial = useQuery({ queryKey: ["customer-financial", id], queryFn: () => api<Financial>(`/customers/${id}/financial`) });
-  const filters = `?fromDate=${from}&toDate=${to}`;
-  const statement = useQuery({ queryKey: ["customer-statement", id, from, to], queryFn: () => api<Statement>(`/customers/${id}/statement${filters}`), enabled: tab === "ledger" });
+  const me = useQuery({ queryKey: ["me"], queryFn: () => api<Actor>("/auth/me") });
+  const account = useQuery({
+    queryKey: ["customer-account", id, from, to],
+    queryFn: () => api<Account>(`/customers/${id}/account${accountRangeQuery ? `?${accountRangeQuery}` : ""}`)
+  });
   const update = useMutation({ mutationFn: (body: object) => api(`/customers/${id}`, { method: "PATCH", body: JSON.stringify(body) }), onSuccess: async () => { await client.invalidateQueries(); setEdit(false); notifySuccess("Customer updated"); }, onError: error => notifyError(error, "Update failed") });
-  function save(event: FormEvent<HTMLFormElement>) { event.preventDefault(); if (update.isPending) return; const data = new FormData(event.currentTarget); update.mutate({ name: data.get("name"), primaryPhone: data.get("phone"), address: data.get("address"), status: data.get("status"), notes: data.get("notes") }); }
-  const cust = customer.data; const fin = financial.data;
-  const debt = payableDebt(fin?.outstandingDebt ?? "0", fin?.unappliedCredit ?? "0");
-  const credit = Decimal.max(0, new Decimal(fin?.unappliedCredit ?? "0").sub(fin?.outstandingDebt ?? "0"));
-  if (customer.isPending) return <main className="page"><LoadingState /></main>;
-  if (customer.isError || !cust) return <main className="page"><ErrorState message="Customer unavailable" retry={() => void customer.refetch()} /></main>;
+  const reversal = useMutation({ mutationFn: ({ paymentId, reason }: { paymentId: string; reason: string }) => api(`/payments/${paymentId}/reverse`, { method: "POST", headers: { "idempotency-key": mutationKey() }, body: JSON.stringify({ reason }) }), onSuccess: async () => { await client.invalidateQueries(); setReverse(null); notifySuccess("Payment reversed"); }, onError: error => notifyError(error, "Reversal failed") });
+
+  function save(event: FormEvent<HTMLFormElement>) { event.preventDefault(); if (update.isPending) return; const form = new FormData(event.currentTarget); update.mutate({ name: form.get("name"), primaryPhone: form.get("phone"), address: form.get("address"), status: form.get("status"), notes: form.get("notes") }); }
+  function reversePayment(event: FormEvent<HTMLFormElement>) { event.preventDefault(); if (!reverse || reversal.isPending) return; const reason = String(new FormData(event.currentTarget).get("reason") ?? "").trim(); if (reason) reversal.mutate({ paymentId: reverse.id, reason }); }
+
+  if (customer.isPending || account.isPending) return <main className="page"><LoadingState /></main>;
+  const customerNotFound = [customer.error, account.error].some(error => error instanceof ApiError && error.status === 404);
+  if (customerNotFound) {
+    return <main className="page"><ErrorState title="Macmiilka lama helin" message="Macmiilkan kuma jiro diiwaanka hadda jira. Waxaa laga yaabaa in xogtiisa hore la tirtiray." /><ActionLink className="btn" href="/customers">Ku noqo liiska macaamiisha</ActionLink></main>;
+  }
+  if (customer.isError || !customer.data || account.isError || !account.data) {
+    const error = customer.error ?? account.error;
+    return <main className="page"><ErrorState message={error instanceof Error ? error.message : "Xogta macaamiisha lama soo rari karin."} retry={() => { void customer.refetch(); void account.refetch(); }} /></main>;
+  }
+  const cust = customer.data;
+  const data = account.data;
+  const filters = `?fromDate=${from}&toDate=${to}`;
+
   return <main className="page customer-account-page">
-    <PageHeader eyebrow="" title={cust.name} description={[cust.primaryPhone, cust.addresses[0]?.addressText].filter(Boolean).join(" · ")} actions={<><ActionButton className="btn" onClick={() => setEdit(true)}>Edit</ActionButton><ActionButton className="btn primary" disabled={!fin || debt.lte(0)} onClick={() => setPay(true)}>Pay</ActionButton><PdfButton path={`/customers/${id}/statement/pdf${filters}`}>Statement</PdfButton></>} />
+    <PageHeader eyebrow="" title={cust.name} description={[cust.primaryPhone, cust.addresses[0]?.addressText].filter(Boolean).join(" · ")} actions={<><ActionButton className="btn" onClick={() => setEdit(true)}>Edit</ActionButton><ActionButton className="btn primary" disabled={!isPositive(data.summary.remainingDebt)} onClick={() => setPay(true)}>Pay</ActionButton><PdfButton path={`/customers/${id}/statement/pdf${filters}`}>Statement</PdfButton></>} />
     <PaymentDialog customerId={id} customerName={cust.name} open={pay} onClose={() => setPay(false)} />
-    <Modal isOpen={edit} onClose={() => { if (!update.isPending) setEdit(false); }} title="Edit customer"><form onSubmit={save}>
-      <div className="form-grid"><div className="field"><FormLabel htmlFor="edit-name">Magaca (Name)</FormLabel><input id="edit-name" name="name" className="input" defaultValue={cust.name} required /></div><div className="field"><FormLabel htmlFor="edit-phone">Telefoonka (Phone)</FormLabel><input id="edit-phone" name="phone" className="input" defaultValue={cust.primaryPhone ?? ""} /></div><div className="field full"><FormLabel htmlFor="edit-location">Goobta (Location)</FormLabel><input id="edit-location" name="address" className="input" defaultValue={cust.addresses[0]?.addressText ?? ""} /></div></div>
-      <details className="simple-disclosure"><summary>More details</summary><div className="field"><FormLabel htmlFor="edit-status">Xaaladda (Status)</FormLabel><select id="edit-status" name="status" className="select" defaultValue={cust.status}><option value="ACTIVE">Active</option><option value="HOLD">Hold</option><option value="INACTIVE">Inactive</option></select></div><div className="field"><FormLabel htmlFor="edit-notes">Xusuus (Notes)</FormLabel><textarea id="edit-notes" name="notes" className="textarea" defaultValue={cust.notes ?? ""} /></div></details>
-      {update.isError && <p className="validation-error">Update failed. Check the details and try again.</p>}<div className="form-actions"><ActionButton type="button" className="btn" disabled={update.isPending} onClick={() => setEdit(false)}>Cancel</ActionButton><SubmitButton busy={update.isPending}>Save</SubmitButton></div>
-    </form></Modal>
-    {financial.isError ? <ErrorState message="Balance unavailable" retry={() => void financial.refetch()} /> : financial.isPending ? <LoadingState /> : <><div className="grid team-metrics"><MetricCard label="Total Sales" value={`$${decimal(fin?.totalInvoiced)}`} icon={Receipt} /><MetricCard label="Total Paid" value={`$${decimal(fin?.totalPaid)}`} icon={Wallet} /><MetricCard label="Debt" value={`$${debt.toFixed(2)}`} icon={Wallet} dark /></div>{credit.gt(0) && <p className="notice">Lacag u taalla: ${credit.toFixed(2)}</p>}</>}
-    <div className="tabs-header" aria-label="Customer account">{([['ledger', 'Xisaab'], ['orders', 'Orders'], ['payments', 'Payments']] as const).map(([key, label]) => <button key={key} type="button" aria-pressed={tab === key} className={tab === key ? "active" : ""} onClick={() => setTab(key)}>{label}</button>)}</div>
-    {tab === "orders" && <CustomerOrdersTab customerId={id} />}{tab === "payments" && <CustomerPaymentsTab customerId={id} />}
-    {tab === "ledger" && <Card><CardHead title="Xisaab" /><div className="toolbar"><label>From<input aria-label="From" className="input" type="date" value={from} max={to} onChange={e => setFrom(e.target.value)} /></label><label>To<input aria-label="To" className="input" type="date" value={to} min={from} onChange={e => setTo(e.target.value)} /></label></div>
-      {statement.isPending ? <LoadingState /> : statement.isError ? <ErrorState message="Statement unavailable" retry={() => void statement.refetch()} /> : <><div className="statement-balances"><span>Bilow: <b>{balance(statement.data?.openingBalance ?? "0")}</b></span><span>Hadda: <b>{balance(statement.data?.closingBalance ?? "0")}</b></span></div><div className="table-wrap"><table className="data-table responsive-table"><thead><tr><th>Date</th><th>Type</th><th>Amount</th><th>Balance</th></tr></thead><tbody>{statement.data?.entries.map(entry => <tr key={entry.id}><td data-label="Date">{dateTime(entry.occurredAt)}</td><td data-label="Type">{entry.entryType === "INVOICE" ? "Iib" : entry.entryType === "PAYMENT" ? "Lacag" : entry.entryType === "REVERSAL" ? "Reversal" : "Adjustment"}</td><td data-label="Amount">${decimal(new Decimal(entry.debitAmount).sub(entry.creditAmount).abs().toString())}</td><td data-label="Balance">{balance(entry.runningBalance)}</td></tr>)}</tbody></table>{!statement.data?.entries.length && <Empty>No activity in this period.</Empty>}</div></>}
-    </Card>}
+    <Modal isOpen={edit} onClose={() => { if (!update.isPending) setEdit(false); }} title="Edit customer"><form onSubmit={save}><div className="form-grid"><div className="field"><FormLabel htmlFor="edit-name">Magaca (Customer Name)</FormLabel><input id="edit-name" name="name" className="input" defaultValue={cust.name} required /></div><div className="field"><FormLabel htmlFor="edit-phone">Telefoonka (Phone)</FormLabel><input id="edit-phone" name="phone" className="input" defaultValue={cust.primaryPhone ?? ""} /></div><div className="field full"><FormLabel htmlFor="edit-location">Goobta (Location)</FormLabel><input id="edit-location" name="address" className="input" defaultValue={cust.addresses[0]?.addressText ?? ""} /></div></div><details className="simple-disclosure"><summary>More details</summary><div className="field"><FormLabel htmlFor="edit-status">Xaaladda (Status)</FormLabel><select id="edit-status" name="status" className="select" defaultValue={cust.status}><option value="ACTIVE">Active</option><option value="HOLD">Hold</option><option value="INACTIVE">Inactive</option></select></div><div className="field"><FormLabel htmlFor="edit-notes">Xusuus (Notes)</FormLabel><textarea id="edit-notes" name="notes" className="textarea" defaultValue={cust.notes ?? ""} /></div></details><div className="form-actions"><ActionButton type="button" className="btn" disabled={update.isPending} onClick={() => setEdit(false)}>Cancel</ActionButton><SubmitButton busy={update.isPending}>Save</SubmitButton></div></form></Modal>
+    <Modal isOpen={Boolean(reverse)} onClose={() => { if (!reversal.isPending) setReverse(null); }} title="Reverse Payment"><form onSubmit={reversePayment}>{reverse && <div className="payment-summary"><strong>{reverse.displayReference}</strong><div className="info-pair"><span>Customer</span><b>{cust.name}</b></div><div className="info-pair"><span>Amount</span><b>${decimal(reverse.amount)}</b></div><div className="info-pair"><span>Order</span><b>{reverse.relationLabel}</b></div></div>}<div className="field"><FormLabel htmlFor="reverse-reason">Sababta (Reason)</FormLabel><textarea id="reverse-reason" name="reason" className="textarea" required minLength={3} autoFocus /></div><p className="notice warn">The original payment stays visible as Reversed.</p><div className="form-actions"><ActionButton type="button" className="btn" disabled={reversal.isPending} onClick={() => setReverse(null)}>Cancel</ActionButton><SubmitButton busy={reversal.isPending}>Reverse</SubmitButton></div></form></Modal>
+
+    <div className="grid account-summary-grid"><MetricCard label="Total Sales" value={`$${decimal(data.summary.totalSales)}`} icon={Receipt} /><MetricCard label="Total Paid" value={`$${decimal(data.summary.totalPaid)}`} icon={Wallet} /><MetricCard label="Remaining Debt" value={`$${decimal(data.summary.remainingDebt)}`} icon={Banknote} dark />{isPositive(data.summary.pendingOrderRemaining) && <MetricCard label="Pending Orders" value={`$${decimal(data.summary.pendingOrderRemaining)}`} icon={Clock3} />}{isPositive(data.summary.orderPaymentsAwaitingDelivery) && <MetricCard label="Paid · Awaiting Delivery" value={`$${decimal(data.summary.orderPaymentsAwaitingDelivery)}`} icon={PackageCheck} />}{isPositive(data.summary.moneyToReview) && <MetricCard label="Money to Review" value={`$${decimal(data.summary.moneyToReview)}`} icon={ShieldAlert} />}</div>
+    <div className="tabs-header" aria-label="Customer account">{([['account', 'Xisaab (Account)'], ['orders', 'Dalabyada (Orders)'], ['payments', 'Lacagaha (Payments)']] as const).map(([key, label]) => <button key={key} type="button" aria-pressed={tab === key} className={tab === key ? "active" : ""} onClick={() => setTab(key)}>{label}</button>)}</div>
+    {tab === "account" && <Card><CardHead title="Order Account" description="Each order shows what was delivered, paid, and still remaining." /><div className="statement-filter-bar"><label>From<input aria-label="From" className="input" type="date" value={from} max={to} onChange={event => setFrom(event.target.value)} /></label><label>To<input aria-label="To" className="input" type="date" value={to} min={from} onChange={event => setTo(event.target.value)} /></label></div><OrderCards orders={data.orders} /></Card>}
+    {tab === "orders" && <Card><CardHead title="Dalabyada (Orders)" description="Requested and accepted fuel by order." /><OrderCards orders={data.orders} compact /></Card>}
+    {tab === "payments" && <Card><CardHead title="Lacagaha (Payments)" description="One chronological list of money received and corrections." /><div className="table-wrap"><table className="data-table responsive-table"><thead><tr><th>Date</th><th>Reference</th><th>Amount</th><th>Related Order</th><th>Status</th><th>Recorded by</th><th aria-label="Actions" /></tr></thead><tbody>{data.payments.map(payment => <tr key={payment.id}><td data-label="Date">{dateTime(payment.paymentDate)}</td><td data-label="Reference">{payment.displayReference}</td><td data-label="Amount"><strong>${decimal(payment.amount)}</strong></td><td data-label="Order">{payment.relationLabel}</td><td data-label="Status"><Badge tone={statusTone(payment.status)}>{formatStatus(payment.status)}</Badge>{payment.reversalReason && <small className="balance-label">{payment.reversalReason}</small>}</td><td data-label="Recorded by">{payment.recordedBy}</td><td data-label="">{me.data?.role === "OWNER" && payment.status === "POSTED" && <ActionButton className="btn small danger" onClick={() => setReverse(payment)}>Reverse</ActionButton>}</td></tr>)}</tbody></table>{!data.payments.length && <Empty>No payments found.</Empty>}</div></Card>}
   </main>;
 }

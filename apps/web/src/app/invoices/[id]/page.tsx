@@ -1,6 +1,6 @@
 "use client";
 import { ActionButton, FormLabel, ActionAnchor, ActionLink } from "../../../components/controls";
-import { decimal, formatStatus, formatFuel } from "../../../lib/format";
+import { decimal, formatStatus, formatFuel, fuustoQuantity } from "../../../lib/format";
 import { useState } from "react";
 import { useParams } from "next/navigation";
 
@@ -199,9 +199,9 @@ export default function InvoiceDetailPage() {
                     <strong>{formatFuel(l.fuel.displayName)}</strong>
                   </td>
                   <td>{l.salesUnit.name}</td>
-                  <td className="font-mono">{l.acceptedUnits} Fuusto</td>
+                  <td className="font-mono">{fuustoQuantity(l.acceptedUnits)} Fuusto</td>
                   <td className="font-mono">{decimal(l.litersPerUnitSnapshot, 2)} Litir</td>
-                  <td className="font-mono">{l.acceptedLiters} Litir</td>
+                  <td className="font-mono">{decimal(l.acceptedLiters)} Litir</td>
                   <td className="font-mono">${decimal(l.unitPriceSnapshot, 4)}</td>
                   <td className="font-mono font-semibold">${decimal(l.lineTotal, 2)}</td>
                 </tr>

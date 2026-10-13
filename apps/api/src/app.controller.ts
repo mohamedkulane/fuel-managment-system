@@ -8,6 +8,10 @@ import { deliveryManifestLineSchema } from "@fuel/shared";
 import { AuthenticatedRequest, hashToken, newSessionToken, requireActor, requireOwner, SessionGuard } from "./auth.js";
 import { PrismaService } from "./prisma.service.js";
 import { exportToPdf, exportToExcel, ColumnDef } from "./reports.exporter.js";
+import { compactPaymentReference, createCustomerStatementPdf } from "./customer-statement.pdf.js";
+import { addDocumentFooter, drawDocumentLogo, resolveDocumentBranding, validateLogoUrl } from "./document-branding.js";
+import { CustomerAccountService } from "./customer-account.service.js";
+import { SimpleWorkflowsService } from "./simple-workflows.service.js";
 
 type DecimalInput = string;
 const dec = (value: DecimalInput): Prisma.Decimal => new Prisma.Decimal(value);
@@ -23,7 +27,24 @@ const requireIdempotencyKey = (value: string | undefined): string => {
 
 @Controller("api/v1")
 export class AppController {
-  public constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
+  public constructor(
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(CustomerAccountService) private readonly customerAccounts: CustomerAccountService,
+    @Inject(SimpleWorkflowsService) private readonly simpleWorkflows: SimpleWorkflowsService
+  ) {}
+
+  private async documentBranding() {
+    const settings = await this.prisma.documentBranding.findUnique({ where: { id: "global" } });
+    return resolveDocumentBranding(settings);
+  }
+
+  private async exportPdf(options: Parameters<typeof exportToPdf>[0]) {
+    return exportToPdf({ ...options, branding: await this.documentBranding() });
+  }
+
+  private async exportExcel(options: Parameters<typeof exportToExcel>[0]) {
+    return exportToExcel({ ...options, branding: await this.documentBranding() });
+  }
 
   @Post("auth/login")
   async login(@Body() body: { email?: string; password?: string }, @Res({ passthrough: true }) response: Response) {
@@ -744,7 +765,7 @@ export class AppController {
     @Body() body: { reason?: string }
   ) {
     const actor = requireOwner(request);
-    const row = await this.prisma.salesOrder.findUnique({ where: { id } });
+    const row = await this.prisma.salesOrder.findUnique({ where: { id }, include: { lines: true } });
     if (!row) throw new NotFoundException("Order not found");
     if (row.status !== "DRAFT") throw new BadRequestException("Discount approval is only applicable to draft orders");
     if (!row.fixedDiscountAmount || row.fixedDiscountAmount.lte(0)) {
@@ -753,9 +774,41 @@ export class AppController {
 
     const updated = await this.prisma.$transaction(async (tx) => {
       const now = new Date();
+      let subtotal = dec("0");
+      for (const line of row.lines) {
+        const [unit, price] = await Promise.all([
+          tx.fuelUnitVersion.findFirst({
+            where: { fuelId: line.fuelId, salesUnitId: line.salesUnitId, effectiveFromUtc: { lte: now }, OR: [{ effectiveToUtc: null }, { effectiveToUtc: { gt: now } }] },
+            orderBy: { effectiveFromUtc: "desc" }
+          }),
+          tx.priceVersion.findFirst({
+            where: { fuelId: line.fuelId, salesUnitId: line.salesUnitId, effectiveFromUtc: { lte: now }, OR: [{ effectiveToUtc: null }, { effectiveToUtc: { gt: now } }] },
+            orderBy: { effectiveFromUtc: "desc" }
+          })
+        ]);
+        if (!unit || !unit.litersPerUnit.eq(240) || !price) throw new BadRequestException("Current price and 240 L fuusto must be configured");
+        subtotal = subtotal.add(line.requestedUnits.mul(price.unitPrice));
+        await tx.salesOrderLine.update({
+          where: { id: line.id },
+          data: {
+            conversionVersionId: unit.id,
+            litersPerUnitSnapshot: unit.litersPerUnit,
+            requestedLitersSnapshot: line.requestedUnits.mul(unit.litersPerUnit),
+            priceVersionId: price.id,
+            unitPriceSnapshot: price.unitPrice,
+            confirmedAt: now
+          }
+        });
+      }
+      if (row.fixedDiscountAmount.gt(subtotal)) throw new BadRequestException("Discount exceeds order total");
       const saved = await tx.salesOrder.update({
         where: { id },
         data: {
+          status: "CONFIRMED",
+          subtotal,
+          totalAmount: subtotal.sub(row.fixedDiscountAmount),
+          confirmedAt: now,
+          confirmedById: actor.id,
           discountApprovedById: actor.id,
           discountApprovedAt: now,
           discountReason: body.reason ?? row.discountReason
@@ -766,7 +819,7 @@ export class AppController {
         data: {
           orderId: id,
           kind: "DISCOUNT_APPROVED",
-          newValues: { fixedDiscountAmount: saved.fixedDiscountAmount.toFixed(4), discountApprovedById: actor.id },
+          newValues: { status: "CONFIRMED", fixedDiscountAmount: saved.fixedDiscountAmount.toFixed(4), totalAmount: saved.totalAmount?.toFixed(4), discountApprovedById: actor.id },
           actorId: actor.id,
           reason: body.reason
         }
@@ -957,7 +1010,24 @@ export class AppController {
 
   @UseGuards(SessionGuard)
   @Get("delivery-sheets/:id/pdf")
-  async manifestPdf(@Param("id") id: string, @Res() response: Response) { const row = await this.prisma.deliverySheet.findUnique({ where: { id }, include: { lines: true } }); if (!row) throw new NotFoundException("Delivery sheet not found"); const chunks: Buffer[] = []; const doc = new PDFDocument({ autoFirstPage: true, info: { Title: "Daily delivery list", Author: "Fuel Wholesale System" } }); doc.on("data", (chunk: Buffer) => chunks.push(chunk)); doc.on("end", () => { response.type("application/pdf").send(Buffer.concat(chunks)); }); doc.fontSize(16).text("Daily Delivery List"); doc.fontSize(10).text(`Sheet ${row.sheetNo} — ${row.serviceDate.toISOString().slice(0, 10)}`); doc.moveDown(); for (const [index, line] of row.lines.entries()) { doc.text(`${index + 1}. ${line.orderNoSnapshot} | ${line.displayCustomerNameSnapshot} | ${line.phoneSnapshot ?? ""} | ${line.addressSnapshot} | ${line.fuelLabelSnapshot} | ${line.scheduledUnits.toFixed(3)} fuusto${line.instructions ? ` | ${line.instructions}` : ""}`); } doc.end(); }
+  async manifestPdf(@Param("id") id: string, @Res() response: Response) {
+    const row = await this.prisma.deliverySheet.findUnique({ where: { id }, include: { lines: true } });
+    if (!row) throw new NotFoundException("Delivery sheet not found");
+    const branding = await this.documentBranding();
+    const chunks: Buffer[] = [];
+    const doc = new PDFDocument({ autoFirstPage: true, bufferPages: true, info: { Title: "Daily delivery list", Author: "Fuel Wholesale System" } });
+    doc.on("data", (chunk: Buffer) => chunks.push(chunk));
+    doc.on("end", () => { response.type("application/pdf").send(Buffer.concat(chunks)); });
+    drawDocumentLogo(doc, branding);
+    doc.fontSize(16).text("Daily Delivery List");
+    doc.fontSize(10).text(`Sheet ${row.sheetNo} — ${row.serviceDate.toISOString().slice(0, 10)}`);
+    doc.moveDown();
+    for (const [index, line] of row.lines.entries()) {
+      doc.text(`${index + 1}. ${line.orderNoSnapshot} | ${line.displayCustomerNameSnapshot} | ${line.phoneSnapshot ?? ""} | ${line.addressSnapshot} | ${line.fuelLabelSnapshot} | ${line.scheduledUnits.toFixed(3)} fuusto${line.instructions ? ` | ${line.instructions}` : ""}`);
+    }
+    addDocumentFooter(doc, branding);
+    doc.end();
+  }
 
   @UseGuards(SessionGuard)
   @Post("dispatches")
@@ -979,6 +1049,66 @@ export class AppController {
   @UseGuards(SessionGuard)
   @Post("users")
   async createUser(@Req() request: AuthenticatedRequest, @Body() body: { displayName?: string; email?: string; password?: string; role?: "OWNER" | "OFFICE_EMPLOYEE" }) { const actor = requireOwner(request); const email = body.email?.trim().toLowerCase(); if (!body.displayName?.trim() || !email || !body.password || body.password.length < 12 || !body.role) throw new BadRequestException("displayName, email, role and a 12+ character password are required"); const row = await this.prisma.$transaction(async (tx) => { const created = await tx.user.create({ data: { displayName: body.displayName!.trim(), email, passwordHash: await argon2.hash(body.password!), role: body.role! }, select: { id: true, displayName: true, email: true, role: true, isActive: true } }); await tx.auditEvent.create({ data: { actorId: actor.id, entityType: "User", entityId: created.id, action: "CREATED", afterRedacted: { email: created.email, role: created.role } } }); return created; }); return { data: row }; }
+
+  @UseGuards(SessionGuard)
+  @Get("settings/document-branding")
+  async getDocumentBranding(@Req() request: AuthenticatedRequest) {
+    requireActor(request);
+    const settings = await this.prisma.documentBranding.findUnique({ where: { id: "global" } });
+    return { data: { companyName: settings?.companyName ?? "FuelDesk", logoUrl: settings?.logoUrl ?? "", footerText: settings?.footerText ?? "" } };
+  }
+
+  @UseGuards(SessionGuard)
+  @Patch("settings/document-branding")
+  async updateDocumentBranding(
+    @Req() request: AuthenticatedRequest,
+    @Body() body: { companyName?: string; logoUrl?: string | null; footerText?: string | null }
+  ) {
+    const actor = requireOwner(request);
+    const companyName = body.companyName?.trim();
+    if (!companyName || companyName.length > 120 || /[\u0000-\u001f]/.test(companyName)) {
+      throw new BadRequestException("Company name is required and must be 120 characters or fewer");
+    }
+    if (body.logoUrl !== undefined && body.logoUrl !== null && typeof body.logoUrl !== "string") {
+      throw new BadRequestException("Logo URL must be text");
+    }
+    if (body.footerText !== undefined && body.footerText !== null && typeof body.footerText !== "string") {
+      throw new BadRequestException("Footer text must be text");
+    }
+    const logoValue = body.logoUrl?.trim() ?? "";
+    const footerValue = body.footerText?.trim() ?? "";
+    if (logoValue.length > 2048) throw new BadRequestException("Logo URL must be 2048 characters or fewer");
+    if (footerValue.length > 500 || /[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(footerValue)) {
+      throw new BadRequestException("Footer must be 500 characters or fewer and contain printable text");
+    }
+    let logoUrl: string | null = null;
+    if (logoValue) {
+      try {
+        logoUrl = validateLogoUrl(logoValue);
+      } catch (error) {
+        throw new BadRequestException(error instanceof Error ? error.message : "Invalid logo URL");
+      }
+    }
+    const footerText = footerValue || null;
+    const settings = await this.prisma.$transaction(async (tx) => {
+      const row = await tx.documentBranding.upsert({
+        where: { id: "global" },
+        create: { id: "global", companyName, logoUrl, footerText, updatedById: actor.id },
+        update: { companyName, logoUrl, footerText, updatedById: actor.id }
+      });
+      await tx.auditEvent.create({
+        data: {
+          actorId: actor.id,
+          entityType: "DocumentBranding",
+          entityId: row.id,
+          action: "UPDATED",
+          afterRedacted: { companyName, logoConfigured: Boolean(logoUrl), footerConfigured: Boolean(footerText) }
+        }
+      });
+      return row;
+    });
+    return { data: { companyName: settings.companyName, logoUrl: settings.logoUrl ?? "", footerText: settings.footerText ?? "" } };
+  }
 
   @UseGuards(SessionGuard)
   @Post("dispatches/:id/post")
@@ -1404,13 +1534,15 @@ export class AppController {
     });
     if (!inv) throw new NotFoundException("Invoice not found");
 
+    const branding = await this.documentBranding();
     const chunks: Buffer[] = [];
-    const doc = new PDFDocument({ autoFirstPage: true, info: { Title: `Invoice ${inv.invoiceNo}`, Author: "Fuel Wholesale System" } });
+    const doc = new PDFDocument({ autoFirstPage: true, bufferPages: true, info: { Title: `Invoice ${inv.invoiceNo}`, Author: "Fuel Wholesale System" } });
     doc.on("data", (chunk: Buffer) => chunks.push(chunk));
     doc.on("end", () => {
       response.type("application/pdf").send(Buffer.concat(chunks));
     });
 
+    drawDocumentLogo(doc, branding);
     doc.fontSize(18).text("COMMERCIAL INVOICE", { align: "right" });
     doc.fontSize(10).text(`Invoice No: ${inv.invoiceNo}`, { align: "right" });
     doc.text(`Issue Date: ${inv.issueDate.toISOString().slice(0, 10)}`, { align: "right" });
@@ -1442,6 +1574,7 @@ export class AppController {
     doc.moveDown();
     doc.fontSize(10).text(`Status: ${inv.status}`);
 
+    addDocumentFooter(doc, branding);
     doc.end();
   }
 
@@ -1511,8 +1644,7 @@ export class AppController {
   async createPayment(
     @Req() request: AuthenticatedRequest,
     @Headers("idempotency-key") headerKey: string | undefined,
-    @Body()
-    body: {
+    @Body() body: {
       customerId?: string;
       amount?: string;
       paymentDate?: string;
@@ -1523,170 +1655,35 @@ export class AppController {
     }
   ) {
     const actor = requireActor(request);
-    const key = headerKey?.trim();
-    if (key) {
-      const existing = await this.prisma.payment.findUnique({
-        where: { idempotencyKey: key },
-        include: { customer: true, allocations: true }
-      });
-      if (existing) {
-        return {
-          data: {
-            ...existing,
-            amount: existing.amount.toFixed(4),
-            allocatedAmount: existing.allocatedAmount.toFixed(4),
-            unappliedAmount: existing.unappliedAmount.toFixed(4),
-            replay: true
-          }
-        };
-      }
-    }
-
-    if (!body.customerId || !body.amount || !body.paymentDate) {
-      throw new BadRequestException("customerId, amount, and paymentDate are required");
-    }
-    const paymentAmount = positive(body.amount, "amount");
-    const paymentDate = new Date(body.paymentDate);
-    if (Number.isNaN(paymentDate.getTime())) throw new BadRequestException("Invalid paymentDate");
-
-    const payment = await this.prisma.$transaction(async (tx) => {
-      const [debtTotal, creditTotal] = await Promise.all([
-        tx.invoice.aggregate({ where: { customerId: body.customerId!, status: { in: ["UNPAID", "PARTIALLY_PAID"] } }, _sum: { balanceDue: true } }),
-        tx.payment.aggregate({ where: { customerId: body.customerId!, status: "POSTED" }, _sum: { unappliedAmount: true } })
-      ]);
-      const payable = Prisma.Decimal.max(dec("0"), (debtTotal._sum.balanceDue ?? dec("0")).sub(creditTotal._sum.unappliedAmount ?? dec("0")));
-      if (paymentAmount.gt(payable)) throw new BadRequestException(`Debt is $${payable.toFixed(2)}. You cannot pay more.`);
-      if (payable.isZero()) throw new BadRequestException("No debt to pay");
-      const openInvoices = await tx.invoice.findMany({
-        where: { customerId: body.customerId, status: { in: ["UNPAID", "PARTIALLY_PAID"] } },
-        orderBy: { issueDate: "asc" }
-      });
-
-      let remainingToAllocate = paymentAmount;
-      const allocationPlan: Array<{ invoiceId: string; amount: Prisma.Decimal }> = [];
-
-      if (body.allocations?.length) {
-        let manualSum = dec("0");
-        const openById = new Map(openInvoices.map((inv) => [inv.id, inv]));
-        for (const item of body.allocations) {
-          if (!item.invoiceId || !item.amount) throw new BadRequestException("Allocation item needs invoiceId and amount");
-          const targetInv = openById.get(item.invoiceId);
-          if (!targetInv) throw new BadRequestException(`Invoice ${item.invoiceId} is not an open invoice for this customer`);
-          const itemAmt = positive(item.amount, "allocation amount");
-          if (itemAmt.gt(targetInv.balanceDue)) {
-            throw new BadRequestException(`Allocation amount $${itemAmt.toFixed(4)} exceeds invoice balance $${targetInv.balanceDue.toFixed(4)}`);
-          }
-          manualSum = manualSum.add(itemAmt);
-          allocationPlan.push({ invoiceId: item.invoiceId, amount: itemAmt });
-        }
-        if (manualSum.gt(paymentAmount)) {
-          throw new BadRequestException("Total allocation exceeds payment amount");
-        }
-        remainingToAllocate = paymentAmount.sub(manualSum);
-      } else {
-        for (const inv of openInvoices) {
-          if (remainingToAllocate.lte(0)) break;
-          const allocAmt = Prisma.Decimal.min(remainingToAllocate, inv.balanceDue);
-          allocationPlan.push({ invoiceId: inv.id, amount: allocAmt });
-          remainingToAllocate = remainingToAllocate.sub(allocAmt);
-        }
-      }
-
-      const totalAllocated = allocationPlan.reduce((sum, item) => sum.add(item.amount), dec("0"));
-      const unappliedAmount = paymentAmount.sub(totalAllocated);
-      const paymentNo = documentNo("PAY");
-
-      const pay = await tx.payment.create({
-        data: {
-          paymentNo,
-          customerId: body.customerId!,
-          amount: paymentAmount,
-          allocatedAmount: totalAllocated,
-          unappliedAmount,
-          paymentDate,
-          paymentMethod: body.paymentMethod || "CASH",
-          reference: body.reference?.trim() || null,
-          notes: body.notes?.trim() || null,
-          idempotencyKey: key || null,
-          status: "POSTED",
-          recordedById: actor.id
-        }
-      });
-
-      for (const item of allocationPlan) {
-        await tx.paymentAllocation.create({
-          data: {
-            paymentId: pay.id,
-            invoiceId: item.invoiceId,
-            amount: item.amount,
-            createdById: actor.id
-          }
-        });
-
-        const targetInvoice = openInvoices.find((i) => i.id === item.invoiceId) || (await tx.invoice.findUniqueOrThrow({ where: { id: item.invoiceId } }));
-        const newPaid = targetInvoice.paidAmount.add(item.amount);
-        const newBalance = targetInvoice.totalAmount.sub(newPaid);
-        const newStatus = newBalance.lte(0) ? "PAID" : "PARTIALLY_PAID";
-
-        await tx.invoice.update({
-          where: { id: item.invoiceId },
-          data: { paidAmount: newPaid, balanceDue: newBalance, status: newStatus }
-        });
-      }
-
-      const lastEntry = await tx.customerLedgerEntry.findFirst({ where: { customerId: body.customerId }, orderBy: { occurredAt: "desc" } });
-      const prevBalance = lastEntry ? lastEntry.runningBalance : dec("0");
-      const runningBalance = prevBalance.sub(paymentAmount);
-      await tx.customerLedgerEntry.create({
-        data: {
-          customerId: body.customerId!,
-          entryType: "PAYMENT",
-          referenceNo: pay.paymentNo,
-          debitAmount: dec("0"),
-          creditAmount: paymentAmount,
-          runningBalance,
-          sourceType: "Payment",
-          sourceId: pay.id,
-          notes: body.reference ? `Ref: ${body.reference}` : undefined
-        }
-      });
-
-      await tx.auditEvent.create({
-        data: {
-          actorId: actor.id,
-          entityType: "Payment",
-          entityId: pay.id,
-          action: "RECORDED",
-          afterRedacted: { paymentNo: pay.paymentNo, amount: pay.amount.toFixed(4) }
-        }
-      });
-
-      return tx.payment.findUniqueOrThrow({
-        where: { id: pay.id },
-        include: { customer: true, allocations: { include: { invoice: true } } }
-      });
+    if (body.allocations?.length) throw new BadRequestException("Payments are assigned automatically to the oldest debt");
+    if (!body.customerId || !body.amount) throw new BadRequestException("Customer and amount are required");
+    const result = await this.simpleWorkflows.payment(actor, headerKey, {
+      customerId: body.customerId,
+      amount: body.amount,
+      paymentDate: body.paymentDate,
+      method: body.paymentMethod,
+      reference: body.reference,
+      notes: body.notes
     });
-
+    const saved = await this.prisma.payment.findUniqueOrThrow({
+      where: { id: String(result.id) },
+      include: { customer: true, recordedBy: true }
+    });
     return {
       data: {
-        ...payment,
-        amount: payment.amount.toFixed(4),
-        allocatedAmount: payment.allocatedAmount.toFixed(4),
-        unappliedAmount: payment.unappliedAmount.toFixed(4),
-        allocations: payment.allocations.map((a) => ({
-          ...a,
-          amount: a.amount.toFixed(4),
-          invoice: {
-            ...a.invoice,
-            totalAmount: a.invoice.totalAmount.toFixed(4),
-            paidAmount: a.invoice.paidAmount.toFixed(4),
-            balanceDue: a.invoice.balanceDue.toFixed(4)
-          }
-        }))
+        id: saved.id,
+        paymentNo: saved.paymentNo,
+        customer: saved.customer,
+        paymentDate: saved.paymentDate,
+        paymentMethod: saved.paymentMethod,
+        reference: saved.reference,
+        amount: saved.amount.toFixed(4),
+        status: saved.status,
+        recordedBy: saved.recordedBy,
+        replay: Boolean(result.replay)
       }
     };
   }
-
   @UseGuards(SessionGuard)
   @Get("payments")
   async payments(
@@ -1788,13 +1785,15 @@ export class AppController {
     });
     if (!p) throw new NotFoundException("Payment not found");
 
+    const branding = await this.documentBranding();
     const chunks: Buffer[] = [];
-    const doc = new PDFDocument({ autoFirstPage: true, info: { Title: `Payment Receipt ${p.paymentNo}`, Author: "Fuel Wholesale System" } });
+    const doc = new PDFDocument({ autoFirstPage: true, bufferPages: true, info: { Title: `Payment Receipt ${p.paymentNo}`, Author: "Fuel Wholesale System" } });
     doc.on("data", (chunk: Buffer) => chunks.push(chunk));
     doc.on("end", () => {
       response.type("application/pdf").send(Buffer.concat(chunks));
     });
 
+    drawDocumentLogo(doc, branding);
     doc.fontSize(18).text("OFFICIAL PAYMENT RECEIPT", { align: "right" });
     doc.fontSize(10).text(`Receipt No: ${p.paymentNo}`, { align: "right" });
     doc.text(`Date: ${p.paymentDate.toISOString().slice(0, 10)}`, { align: "right" });
@@ -1807,144 +1806,68 @@ export class AppController {
     doc.text(`Collected By: ${p.recordedBy.displayName}`);
     doc.moveDown();
 
-    doc.fontSize(14).text(`Amount Received: $${p.amount.toFixed(4)}`);
+    doc.fontSize(14).text(`Amount Received: $${p.amount.toFixed(2)}`);
     doc.moveDown();
 
     if (p.allocations.length) {
-      doc.fontSize(11).text("Allocated Invoices:");
+      doc.fontSize(11).text("Paid Toward Delivered Orders:");
       doc.text("------------------------------------------------------------------");
       for (const [idx, alloc] of p.allocations.entries()) {
-        doc.text(`${idx + 1}. Invoice ${alloc.invoice.invoiceNo} | Allocated: $${alloc.amount.toFixed(4)} | Invoice Balance Due: $${alloc.invoice.balanceDue.toFixed(4)}`);
+        doc.text(`${idx + 1}. ${alloc.invoice.invoiceNo} | Paid: $${alloc.amount.toFixed(2)} | Remaining: $${alloc.invoice.balanceDue.toFixed(2)}`);
       }
       doc.text("------------------------------------------------------------------");
       doc.moveDown();
     }
 
-    doc.fontSize(11).text(`Total Allocated: $${p.allocatedAmount.toFixed(4)}`);
-    doc.text(`Unapplied Customer Credit: $${p.unappliedAmount.toFixed(4)}`);
+    doc.fontSize(11).text(`Paid toward delivered sales: $${p.allocatedAmount.toFixed(2)}`);
+    if (p.unappliedAmount.gt(0)) doc.text(`${p.orderId ? "Order payment awaiting delivery" : "Needs Owner review"}: $${p.unappliedAmount.toFixed(2)}`);
 
+    addDocumentFooter(doc, branding);
     doc.end();
   }
 
   @UseGuards(SessionGuard)
   @Post("payments/:id/reverse")
-  async reversePayment(@Req() request: AuthenticatedRequest, @Param("id") id: string, @Body() body: { reason?: string }) {
-    const actor = requireOwner(request);
-    if (!body.reason?.trim()) throw new BadRequestException("Reason is required for payment reversal");
-
-    const pay = await this.prisma.payment.findUnique({
-      where: { id },
-      include: { allocations: { include: { invoice: true } } }
-    });
-    if (!pay) throw new NotFoundException("Payment not found");
-    if (pay.status === "REVERSED") throw new BadRequestException("Payment is already reversed");
-
-    const updated = await this.prisma.$transaction(async (tx) => {
-      for (const alloc of pay.allocations) {
-        const inv = alloc.invoice;
-        const restoredPaid = inv.paidAmount.sub(alloc.amount);
-        const restoredBalance = inv.totalAmount.sub(restoredPaid);
-        const restoredStatus = restoredPaid.gt(0) ? "PARTIALLY_PAID" : "UNPAID";
-
-        await tx.invoice.update({
-          where: { id: inv.id },
-          data: { paidAmount: restoredPaid, balanceDue: restoredBalance, status: restoredStatus }
-        });
-      }
-
-      const reversalNo = documentNo("PREV");
-      await tx.paymentReversal.create({
-        data: {
-          reversalNo,
-          paymentId: pay.id,
-          reason: body.reason!,
-          reversedById: actor.id
-        }
-      });
-
-      const rev = await tx.payment.update({
-        where: { id },
-        data: { status: "REVERSED", allocatedAmount: dec("0"), unappliedAmount: dec("0") }
-      });
-
-      const lastEntry = await tx.customerLedgerEntry.findFirst({ where: { customerId: pay.customerId }, orderBy: { occurredAt: "desc" } });
-      const prevBalance = lastEntry ? lastEntry.runningBalance : dec("0");
-      const runningBalance = prevBalance.add(pay.amount);
-      await tx.customerLedgerEntry.create({
-        data: {
-          customerId: pay.customerId,
-          entryType: "REVERSAL",
-          referenceNo: reversalNo,
-          debitAmount: pay.amount,
-          creditAmount: dec("0"),
-          runningBalance,
-          sourceType: "PaymentReversal",
-          sourceId: pay.id,
-          notes: body.reason
-        }
-      });
-
-      await tx.auditEvent.create({
-        data: {
-          actorId: actor.id,
-          entityType: "Payment",
-          entityId: pay.id,
-          action: "REVERSED",
-          reason: body.reason
-        }
-      });
-
-      return rev;
-    });
-
-    return {
-      data: {
-        ...updated,
-        amount: updated.amount.toFixed(4),
-        allocatedAmount: updated.allocatedAmount.toFixed(4),
-        unappliedAmount: updated.unappliedAmount.toFixed(4)
-      }
-    };
+  async reversePayment(
+    @Req() request: AuthenticatedRequest,
+    @Param("id") id: string,
+    @Headers("idempotency-key") headerKey: string | undefined,
+    @Body() body: { reason?: string }
+  ) {
+    return { data: await this.simpleWorkflows.reversePayment(requireOwner(request), headerKey, id, body.reason) };
   }
-
   @UseGuards(SessionGuard)
   @Get("financial/debts")
   async accountsReceivableSummary() {
     const customers = await this.prisma.customer.findMany({
       where: { status: { in: ["ACTIVE", "HOLD"] } },
       include: {
-        invoices: { where: { status: { in: ["UNPAID", "PARTIALLY_PAID"] } } },
-        payments: { where: { status: "POSTED" } }
+        invoices: { where: { status: { in: ["UNPAID", "PARTIALLY_PAID"] } } }
       }
     });
 
-    let totalInvoicedSum = dec("0");
+    let totalSalesSum = dec("0");
     let totalPaidSum = dec("0");
     let totalDebtSum = dec("0");
-    let totalUnappliedSum = dec("0");
+    let totalPendingSum = dec("0");
+    let totalReviewSum = dec("0");
 
     const items = [];
 
     for (const cust of customers) {
       const openInvoices = cust.invoices;
       const custDebt = openInvoices.reduce((sum, inv) => sum.add(inv.balanceDue), dec("0"));
-      const custUnapplied = cust.payments.reduce((sum, p) => sum.add(p.unappliedAmount), dec("0"));
-      const custTotalInvoiced = await this.prisma.invoice.aggregate({
-        where: { customerId: cust.id, status: { not: "REVERSED" } },
-        _sum: { totalAmount: true }
-      });
-      const custTotalPaid = await this.prisma.payment.aggregate({
-        where: { customerId: cust.id, status: "POSTED" },
-        _sum: { amount: true }
-      });
+      const account = await this.customerAccounts.read(cust.id);
+      const invTotal = dec(account.summary.totalSales);
+      const payTotal = dec(account.summary.totalPaid);
+      const pendingTotal = dec(account.summary.pendingOrderRemaining);
+      const reviewTotal = dec(account.summary.moneyToReview);
 
-      const invTotal = custTotalInvoiced._sum.totalAmount ?? dec("0");
-      const payTotal = custTotalPaid._sum.amount ?? dec("0");
-
-      totalInvoicedSum = totalInvoicedSum.add(invTotal);
+      totalSalesSum = totalSalesSum.add(invTotal);
       totalPaidSum = totalPaidSum.add(payTotal);
       totalDebtSum = totalDebtSum.add(custDebt);
-      totalUnappliedSum = totalUnappliedSum.add(custUnapplied);
+      totalPendingSum = totalPendingSum.add(pendingTotal);
+      totalReviewSum = totalReviewSum.add(reviewTotal);
 
       const now = new Date();
       let agingCurrent = dec("0");
@@ -1966,11 +1889,11 @@ export class AppController {
         name: cust.name,
         primaryPhone: cust.primaryPhone,
         status: cust.status,
-        totalInvoiced: invTotal.toFixed(4),
+        totalSales: invTotal.toFixed(2),
         totalPaid: payTotal.toFixed(4),
-        outstandingDebt: custDebt.toFixed(4),
-        unappliedCredit: custUnapplied.toFixed(4),
-        netBalance: custDebt.sub(custUnapplied).toFixed(4),
+        remainingDebt: custDebt.toFixed(2),
+        pendingOrders: pendingTotal.toFixed(2),
+        moneyToReview: reviewTotal.toFixed(2),
         aging: {
           current: agingCurrent.toFixed(4),
           days31To60: aging30.toFixed(4),
@@ -1983,11 +1906,11 @@ export class AppController {
     return {
       data: {
         totals: {
-          totalInvoiced: totalInvoicedSum.toFixed(4),
-          totalPaid: totalPaidSum.toFixed(4),
-          outstandingDebt: totalDebtSum.toFixed(4),
-          unappliedCredit: totalUnappliedSum.toFixed(4),
-          netPosition: totalDebtSum.sub(totalUnappliedSum).toFixed(4)
+          totalSales: totalSalesSum.toFixed(2),
+          totalPaid: totalPaidSum.toFixed(2),
+          remainingDebt: totalDebtSum.toFixed(2),
+          pendingOrders: totalPendingSum.toFixed(2),
+          moneyToReview: totalReviewSum.toFixed(2)
         },
         customers: items
       }
@@ -1995,30 +1918,33 @@ export class AppController {
   }
 
   @UseGuards(SessionGuard)
+  @Get("customers/:id/account")
+  async customerAccount(
+    @Param("id") id: string,
+    @Query("fromDate") fromDate?: string,
+    @Query("toDate") toDate?: string
+  ) {
+    return { data: await this.customerAccounts.read(id, fromDate, toDate) };
+  }
+
+  @UseGuards(SessionGuard)
   @Get("customers/:id/financial")
   async customerFinancialSummary(@Param("id") id: string) {
-    const cust = await this.prisma.customer.findUnique({ where: { id } });
-    if (!cust) throw new NotFoundException("Customer not found");
-
-    const invoices = await this.prisma.invoice.findMany({ where: { customerId: id, status: { not: "REVERSED" } } });
-    const payments = await this.prisma.payment.findMany({ where: { customerId: id, status: "POSTED" } });
-
-    const totalInvoiced = invoices.reduce((sum, i) => sum.add(i.totalAmount), dec("0"));
-    const outstandingDebt = invoices.filter((i) => ["UNPAID", "PARTIALLY_PAID"].includes(i.status)).reduce((sum, i) => sum.add(i.balanceDue), dec("0"));
-    const totalPaid = payments.reduce((sum, p) => sum.add(p.amount), dec("0"));
-    const unappliedCredit = payments.reduce((sum, p) => sum.add(p.unappliedAmount), dec("0"));
+    const account = await this.customerAccounts.read(id);
 
     return {
       data: {
-        customerId: cust.id,
-        code: cust.code,
-        name: cust.name,
-        status: cust.status,
-        totalInvoiced: totalInvoiced.toFixed(4),
-        totalPaid: totalPaid.toFixed(4),
-        outstandingDebt: outstandingDebt.toFixed(4),
-        unappliedCredit: unappliedCredit.toFixed(4),
-        netPosition: outstandingDebt.sub(unappliedCredit).toFixed(4)
+        customerId: account.customer.id,
+        code: account.customer.code,
+        name: account.customer.name,
+        status: account.customer.status,
+        totalInvoiced: account.summary.totalSales,
+        totalPaid: account.summary.totalPaid,
+        outstandingDebt: account.summary.remainingDebt,
+        unappliedCredit: "0.0000",
+        pendingOrderRemaining: account.summary.pendingOrderRemaining,
+        moneyToReview: account.summary.moneyToReview,
+        netPosition: account.summary.remainingDebt
       }
     };
   }
@@ -2040,14 +1966,46 @@ export class AppController {
   @UseGuards(SessionGuard)
   @Get("customers/:id/statement/pdf")
   async customerStatementPdf(@Param("id") id: string, @Res() response: Response, @Query("fromDate") fromDate?: string, @Query("toDate") toDate?: string) {
-    const { data } = await this.customerStatement(id, fromDate, toDate);
-    const label = (value: string) => dec(value).lt(0) ? "Customer credit $" + dec(value).abs().toFixed(2) : "Debt $" + dec(value).toFixed(2);
-    const pdf = await exportToPdf({
-      title: "FuelDesk - Customer Statement",
-      subtitle: data.customer.name + " | " + (data.customer.phone ?? "") + " | " + (fromDate ?? "Start") + " to " + (toDate ?? "Today"),
-      filters: { Opening: label(data.openingBalance), Closing: label(data.closingBalance) },
-      columns: [{header:"Date",key:"date"},{header:"Type",key:"type"},{header:"Reference",key:"reference"},{header:"Amount",key:"amount"},{header:"Balance",key:"balance"}],
-      rows: data.entries.map(e=>({date:new Intl.DateTimeFormat("en-GB",{timeZone:"Africa/Mogadishu"}).format(e.occurredAt),type:e.entryType==="INVOICE"?"Sale":e.entryType==="PAYMENT"?"Payment":e.entryType==="REVERSAL"?"Reversal":"Adjustment",reference:e.referenceNo,amount:"$"+dec(e.debitAmount).sub(e.creditAmount).abs().toFixed(2),balance:label(e.runningBalance)})),
+    const account = await this.customerAccounts.read(id, fromDate, toDate);
+    const { start, end } = statementBounds(fromDate, toDate);
+    const dateFormatter = new Intl.DateTimeFormat("en-GB", { timeZone: "Africa/Mogadishu", day: "2-digit", month: "short", year: "numeric" });
+    const timeFormatter = new Intl.DateTimeFormat("en-GB", { timeZone: "Africa/Mogadishu", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+    const inPeriod = (value: Date) => (!start || value >= start) && (!end || value < end);
+    const opening = Prisma.Decimal.max(dec("0"), dec(account.summary.openingBalance));
+    const closing = Prisma.Decimal.max(dec("0"), dec(account.summary.closingBalance));
+    const pdf = await createCustomerStatementPdf({
+      customer: { name: account.customer.name, phone: account.customer.phone, location: account.customer.location },
+      period: `${fromDate ?? "Start"} – ${toDate ?? dateFormatter.format(new Date())}`,
+      generatedAt: `${dateFormatter.format(new Date())}, ${timeFormatter.format(new Date())}`,
+      openingDebt: opening.toFixed(2),
+      closingDebt: closing.toFixed(2),
+      totalSales: dec(account.summary.totalSales).toFixed(2),
+      totalPaid: dec(account.summary.totalPaid).toFixed(2),
+      remainingDebt: dec(account.summary.remainingDebt).toFixed(2),
+      pendingOrderRemaining: dec(account.summary.pendingOrderRemaining).toFixed(2),
+      moneyToReview: dec(account.summary.moneyToReview).toFixed(2),
+      orders: account.orders
+        .filter((order) => !end || order.orderDate < end)
+        .map((order) => {
+          const debt = dec(order.debt);
+          const pending = dec(order.pendingRemaining);
+          return {
+            date: dateFormatter.format(order.orderDate),
+            orderNo: order.orderNo,
+            fuel: order.fuel,
+            acceptedSale: dec(order.deliveredTotal).toFixed(2),
+            paid: dec(order.paidOnOrder).toFixed(2),
+            remaining: debt.gt(0) ? debt.toFixed(2) : pending.toFixed(2),
+            remainingLabel: debt.gt(0) ? "Debt" as const : pending.gt(0) ? "Order Remaining" as const : "Settled" as const,
+            payments: order.payments.filter((payment) => inPeriod(payment.date)).map((payment) => ({
+              date: dateFormatter.format(payment.date),
+              reference: compactPaymentReference(payment.reference),
+              amount: dec(payment.amount).toFixed(2),
+              status: payment.status === "REVERSED" ? "Reversed" : "Paid"
+            }))
+          };
+        }),
+      branding: await this.documentBranding()
     });
     response.setHeader("Content-Disposition", "inline; filename=customer-statement.pdf");
     response.type("application/pdf").send(pdf);
@@ -2213,12 +2171,13 @@ export class AppController {
       { header: "Customer Name", key: "name", width: 25 },
       { header: "Phone", key: "primaryPhone", width: 15 },
       { header: "Status", key: "status", width: 10 },
-      { header: "Total Invoiced", key: "totalInvoiced", format: "currency", align: "right" },
+      { header: "Total Sales", key: "totalSales", format: "currency", align: "right" },
       { header: "Total Paid", key: "totalPaid", format: "currency", align: "right" },
-      { header: "Debt Due", key: "outstandingDebt", format: "currency", align: "right" },
-      { header: "Net Position", key: "netBalance", format: "currency", align: "right" }
+      { header: "Debt", key: "remainingDebt", format: "currency", align: "right" },
+      { header: "Pending Orders", key: "pendingOrders", format: "currency", align: "right" },
+      { header: "Needs Review", key: "moneyToReview", format: "currency", align: "right" }
     ];
-    const pdfBuffer = await exportToPdf({
+    const pdfBuffer = await this.exportPdf({
       title: "Customer List & Financial Position Report",
       columns,
       rows: data.data.customers,
@@ -2236,12 +2195,13 @@ export class AppController {
       { header: "Customer Name", key: "name", width: 25 },
       { header: "Phone", key: "primaryPhone", width: 15 },
       { header: "Status", key: "status", width: 10 },
-      { header: "Total Invoiced", key: "totalInvoiced", format: "currency", align: "right" },
+      { header: "Total Sales", key: "totalSales", format: "currency", align: "right" },
       { header: "Total Paid", key: "totalPaid", format: "currency", align: "right" },
-      { header: "Debt Due", key: "outstandingDebt", format: "currency", align: "right" },
-      { header: "Net Position", key: "netBalance", format: "currency", align: "right" }
+      { header: "Debt", key: "remainingDebt", format: "currency", align: "right" },
+      { header: "Pending Orders", key: "pendingOrders", format: "currency", align: "right" },
+      { header: "Needs Review", key: "moneyToReview", format: "currency", align: "right" }
     ];
-    const xlsxBuffer = await exportToExcel({
+    const xlsxBuffer = await this.exportExcel({
       title: "Customer List & Financial Position Report",
       columns,
       rows: data.data.customers,
@@ -2263,9 +2223,9 @@ export class AppController {
     const rows = data.data.customers.map((c) => ({
       code: c.code,
       name: c.name,
-      outstandingDebt: c.outstandingDebt,
-      unappliedCredit: c.unappliedCredit,
-      netBalance: c.netBalance,
+      remainingDebt: c.remainingDebt,
+      pendingOrders: c.pendingOrders,
+      moneyToReview: c.moneyToReview,
       current: c.aging.current,
       days31To60: c.aging.days31To60,
       days61To90: c.aging.days61To90,
@@ -2274,15 +2234,15 @@ export class AppController {
     const columns: ColumnDef[] = [
       { header: "Code", key: "code", width: 12 },
       { header: "Customer Name", key: "name", width: 22 },
-      { header: "Total Debt", key: "outstandingDebt", format: "currency", align: "right" },
-      { header: "Credit", key: "unappliedCredit", format: "currency", align: "right" },
-      { header: "Net Debt", key: "netBalance", format: "currency", align: "right" },
+      { header: "Total Debt", key: "remainingDebt", format: "currency", align: "right" },
+      { header: "Pending Orders", key: "pendingOrders", format: "currency", align: "right" },
+      { header: "Needs Review", key: "moneyToReview", format: "currency", align: "right" },
       { header: "Current", key: "current", format: "currency", align: "right" },
       { header: "31-60 Days", key: "days31To60", format: "currency", align: "right" },
       { header: "61-90 Days", key: "days61To90", format: "currency", align: "right" },
       { header: "90+ Days", key: "days90Plus", format: "currency", align: "right" }
     ];
-    const pdfBuffer = await exportToPdf({ title: "Accounts Receivable Debt Aging Report", columns, rows });
+    const pdfBuffer = await this.exportPdf({ title: "Accounts Receivable Debt Aging Report", columns, rows });
     response.type("application/pdf").send(pdfBuffer);
   }
 
@@ -2293,9 +2253,9 @@ export class AppController {
     const rows = data.data.customers.map((c) => ({
       code: c.code,
       name: c.name,
-      outstandingDebt: c.outstandingDebt,
-      unappliedCredit: c.unappliedCredit,
-      netBalance: c.netBalance,
+      remainingDebt: c.remainingDebt,
+      pendingOrders: c.pendingOrders,
+      moneyToReview: c.moneyToReview,
       current: c.aging.current,
       days31To60: c.aging.days31To60,
       days61To90: c.aging.days61To90,
@@ -2304,15 +2264,15 @@ export class AppController {
     const columns: ColumnDef[] = [
       { header: "Code", key: "code", width: 12 },
       { header: "Customer Name", key: "name", width: 22 },
-      { header: "Total Debt", key: "outstandingDebt", format: "currency", align: "right" },
-      { header: "Credit", key: "unappliedCredit", format: "currency", align: "right" },
-      { header: "Net Debt", key: "netBalance", format: "currency", align: "right" },
+      { header: "Total Debt", key: "remainingDebt", format: "currency", align: "right" },
+      { header: "Pending Orders", key: "pendingOrders", format: "currency", align: "right" },
+      { header: "Needs Review", key: "moneyToReview", format: "currency", align: "right" },
       { header: "Current", key: "current", format: "currency", align: "right" },
       { header: "31-60 Days", key: "days31To60", format: "currency", align: "right" },
       { header: "61-90 Days", key: "days61To90", format: "currency", align: "right" },
       { header: "90+ Days", key: "days90Plus", format: "currency", align: "right" }
     ];
-    const xlsxBuffer = await exportToExcel({ title: "Accounts Receivable Debt Aging Report", columns, rows });
+    const xlsxBuffer = await this.exportExcel({ title: "Accounts Receivable Debt Aging Report", columns, rows });
     response.type("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet").send(xlsxBuffer);
   }
 
@@ -2348,7 +2308,7 @@ export class AppController {
       ...e,
       occurredAt: e.occurredAt.toISOString().slice(0, 10)
     }));
-    const xlsxBuffer = await exportToExcel({
+    const xlsxBuffer = await this.exportExcel({
       title: `Statement of Account — ${data.data.customer.name}`,
       columns,
       rows
@@ -2403,7 +2363,7 @@ export class AppController {
       { header: "Total ($)", key: "lineTotal", format: "currency", align: "right" },
       { header: "Status", key: "status", width: 14 }
     ];
-    const pdfBuffer = await exportToPdf({ title: "Sales Orders Report", columns, rows: data.data.items });
+    const pdfBuffer = await this.exportPdf({ title: "Sales Orders Report", columns, rows: data.data.items });
     response.type("application/pdf").send(pdfBuffer);
   }
 
@@ -2421,7 +2381,7 @@ export class AppController {
       { header: "Total ($)", key: "lineTotal", format: "currency", align: "right" },
       { header: "Status", key: "status", width: 14 }
     ];
-    const xlsxBuffer = await exportToExcel({ title: "Sales Orders Report", columns, rows: data.data.items });
+    const xlsxBuffer = await this.exportExcel({ title: "Sales Orders Report", columns, rows: data.data.items });
     response.type("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet").send(xlsxBuffer);
   }
 
@@ -2434,26 +2394,27 @@ export class AppController {
     const payments = await this.prisma.payment.findMany({
       where: {
         paymentDate: { gte: start, lte: end },
-        status: "POSTED",
         ...(customerId ? { customerId } : {})
       },
-      include: { customer: true, recordedBy: true },
-      orderBy: { paymentDate: "desc" }
+      include: { customer: true, recordedBy: true, order: true, allocations: { include: { invoice: { include: { lines: { include: { orderLine: { include: { order: true } } } } } } } } },
+      orderBy: [{ paymentDate: "desc" }, { id: "desc" }]
     });
 
-    const items = payments.map((p) => ({
-      paymentNo: p.paymentNo,
+    const items = payments.map((p) => {
+      const orderNumbers = new Set<string>();
+      if (p.order) orderNumbers.add(p.order.orderNo);
+      for (const allocation of p.allocations) for (const line of allocation.invoice.lines) orderNumbers.add(line.orderLine.order.orderNo);
+      return {
       paymentDate: p.paymentDate.toISOString().slice(0, 10),
       customerName: p.customer.name,
-      paymentMethod: p.paymentMethod,
-      reference: p.reference ?? "—",
-      amount: p.amount.toFixed(4),
-      allocatedAmount: p.allocatedAmount.toFixed(4),
-      unappliedAmount: p.unappliedAmount.toFixed(4),
+      order: orderNumbers.size === 0 ? "Needs review" : orderNumbers.size === 1 ? [...orderNumbers][0]! : "Multiple orders",
+      paid: p.amount.toFixed(2),
+      status: p.status === "REVERSED" ? "Reversed" : p.orderId ? "Order payment" : "Paid",
       recordedBy: p.recordedBy.displayName
-    }));
+    }; });
+    const totalCollected = payments.reduce((sum, payment) => payment.status === "POSTED" ? sum.add(payment.amount) : sum, dec("0"));
 
-    return { data: { period: { from: start.toISOString().slice(0, 10), to: end.toISOString().slice(0, 10) }, items } };
+    return { data: { period: { from: start.toISOString().slice(0, 10), to: end.toISOString().slice(0, 10) }, totals: { totalCollected: totalCollected.toFixed(2) }, items } };
   }
 
   @UseGuards(SessionGuard)
@@ -2461,16 +2422,14 @@ export class AppController {
   async reportsCollectionsPdf(@Query("fromDate") fromDate: string | undefined, @Query("toDate") toDate: string | undefined, @Query("customerId") customerId: string | undefined, @Res() response: Response) {
     const data = await this.reportsCollections(fromDate, toDate, customerId);
     const columns: ColumnDef[] = [
-      { header: "Payment No", key: "paymentNo", width: 14 },
       { header: "Date", key: "paymentDate", width: 12 },
       { header: "Customer", key: "customerName", width: 22 },
-      { header: "Method", key: "paymentMethod", width: 14 },
-      { header: "Reference", key: "reference", width: 16 },
-      { header: "Amount ($)", key: "amount", format: "currency", align: "right" },
-      { header: "Allocated ($)", key: "allocatedAmount", format: "currency", align: "right" },
-      { header: "Unapplied ($)", key: "unappliedAmount", format: "currency", align: "right" }
+      { header: "Order", key: "order", width: 18 },
+      { header: "Paid ($)", key: "paid", format: "currency", align: "right" },
+      { header: "Status", key: "status", width: 15 },
+      { header: "Recorded by", key: "recordedBy", width: 18 }
     ];
-    const pdfBuffer = await exportToPdf({ title: "Payment Collections Report", columns, rows: data.data.items });
+    const pdfBuffer = await this.exportPdf({ title: "Payment Collections Report", columns, rows: data.data.items });
     response.type("application/pdf").send(pdfBuffer);
   }
 
@@ -2479,16 +2438,14 @@ export class AppController {
   async reportsCollectionsXlsx(@Query("fromDate") fromDate: string | undefined, @Query("toDate") toDate: string | undefined, @Query("customerId") customerId: string | undefined, @Res() response: Response) {
     const data = await this.reportsCollections(fromDate, toDate, customerId);
     const columns: ColumnDef[] = [
-      { header: "Payment No", key: "paymentNo", width: 14 },
       { header: "Date", key: "paymentDate", width: 12 },
       { header: "Customer", key: "customerName", width: 22 },
-      { header: "Method", key: "paymentMethod", width: 14 },
-      { header: "Reference", key: "reference", width: 16 },
-      { header: "Amount ($)", key: "amount", format: "currency", align: "right" },
-      { header: "Allocated ($)", key: "allocatedAmount", format: "currency", align: "right" },
-      { header: "Unapplied ($)", key: "unappliedAmount", format: "currency", align: "right" }
+      { header: "Order", key: "order", width: 18 },
+      { header: "Paid ($)", key: "paid", format: "currency", align: "right" },
+      { header: "Status", key: "status", width: 15 },
+      { header: "Recorded by", key: "recordedBy", width: 18 }
     ];
-    const xlsxBuffer = await exportToExcel({ title: "Payment Collections Report", columns, rows: data.data.items });
+    const xlsxBuffer = await this.exportExcel({ title: "Payment Collections Report", columns, rows: data.data.items });
     response.type("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet").send(xlsxBuffer);
   }
 
@@ -2519,7 +2476,7 @@ export class AppController {
       { header: "Location", key: "location", width: 18 },
       { header: "Balance (Liters)", key: "balanceLiters", format: "decimal", align: "right" }
     ];
-    const pdfBuffer = await exportToPdf({ title: "Inventory Stock Balances Report", columns, rows: data.data.items });
+    const pdfBuffer = await this.exportPdf({ title: "Inventory Stock Balances Report", columns, rows: data.data.items });
     response.type("application/pdf").send(pdfBuffer);
   }
 
@@ -2533,7 +2490,7 @@ export class AppController {
       { header: "Location", key: "location", width: 18 },
       { header: "Balance (Liters)", key: "balanceLiters", format: "decimal", align: "right" }
     ];
-    const xlsxBuffer = await exportToExcel({ title: "Inventory Stock Balances Report", columns, rows: data.data.items });
+    const xlsxBuffer = await this.exportExcel({ title: "Inventory Stock Balances Report", columns, rows: data.data.items });
     response.type("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet").send(xlsxBuffer);
   }
 
@@ -2588,7 +2545,7 @@ export class AppController {
         : []),
       { header: "Status", key: "status", width: 12 }
     ];
-    const pdfBuffer = await exportToPdf({ title: "Fuel Stock Purchases Report", columns, rows: data.data.items });
+    const pdfBuffer = await this.exportPdf({ title: "Fuel Stock Purchases Report", columns, rows: data.data.items });
     response.type("application/pdf").send(pdfBuffer);
   }
 
@@ -2612,7 +2569,7 @@ export class AppController {
         : []),
       { header: "Status", key: "status", width: 12 }
     ];
-    const xlsxBuffer = await exportToExcel({ title: "Fuel Stock Purchases Report", columns, rows: data.data.items });
+    const xlsxBuffer = await this.exportExcel({ title: "Fuel Stock Purchases Report", columns, rows: data.data.items });
     response.type("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet").send(xlsxBuffer);
   }
 
@@ -2673,7 +2630,7 @@ export class AppController {
       { header: "Returned (L)", key: "physicalReturnedLiters", format: "decimal", align: "right" },
       { header: "Status", key: "status", width: 14 }
     ];
-    const pdfBuffer = await exportToPdf({ title: "Actual Delivery & Reconciliation Report (Non-Financial)", columns, rows: data.data.items });
+    const pdfBuffer = await this.exportPdf({ title: "Actual Delivery & Reconciliation Report (Non-Financial)", columns, rows: data.data.items });
     response.type("application/pdf").send(pdfBuffer);
   }
 
@@ -2691,7 +2648,7 @@ export class AppController {
       { header: "Returned (L)", key: "physicalReturnedLiters", format: "decimal", align: "right" },
       { header: "Status", key: "status", width: 14 }
     ];
-    const xlsxBuffer = await exportToExcel({ title: "Actual Delivery & Reconciliation Report (Non-Financial)", columns, rows: data.data.items });
+    const xlsxBuffer = await this.exportExcel({ title: "Actual Delivery & Reconciliation Report (Non-Financial)", columns, rows: data.data.items });
     response.type("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet").send(xlsxBuffer);
   }
 
@@ -2739,7 +2696,7 @@ export class AppController {
       { header: "Balance Due ($)", key: "balanceDue", format: "currency", align: "right" },
       { header: "Status", key: "status", width: 14 }
     ];
-    const pdfBuffer = await exportToPdf({ title: "Invoices & Revenue Ledger Report", columns, rows: data.data.items });
+    const pdfBuffer = await this.exportPdf({ title: "Invoices & Revenue Ledger Report", columns, rows: data.data.items });
     response.type("application/pdf").send(pdfBuffer);
   }
 
@@ -2757,7 +2714,7 @@ export class AppController {
       { header: "Balance Due ($)", key: "balanceDue", format: "currency", align: "right" },
       { header: "Status", key: "status", width: 14 }
     ];
-    const xlsxBuffer = await exportToExcel({ title: "Invoices & Revenue Ledger Report", columns, rows: data.data.items });
+    const xlsxBuffer = await this.exportExcel({ title: "Invoices & Revenue Ledger Report", columns, rows: data.data.items });
     response.type("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet").send(xlsxBuffer);
   }
 
@@ -2829,7 +2786,7 @@ export class AppController {
       { header: "Total Amount ($)", key: "amount", format: "currency", align: "right" },
       { header: "Document Count", key: "count", align: "right" }
     ];
-    const pdfBuffer = await exportToPdf({ title: "Financial Revenue & Stock Purchase Summary (Owner Only)", columns, rows });
+    const pdfBuffer = await this.exportPdf({ title: "Financial Revenue & Stock Purchase Summary (Owner Only)", columns, rows });
     response.type("application/pdf").send(pdfBuffer);
   }
 
@@ -2847,7 +2804,7 @@ export class AppController {
       { header: "Total Amount ($)", key: "amount", format: "currency", align: "right" },
       { header: "Document Count", key: "count", align: "right" }
     ];
-    const xlsxBuffer = await exportToExcel({ title: "Financial Revenue & Stock Purchase Summary (Owner Only)", columns, rows });
+    const xlsxBuffer = await this.exportExcel({ title: "Financial Revenue & Stock Purchase Summary (Owner Only)", columns, rows });
     response.type("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet").send(xlsxBuffer);
   }
 
@@ -2934,7 +2891,7 @@ export class AppController {
       { header: "Action", key: "action", width: 12 },
       { header: "Reason", key: "reason", width: 20 }
     ];
-    const pdfBuffer = await exportToPdf({ title: "Audit Trail & System Security Logs", columns, rows });
+    const pdfBuffer = await this.exportPdf({ title: "Audit Trail & System Security Logs", columns, rows });
     response.type("application/pdf").send(pdfBuffer);
   }
 
@@ -2966,9 +2923,7 @@ export class AppController {
       { header: "Action", key: "action", width: 12 },
       { header: "Reason", key: "reason", width: 20 }
     ];
-    const xlsxBuffer = await exportToExcel({ title: "Audit Trail & System Security Logs", columns, rows });
+    const xlsxBuffer = await this.exportExcel({ title: "Audit Trail & System Security Logs", columns, rows });
     response.type("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet").send(xlsxBuffer);
   }
 }
-
-

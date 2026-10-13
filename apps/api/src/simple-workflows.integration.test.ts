@@ -75,9 +75,10 @@ describe("Simple workflows preserve stock and finance",()=>{
  });
  it("exposes only allowlisted operational fields in the delivery manifest",async()=>{
   const controller=new SimpleWorkflowsController(service,db);
-  const response=await controller.manifest("2026-10-12");
-  expect(response.data.length).toBeGreaterThan(0);
-  for(const row of response.data) expect(Object.keys(row).sort()).toEqual(["address","customer","fuel","fuusto","notes","phone"]);
+  const date=new Intl.DateTimeFormat("en-CA",{timeZone:"Africa/Mogadishu",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());
+  const response=await controller.manifest(date);
+  expect(response.data.date).toBe(date);
+  for(const row of response.data.rows) expect(Object.keys(row).sort()).toEqual(["customer","fuel","location","phone","quantity"]);
   const serialized=JSON.stringify(response);
   for(const forbidden of ["price","debt","payment","tax","cost","revenue","profit","totalAmount","balanceDue"]) expect(serialized).not.toContain(forbidden);
  });

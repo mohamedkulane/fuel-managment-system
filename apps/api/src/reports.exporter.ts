@@ -1,5 +1,6 @@
 import PDFDocument from "pdfkit";
 import ExcelJS from "exceljs";
+import { addDocumentFooter, drawDocumentLogo, type ResolvedDocumentBranding } from "./document-branding.js";
 
 export type ColumnDef = {
   header: string;
@@ -16,8 +17,9 @@ export async function exportToPdf(options: {
   columns: ColumnDef[];
   rows: Record<string, any>[];
   totals?: Record<string, any>;
+  branding?: ResolvedDocumentBranding;
 }): Promise<Buffer> {
-  const doc = new PDFDocument({ margin: 30, size: "A4", autoFirstPage: true });
+  const doc = new PDFDocument({ margin: 30, size: "A4", autoFirstPage: true, bufferPages: true });
   const chunks: Buffer[] = [];
   doc.on("data", (chunk: Buffer) => chunks.push(chunk));
 
@@ -25,7 +27,7 @@ export async function exportToPdf(options: {
     doc.on("end", () => resolve(Buffer.concat(chunks)));
     doc.on("error", reject);
 
-    // Header
+    if (options.branding) drawDocumentLogo(doc, options.branding);
     doc.fontSize(16).text(options.title.toUpperCase(), { align: "right" });
     if (options.subtitle) doc.fontSize(9).fillColor("#666666").text(options.subtitle, { align: "right" });
     doc.fontSize(8).fillColor("#999999").text(`Generated: ${new Date().toISOString().slice(0, 19).replace("T", " ")} UTC`, { align: "right" });
@@ -105,6 +107,7 @@ export async function exportToPdf(options: {
       });
     }
 
+    if (options.branding) addDocumentFooter(doc, options.branding);
     doc.end();
   });
 }
@@ -115,29 +118,38 @@ export async function exportToExcel(options: {
   columns: ColumnDef[];
   rows: Record<string, any>[];
   totals?: Record<string, any>;
+  branding?: ResolvedDocumentBranding;
 }): Promise<Buffer> {
   const workbook = new ExcelJS.Workbook();
   workbook.creator = "Fuel Wholesale Management System";
   workbook.created = new Date();
 
-  const worksheet = workbook.addWorksheet("Report", { views: [{ state: "frozen", ySplit: options.filters ? 4 : 2 }] });
+  const hasLogo = Boolean(options.branding?.logo);
+  const titleRow = hasLogo ? 3 : 1;
+  const worksheet = workbook.addWorksheet("Report", { views: [{ state: "frozen", ySplit: titleRow + (options.filters ? 3 : 1) }] });
 
   // Title block
-  worksheet.mergeCells(1, 1, 1, options.columns.length);
-  const titleCell = worksheet.getCell(1, 1);
+  worksheet.mergeCells(titleRow, 1, titleRow, options.columns.length);
+  const titleCell = worksheet.getCell(titleRow, 1);
   titleCell.value = `${options.title.toUpperCase()} (Generated: ${new Date().toISOString().slice(0, 10)})`;
   titleCell.font = { name: "Arial", size: 14, bold: true, color: { argb: "FFFFFFFF" } };
   titleCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF0F172A" } };
   titleCell.alignment = { vertical: "middle", horizontal: "left" };
+  if (options.branding?.logo) {
+    const extension = options.branding.logo[0] === 0x89 ? "png" : "jpeg";
+    const imageId = workbook.addImage({ base64: options.branding.logo.toString("base64"), extension });
+    worksheet.addImage(imageId, "A1:B3");
+  }
 
-  let startRow = 2;
+  let startRow = titleRow + 1;
   if (options.filters && Object.keys(options.filters).length > 0) {
     const filterText = Object.entries(options.filters).map(([k, v]) => `${k}: ${v}`).join(" | ");
-    worksheet.mergeCells(2, 1, 2, options.columns.length);
-    const filterCell = worksheet.getCell(2, 1);
+    const filterRow = titleRow + 1;
+    worksheet.mergeCells(filterRow, 1, filterRow, options.columns.length);
+    const filterCell = worksheet.getCell(filterRow, 1);
     filterCell.value = `Filters: ${filterText}`;
     filterCell.font = { name: "Arial", size: 10, italic: true };
-    startRow = 3;
+    startRow = titleRow + 2;
   }
 
   // Header Row
@@ -188,6 +200,15 @@ export async function exportToExcel(options: {
       if (col.format === "currency") cell.numFmt = "$#,##0.00";
       else if (col.format === "decimal") cell.numFmt = "#,##0.000";
     });
+  }
+
+  if (options.branding) {
+    const footerRow = worksheet.lastRow!.number + 2;
+    worksheet.mergeCells(footerRow, 1, footerRow, options.columns.length);
+    const footerCell = worksheet.getCell(footerRow, 1);
+    footerCell.value = options.branding.footerText ?? "Fuel Wholesale Management System";
+    footerCell.font = { name: "Arial", size: 9, italic: true, color: { argb: "FF5D6B64" } };
+    footerCell.alignment = { horizontal: "center" };
   }
 
   // Column Widths

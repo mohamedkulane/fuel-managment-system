@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Bell, ChevronDown, CircleUserRound, LogOut, Search, Settings, ShoppingBag, Users, X } from "lucide-react";
@@ -11,6 +12,7 @@ type OrderHit = { id: string; orderNo: string; customer: { name: string } };
 type Overview = { operations: { pendingOrders: number; dispatched: number; unbilledDeliveries: number } };
 
 export function WorkspaceHeader({ actor }: { actor?: Actor }) {
+  const router = useRouter();
   const [search, setSearch] = useState("");
   const [term, setTerm] = useState("");
   const [panel, setPanel] = useState<"search" | "notifications" | "profile" | null>(null);
@@ -28,12 +30,18 @@ export function WorkspaceHeader({ actor }: { actor?: Actor }) {
   const ops = overview.data?.operations;
   const attention = (ops?.pendingOrders ?? 0) + (ops?.unbilledDeliveries ?? 0);
   const initials = actor?.displayName.split(" ").map(name => name[0]).slice(0, 2).join("") ?? "";
+  function openResult(path: string) {
+    setPanel(null);
+    setSearch("");
+    setTerm("");
+    router.push(path);
+  }
   return <div className="workspace-tools" ref={root}>
     <div className="global-search"><Search size={20} aria-hidden="true" /><input aria-label="Raadi (Search customers or orders)" placeholder="Search customers or orders" value={search} onFocus={() => setPanel("search")} onChange={e => { setSearch(e.target.value); setPanel("search"); }} aria-controls="global-search-results" aria-expanded={panel === "search"} />{search && <button type="button" className="icon-btn" aria-label="Clear search" onClick={() => { setSearch(""); setTerm(""); }}><X size={16} /></button>}
       {panel === "search" && <div className="header-panel search-results" id="global-search-results" aria-label="Search results">
-        {term.length < 2 ? <p>Geli ugu yaraan laba xaraf (Enter at least two characters).</p> : customers.isError || orders.isError ? <p role="alert">Raadintu ma shaqayn. Fadlan isku day mar kale.</p> : customers.isFetching || orders.isFetching ? <p role="status">Raadinaya…</p> : <>
-          <h3>Macaamiisha</h3>{customers.data?.items.map(row => <Link key={row.id} href={`/customers/${row.id}`} onClick={() => setPanel(null)}><Users size={18} /><span>{row.name}<small>{row.primaryPhone}</small></span></Link>)}
-          <h3>Dalabyada</h3>{orders.data?.items.map(row => <Link key={row.id} href={`/orders/${row.id}`} onClick={() => setPanel(null)}><ShoppingBag size={18} /><span>{row.customer.name}<small>{row.orderNo}</small></span></Link>)}
+        {search.trim().length < 2 ? <p>Geli ugu yaraan laba xaraf (Enter at least two characters).</p> : search.trim() !== term || customers.isFetching || orders.isFetching ? <p role="status">Raadinaya…</p> : customers.isError || orders.isError ? <p role="alert">Raadintu ma shaqayn. Fadlan isku day mar kale.</p> : <>
+          <h3>Macaamiisha</h3>{customers.data?.items.map(row => <button key={row.id} type="button" onClick={() => openResult(`/customers/${row.id}`)}><Users size={18} /><span>{row.name}<small>{row.primaryPhone}</small></span></button>)}
+          <h3>Dalabyada</h3>{orders.data?.items.map(row => <button key={row.id} type="button" onClick={() => openResult(`/orders/${row.id}`)}><ShoppingBag size={18} /><span>{row.customer.name}<small>{row.orderNo}</small></span></button>)}
           {!customers.data?.items.length && !orders.data?.items.length && <p>Wax natiijo ah lama helin.</p>}
         </>}
       </div>}

@@ -83,14 +83,16 @@ export default function ReportsHubPage() {
 
       {/* Global Filter Bar */}
       <Card className="filter-panel">
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 16, alignItems: "center" }}>
-          <div>
-            <FormLabel style={{ display: "block", fontSize: 12, fontWeight: "bold", marginBottom: 4 }}>From</FormLabel>
-            <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="input" />
+        <div className="report-filters">
+        <div className="report-date-range">
+        <div>
+          <FormLabel style={{ display: "block", fontSize: 12, fontWeight: "bold", marginBottom: 4 }}>From</FormLabel>
+          <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="input" />
           </div>
           <div>
             <FormLabel style={{ display: "block", fontSize: 12, fontWeight: "bold", marginBottom: 4 }}>To</FormLabel>
             <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="input" />
+          </div>
           </div>
 
           {activeReport.id === "statement" && (
@@ -111,7 +113,7 @@ export default function ReportsHubPage() {
             </div>
           )}
 
-          <div style={{ marginLeft: "auto", display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <div className="report-filter-actions">
             <PdfButton className="btn primary" path={activeReport.endpoint+"/pdf?fromDate="+fromDate+"&toDate="+toDate} failure="Report unavailable">Open Report</PdfButton>
           </div>
         </div>

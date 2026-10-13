@@ -4,7 +4,7 @@ import { ActionLink } from "../../../components/controls";
 import { ActionButton, FormLabel } from "../../../components/controls";
 
 import Decimal from "decimal.js";
-import { dateTime, decimal, formatStatus, formatFuel } from "../../../lib/format";
+import { dateTime, decimal, formatStatus, formatFuel, fuustoQuantity } from "../../../lib/format";
 import { FormEvent, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, mutationKey, type Actor } from "../../../lib/api";
@@ -149,7 +149,7 @@ export default function ReceivePage() {
     });
   }
 
-  const calculatedLitersPreview = validDecimal(fuustoInput)?.mul(240).toFixed(3) ?? "0.000";
+  const calculatedLitersPreview = validDecimal(fuustoInput)?.mul(240).toFixed(2) ?? "0.00";
 
   return (
     <main className="page receive-page">
@@ -206,12 +206,12 @@ export default function ReceivePage() {
                     </thead>
                     <tbody>
                       {receiptDetail.data.lines.map((line) => {
-                        const fuustoVal = line.quantityFuusto ?? new Decimal(line.actualLiters).div(240).toFixed(3);
+                        const fuustoVal = fuustoQuantity(line.quantityFuusto ?? new Decimal(line.actualLiters).div(240).toFixed(3));
                         return (
                           <tr key={line.id}>
                             <td>{formatFuel(line.fuel.displayName)}</td>
                             <td className="strong mono" style={{ fontSize: 14 }}>{fuustoVal} Fuusto</td>
-                            <td className="mono muted">{decimal(line.actualLiters, 3)} L</td>
+                            <td className="mono muted">{decimal(line.actualLiters)} L</td>
                             {isOwner && <td className="mono">{line.unitPurchaseCost ? `$${decimal(line.unitPurchaseCost, 4)}` : <span className="muted">Aan la diiwaangelin</span>}</td>}
                             {isOwner && <td className="mono">{line.totalPurchaseCost ? `$${decimal(line.totalPurchaseCost, 2)}` : <span className="muted">Aan la diiwaangelin</span>}</td>}
                           </tr>
@@ -270,10 +270,10 @@ export default function ReceivePage() {
                     <td>{row.supplier ?? row.tankerReference ?? "—"}</td>
                     <td>{row.lines.map((x) => formatFuel(x.fuel.displayName)).join(", ")}</td>
                     <td className="strong mono" style={{ fontSize: 13 }}>
-                      {row.lines.map((x) => `${x.quantityFuusto ?? new Decimal(x.actualLiters).div(240).toFixed(3)} Fuusto`).join(", ")}
+                      {row.lines.map((x) => `${fuustoQuantity(x.quantityFuusto ?? new Decimal(x.actualLiters).div(240).toFixed(3))} Fuusto`).join(", ")}
                     </td>
                     <td className="mono muted">
-                      {row.lines.map((x) => `${decimal(x.actualLiters, 3)} L`).join(", ")}
+                      {row.lines.map((x) => `${decimal(x.actualLiters)} L`).join(", ")}
                     </td>
                     {isOwner && (
                       <td className="mono">
@@ -309,4 +309,3 @@ export default function ReceivePage() {
     </main>
   );
 }
-

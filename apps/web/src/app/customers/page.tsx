@@ -103,8 +103,8 @@ export default function CustomersPage() {
 
       <Card>
         <CardHead title="Dhammaan Macaamiisha" description="Ka raadi magaca macmiilka, koodhka, ama telefoonka" />
-        <div className="toolbar">
-          <div style={{ display: "flex", gap: "10px", flex: 1, minWidth: "260px" }}>
+        <div className="toolbar customers-toolbar">
+          <div className="customer-filters">
             <input
               className="input"
               value={search}
@@ -113,8 +113,8 @@ export default function CustomersPage() {
               aria-label="Raadi macaamiisha"
               style={{ width: "100%" }}
             />
-            <select className="select" value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }}>
-              <option value="">Dhammaan Xaaladaha</option>
+            <select className="select customer-status" value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }}>
+              <option value="">Xaaladaha</option>
               <option value="ACTIVE">Firfircoon</option>
               <option value="HOLD">La Hakiyay</option>
               <option value="INACTIVE">Aan Firfircoonayn</option>
@@ -162,5 +162,3 @@ export default function CustomersPage() {
     </main>
   );
 }
-
-

@@ -7,6 +7,12 @@ export function decimal(value: string | undefined | null, places = 2): string {
   const [whole, fraction] = new Decimal(value).toFixed(places).split(".");
   return whole!.replace(/\B(?=(\d{3})+(?!\d))/g, ",") + (fraction === undefined ? "" : `.${fraction}`);
 }
+export function fuustoQuantity(value: string | undefined | null): string {
+  if (value == null) return "—";
+  const [whole, fraction] = new Decimal(value).toFixed().split(".");
+  const trimmedFraction = fraction?.replace(/0+$/, "");
+  return whole!.replace(/\B(?=(\d{3})+(?!\d))/g, ",") + (trimmedFraction ? `.${trimmedFraction}` : "");
+}
 export function sum(values: string[]): string { return values.reduce((total, value) => total.plus(value), new Decimal(0)).toString(); }
 export function dateTime(value: string): string { return new Intl.DateTimeFormat("en-GB", { timeZone: "Africa/Mogadishu", dateStyle: "medium", timeStyle: "short" }).format(new Date(value)); }
 export function businessDate(): string { return new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Mogadishu", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date()); }

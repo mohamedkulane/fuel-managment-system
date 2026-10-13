@@ -4,11 +4,11 @@ import { OrderDelivery } from "../../../components/order-delivery";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import Decimal from "decimal.js";
 import { ShoppingBag, Boxes, Truck, AlertCircle } from "lucide-react";
-import { dateTime, sum, decimal, formatStatus, formatFuel } from "../../../lib/format";
+import { dateTime, sum, decimal, formatStatus, formatFuel, fuustoQuantity } from "../../../lib/format";
 import { useParams } from "next/navigation";
 
 import { useQuery } from "@tanstack/react-query";
-import { api, mutationKey, type Actor } from "../../../lib/api";
+import { api, type Actor } from "../../../lib/api";
 import { MetricCard, Badge, Card, CardHead, ErrorState, PageHeader } from "../../../components/ui";
 import { notifyError, notifySuccess } from "../../../lib/toast";
 
@@ -50,7 +50,7 @@ export default function OrderPage() {
   const query = useQuery({ queryKey: ["order", id], queryFn: () => api<Order>(`/orders/${id}`) });
   const client = useQueryClient();
   const me = useQuery({ queryKey: ["me"], queryFn: () => api<Actor>("/auth/me") });
-  const confirm = useMutation({ mutationFn: () => api(`/orders/${id}/confirm`, { method: "POST", headers: { "idempotency-key": mutationKey() } }), onSuccess: async () => { await client.invalidateQueries(); notifySuccess(new Decimal(query.data?.fixedDiscountAmount ?? "0").gt(0) ? "Discount approved" : "Order confirmed"); }, onError: error => notifyError(error, new Decimal(query.data?.fixedDiscountAmount ?? "0").gt(0) ? "Approval failed" : "Order not saved") });
+  const approveDiscount = useMutation({ mutationFn: () => api(`/orders/${id}/approve-discount`, { method: "POST", body: JSON.stringify({}) }), onSuccess: async () => { await client.invalidateQueries(); notifySuccess("Discount approved"); }, onError: error => notifyError(error, "Approval failed") });
 
   if (query.isError)
     return (
@@ -76,7 +76,8 @@ export default function OrderPage() {
       />
       {row && (
         <>
-          {isDraft && (!hasDiscount || me.data?.role === "OWNER") && <div className="notice"><p>Hubi qiimaha hadda ka hor xaqiijinta dalabka.</p><ActionButton className="btn primary" disabled={confirm.isPending} onClick={() => confirm.mutate()}>{hasDiscount ? "Approve Discount & Confirm" : "Confirm Order"}</ActionButton>{confirm.isError && <ErrorState message={confirm.error.message}/>}</div>}
+          {isDraft && hasDiscount && <div className="notice"><p>Dhimistan waxay sugaysaa oggolaanshaha milkiilaha (Owner approval).</p>{me.data?.role === "OWNER" && <ActionButton className="btn primary" disabled={approveDiscount.isPending} onClick={() => approveDiscount.mutate()}>Approve Discount</ActionButton>}{approveDiscount.isError && <ErrorState message={approveDiscount.error.message}/>}</div>}
+          {isDraft && !hasDiscount && <div className="notice warn"><p>This historic draft needs Owner review. New regular orders are saved immediately.</p></div>}
           {hasPriceChangeNotice && (
             <div className="notice warn" style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 16 }}>
               <AlertCircle size={18} />
@@ -118,13 +119,13 @@ export default function OrderPage() {
             />
             <MetricCard
               label="Tirada la codsaday"
-              value={`${sum(row.lines.map((l) => l.requestedUnits))} Fuusto`}
+              value={`${fuustoQuantity(sum(row.lines.map((l) => l.requestedUnits)))} Fuusto`}
               note="Fuusto la dalbaday"
               icon={Boxes}
             />
             <MetricCard
               label="Tirada la aqbalay"
-              value={`${sum(row.lines.flatMap((l) => l.dispatchLines.flatMap((d) => d.confirmations.map((c) => c.acceptedUnits))))} Fuusto`}
+              value={`${fuustoQuantity(sum(row.lines.flatMap((l) => l.dispatchLines.flatMap((d) => d.confirmations.map((c) => c.acceptedUnits)))))} Fuusto`}
               note="Fuusto uu macmiilku xaqiijiyay"
               icon={Truck}
             />
@@ -146,16 +147,16 @@ export default function OrderPage() {
                   </thead>
                   <tbody>
                     {row.lines.map((line) => {
-                      const dispatched = sum(line.dispatchLines.map((x) => x.dispatchedUnits));
-                      const accepted = sum(line.dispatchLines.flatMap((x) => x.confirmations).map((x) => x.acceptedUnits));
-                      const returnedL = sum(line.dispatchLines.flatMap((x) => x.confirmations).map((x) => x.physicalReturnedLiters));
+                      const dispatched = fuustoQuantity(sum(line.dispatchLines.map((x) => x.dispatchedUnits)));
+                      const accepted = fuustoQuantity(sum(line.dispatchLines.flatMap((x) => x.confirmations).map((x) => x.acceptedUnits)));
+                      const returnedL = decimal(sum(line.dispatchLines.flatMap((x) => x.confirmations).map((x) => x.physicalReturnedLiters)));
                       return (
                         <tr key={line.id}>
                           <td className="strong">{formatFuel(line.fuel.displayName)}</td>
-                          <td className="strong mono">{line.requestedUnits} Fuusto</td>
+                          <td className="strong mono">{fuustoQuantity(line.requestedUnits)} Fuusto</td>
                           <td>
                             {line.litersPerUnitSnapshot
-                              ? `${line.litersPerUnitSnapshot} L / Fuusto`
+                              ? `${decimal(line.litersPerUnitSnapshot)} L / Fuusto`
                               : <span className="muted">Wuxuu noqon doonaa 240 L/fuusto marka la xaqiijiyo</span>}
                           </td>
                           <td className="strong mono">
@@ -209,4 +210,3 @@ export default function OrderPage() {
     </main>
   );
 }
-

@@ -1,7 +1,7 @@
 "use client";
 import { ActionLink } from "../../components/controls";
 import { ClipboardList, Clock3, CircleCheck, Truck } from "lucide-react";
-import { sum, formatStatus } from "../../lib/format";
+import { sum, formatStatus, decimal, fuustoQuantity } from "../../lib/format";
 
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../../lib/api";
@@ -57,8 +57,8 @@ export default function DispatchesPage() {
                     </td>
                     <td>{row.deliverySheet?.sheetNo ?? "Toos"}</td>
                     <td className="strong mono">
-                      {sum(row.lines.map(l => l.dispatchedUnits))} Fuusto (
-                      {sum(row.lines.map(l => l.dispatchedLiters))} L)
+                      {fuustoQuantity(sum(row.lines.map(l => l.dispatchedUnits)))} Fuusto (
+                      {decimal(sum(row.lines.map(l => l.dispatchedLiters)))} L)
                     </td>
                     <td>
                       <Badge
@@ -96,4 +96,3 @@ export default function DispatchesPage() {
     </main>
   );
 }
-

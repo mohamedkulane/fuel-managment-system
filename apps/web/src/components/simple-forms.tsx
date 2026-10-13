@@ -6,7 +6,7 @@ import { api, mutationKey, type Actor } from "../lib/api";
 import { businessDate, decimal, formatFuel } from "../lib/format";
 import { ActionButton, FormLabel } from "./controls";
 import { ErrorState, Modal, SubmitButton } from "./ui";
-import { payableDebt, paymentError } from "../lib/payment-validation";
+import { paymentError } from "../lib/payment-validation";
 import { notifyError, notifySuccess } from "../lib/toast";
 
 export function useWorkflow<T extends object>(path: string, success?: (result: { id: string; status?: string }) => void, messages?: {success?: string; error: string}) {
@@ -19,8 +19,8 @@ export function useWorkflow<T extends object>(path: string, success?: (result: {
 
 export function PaymentDialog({ customerId, customerName, open, onClose }: {customerId:string;customerName:string;open:boolean;onClose:()=>void}) {
   const [amount,setAmount]=useState(""); const [validation,setValidation]=useState("");
-  const financial=useQuery({queryKey:["customer-financial",customerId],queryFn:()=>api<{outstandingDebt:string;unappliedCredit:string}>("/customers/"+customerId+"/financial"),enabled:open,staleTime:0});
-  const payable=payableDebt(financial.data?.outstandingDebt??"0",financial.data?.unappliedCredit??"0");
+  const financial=useQuery({queryKey:["customer-account",customerId],queryFn:()=>api<{summary:{remainingDebt:string}}>("/customers/"+customerId+"/account"),enabled:open,staleTime:0});
+  const payable=new Decimal(financial.data?.summary.remainingDebt??"0");
   const payment=useWorkflow<{customerId:string;amount:string;method:string;reference:string}>("/simple/payments",()=>{setAmount("");setValidation("");onClose();},{success:"Payment recorded",error:"Payment failed"});
   const issue=amount?paymentError(amount,payable):null;
   const remainder=/^\d+(\.\d{1,2})?$/.test(amount)?Decimal.max(0,payable.sub(amount)):payable;

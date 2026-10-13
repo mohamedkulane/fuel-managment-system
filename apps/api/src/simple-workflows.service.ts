@@ -7,7 +7,7 @@ import type { Actor } from "./auth.js";
 type Tx = Prisma.TransactionClient;
 export type SimpleOrderInput = { customerId: string; fuelId: string; salesUnitId: string; quantity: string; expectedPriceId: string; address: string; discount?: string; paidNow?: string; notes?: string };
 export type SimpleReceiptInput = { fuelId: string; quantity: string; date: string; supplier?: string; notes?: string; unitCost?: string; totalCost?: string };
-export type SimplePaymentInput = { customerId: string; amount: string; method?: "CASH" | "BANK_TRANSFER" | "EVC_PLUS" | "EDAHAB" | "OTHER"; reference?: string };
+export type SimplePaymentInput = { customerId: string; amount: string; method?: "CASH" | "BANK_TRANSFER" | "EVC_PLUS" | "EDAHAB" | "OTHER"; reference?: string; notes?: string; paymentDate?: string };
 export type SimpleDeliveryInput = { orderId: string; lines: { orderLineId: string; acceptedUnits: string; remaining?: "RETURNED" | "IN_TRANSIT"; reason?: string }[] };
 const d = (v: string) => new Prisma.Decimal(v);
 const no = (prefix: string) => `${prefix}-${Date.now()}-${randomUUID().slice(0,8)}`;
@@ -57,7 +57,9 @@ export class SimpleWorkflowsService {
     const method = input.method ?? "CASH";
     if (!["CASH","BANK_TRANSFER","EVC_PLUS","EDAHAB","OTHER"].includes(method)) throw new BadRequestException("Invalid payment method");
     if (!await tx.customer.findUnique({ where: { id: required(input.customerId,"Customer") } })) throw new NotFoundException("Customer not found");
-    const payment = await tx.payment.create({ data: { paymentNo: no("PAY"), customerId: input.customerId, orderId, amount: value, unappliedAmount: value, allocatedAmount: d("0"), paymentDate: new Date(), paymentMethod: method, reference: input.reference, recordedById: actor.id } });
+    const paymentDate = input.paymentDate ? new Date(input.paymentDate) : new Date();
+    if (!Number.isFinite(paymentDate.getTime())) throw new BadRequestException("Enter a valid payment date");
+    const payment = await tx.payment.create({ data: { paymentNo: no("PAY"), customerId: input.customerId, orderId, amount: value, unappliedAmount: value, allocatedAmount: d("0"), paymentDate, paymentMethod: method, reference: input.reference?.trim() || null, notes: input.notes?.trim() || null, recordedById: actor.id } });
     await this.ledger(tx, input.customerId, "PAYMENT", payment.paymentNo, payment.id, value);
     if (!orderId) {
       const invoices = await tx.invoice.findMany({ where: { customerId: input.customerId, status: { in: ["UNPAID","PARTIALLY_PAID"] } }, orderBy: [{ issueDate:"asc" },{ id:"asc" }] });
@@ -84,17 +86,70 @@ export class SimpleWorkflowsService {
       const value = amount(input.amount, "Payment");
       const customer = await tx.customer.findUnique({ where: { id: customerId } });
       if (!customer) throw new NotFoundException("Customer not found");
-      const [debt, credit] = await Promise.all([
-        tx.invoice.aggregate({ where: { customerId, status: { in: ["UNPAID", "PARTIALLY_PAID"] } }, _sum: { balanceDue: true } }),
-        tx.payment.aggregate({ where: { customerId, status: "POSTED" }, _sum: { unappliedAmount: true } }),
-      ]);
+      const debt = await tx.invoice.aggregate({ where: { customerId, status: { in: ["UNPAID", "PARTIALLY_PAID"] } }, _sum: { balanceDue: true } });
       const openDebt = debt._sum.balanceDue ?? d("0");
-      const unappliedCredit = credit._sum.unappliedAmount ?? d("0");
-      const payable = Prisma.Decimal.max(d("0"), openDebt.sub(unappliedCredit));
+      // Order-linked money is reserved for that order. Historical unlinked balances
+      // require owner review and are never guessed into a new FIFO collection.
+      const payable = Prisma.Decimal.max(d("0"), openDebt);
       if (value.gt(payable)) throw new BadRequestException(`Debt is $${payable.toFixed(2)}. You cannot pay more.`);
       if (payable.isZero()) throw new BadRequestException("No debt to pay");
       const p = await this.collect(tx, actor, { ...input, customerId, amount: value.toFixed(4) });
       return { id: p.id };
+    });
+  }
+
+  reversePayment(actor: Actor, key: string | undefined, paymentId: string, reasonInput: string | undefined) {
+    if (actor.role !== "OWNER") throw new ForbiddenException("Only the owner can reverse a payment");
+    const reason = required(reasonInput, "Reason");
+    return this.execute(actor, key, "payment-reversal", { paymentId, reason }, async tx => {
+      const payment = await tx.payment.findUnique({
+        where: { id: paymentId },
+        include: { allocations: { include: { invoice: true } }, reversals: true }
+      });
+      if (!payment) throw new NotFoundException("Payment not found");
+      if (payment.status === "REVERSED") {
+        return { id: payment.id, status: "REVERSED", replay: true };
+      }
+
+      const claimed = await tx.payment.updateMany({
+        where: { id: payment.id, status: "POSTED" },
+        data: { status: "REVERSED", allocatedAmount: d("0"), unappliedAmount: d("0") }
+      });
+      if (claimed.count !== 1) return { id: payment.id, status: "REVERSED", replay: true };
+
+      for (const allocation of payment.allocations) {
+        const restoredPaid = Prisma.Decimal.max(d("0"), allocation.invoice.paidAmount.sub(allocation.amount));
+        const restoredBalance = Prisma.Decimal.max(d("0"), allocation.invoice.totalAmount.sub(restoredPaid));
+        await tx.invoice.update({
+          where: { id: allocation.invoiceId },
+          data: {
+            paidAmount: restoredPaid,
+            balanceDue: restoredBalance,
+            status: restoredBalance.isZero() ? "PAID" : restoredPaid.gt(0) ? "PARTIALLY_PAID" : "UNPAID"
+          }
+        });
+      }
+
+      const reversal = await tx.paymentReversal.create({
+        data: { reversalNo: no("PREV"), paymentId: payment.id, idempotencyKey: key!, reason, reversedById: actor.id }
+      });
+      const totals = await tx.customerLedgerEntry.aggregate({ where: { customerId: payment.customerId }, _sum: { debitAmount: true, creditAmount: true } });
+      const prior = (totals._sum.debitAmount ?? d("0")).sub(totals._sum.creditAmount ?? d("0"));
+      await tx.customerLedgerEntry.create({
+        data: {
+          customerId: payment.customerId,
+          entryType: "REVERSAL",
+          referenceNo: reversal.reversalNo,
+          debitAmount: payment.amount,
+          creditAmount: d("0"),
+          runningBalance: prior.add(payment.amount),
+          sourceType: "PaymentReversal",
+          sourceId: reversal.id,
+          notes: reason
+        }
+      });
+      await this.audit(tx, actor, "Payment", payment.id, "REVERSED");
+      return { id: payment.id, status: "REVERSED", replay: false };
     });
   }
 

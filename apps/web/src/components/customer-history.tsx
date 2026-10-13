@@ -3,7 +3,7 @@ import { ActionButton, FormLabel, ActionAnchor, ActionLink } from "./controls";
 import Decimal from "decimal.js";
 import { PaymentDialog } from "./simple-forms";
 import { Receipt, Wallet, CircleCheck, TrendingUp } from "lucide-react";
-import { sum, dateTime, decimal, formatStatus, formatFuel } from "../lib/format";
+import { sum, dateTime, decimal, formatStatus, formatFuel, fuustoQuantity } from "../lib/format";
 
 import { FormEvent, useState } from "react";
 import { useParams } from "next/navigation";
@@ -172,14 +172,14 @@ export function CustomerOrdersTab({ customerId }: { customerId: string }) {
                   <td>
                     {row.lines.map((l) => (
                       <div key={l.id}>
-                        {formatFuel(l.fuel.displayName)}: <b>{l.requestedUnits} {l.salesUnit?.name ?? "fuusto"}</b>
+                        {formatFuel(l.fuel.displayName)}: <b>{fuustoQuantity(l.requestedUnits)} {l.salesUnit?.name ?? "fuusto"}</b>
                       </div>
                     ))}
                   </td>
                   <td>
                     {row.lines.map((l) => (
                       <div key={l.id} className="mono text-xs">
-                        {l.litersPerUnitSnapshot ? `${l.litersPerUnitSnapshot} L / fuusto` : "Aan la xaqiijin"}
+                        {l.litersPerUnitSnapshot ? `${decimal(l.litersPerUnitSnapshot)} L / fuusto` : "Aan la xaqiijin"}
                       </div>
                     ))}
                   </td>

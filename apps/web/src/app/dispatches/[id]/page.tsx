@@ -1,6 +1,6 @@
 "use client";
 import { ActionButton, ActionLink } from "../../../components/controls";
-import { sum, decimal, formatStatus, formatFuel } from "../../../lib/format";
+import { sum, decimal, formatStatus, formatFuel, fuustoQuantity } from "../../../lib/format";
 import { Boxes, Truck, CircleCheck } from "lucide-react";
 import { useParams } from "next/navigation";
 
@@ -97,7 +97,7 @@ export default function DispatchDetailPage() {
             <b>Dirista rasmiga ah:</b> Diiwaangelinta diristu waxay dhintaa Kaydka Bakhaarka waxayna kordhisaa Kaydka Jidka Ku Jira.
           </div>
 
-          <div className="grid team-metrics"><MetricCard label="Litarada loo diray" value={`${decimal(sum(row.lines.map(l=>l.dispatchedLiters)),3)} L`} note="Shidaalka rasmiga ah ee loo diray" icon={Truck}/><MetricCard label="Litarada la aqbalay" value={`${decimal(sum(row.lines.flatMap(l=>l.confirmations.map(c=>c.acceptedLiters))),3)} L`} note="Aqbalada macmiilka ee la xaqiijiyay" icon={CircleCheck}/><MetricCard label="Litarada lagu soo celiyay" value={`${decimal(sum(row.lines.flatMap(l=>l.confirmations.map(c=>c.physicalReturnedLiters))),3)} L`} note="Lagu soo celiyay bakhaarka" icon={Boxes}/></div>
+          <div className="grid team-metrics"><MetricCard label="Litarada loo diray" value={`${decimal(sum(row.lines.map(l=>l.dispatchedLiters)))} L`} note="Shidaalka rasmiga ah ee loo diray" icon={Truck}/><MetricCard label="Litarada la aqbalay" value={`${decimal(sum(row.lines.flatMap(l=>l.confirmations.map(c=>c.acceptedLiters))))} L`} note="Aqbalada macmiilka ee la xaqiijiyay" icon={CircleCheck}/><MetricCard label="Litarada lagu soo celiyay" value={`${decimal(sum(row.lines.flatMap(l=>l.confirmations.map(c=>c.physicalReturnedLiters))))} L`} note="Lagu soo celiyay bakhaarka" icon={Boxes}/></div>
           <Card>
             <CardHead title="Xariijimaha Dalabyada Loo Diray" description="Tirada shidaalka loo diray ee fuustooyinka iyo litarada rasmiga ah" />
             <div className="table-wrap">
@@ -123,12 +123,12 @@ export default function DispatchDetailPage() {
                         </td>
                         <td>{line.orderLine.order.customer.name}</td>
                         <td>{formatFuel(line.orderLine.fuel.displayName)}</td>
-                        <td className="mono strong">{line.dispatchedUnits} Fuusto</td>
-                        <td className="mono">{line.dispatchedLiters} L</td>
+                        <td className="mono strong">{fuustoQuantity(line.dispatchedUnits)} Fuusto</td>
+                        <td className="mono">{decimal(line.dispatchedLiters)} L</td>
                         <td>
                           {line.confirmations.length > 0 ? (
                             <Badge tone="ok">
-                              {totalAccepted} Fuusto la aqbalay / {totalReturned} L lagu soo celiyay
+                              {fuustoQuantity(totalAccepted)} Fuusto la aqbalay / {decimal(totalReturned)} L lagu soo celiyay
                             </Badge>
                           ) : (
                             <Badge tone="warn">Aan la heshiisiin</Badge>
@@ -146,4 +146,3 @@ export default function DispatchDetailPage() {
     </main>
   );
 }
-

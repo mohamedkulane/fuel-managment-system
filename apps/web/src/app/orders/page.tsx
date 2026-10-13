@@ -1,14 +1,13 @@
 "use client";
 import { ActionButton, ActionLink } from "../../components/controls";
 import { Users, ClipboardList, CircleCheck, Clock3 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Decimal from "decimal.js";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, apiBase, mutationKey, type PaginatedResponse } from "../../lib/api";
-import { formatStatus, formatFuel, decimal, businessDate } from "../../lib/format";
+import { useQuery } from "@tanstack/react-query";
+import { api, type PaginatedResponse } from "../../lib/api";
+import { formatStatus, formatFuel, decimal, businessDate, fuustoQuantity } from "../../lib/format";
 import { PdfButton } from "../../components/pdf-button";
-import { notifyError, notifySuccess } from "../../lib/toast";
 import { MetricCard, LoadingState, Badge, Card, CardHead, Empty, ErrorState, PageHeader, Pagination } from "../../components/ui";
 
 type Order = {
@@ -31,31 +30,45 @@ type Order = {
   }>;
 };
 
+type DeliveryList = {
+  date: string;
+  rows: Array<{
+    customer: string;
+    phone: string;
+    location: string;
+    fuel: "Naafto" | "Basiin";
+    quantity: string;
+  }>;
+};
+
 export default function OrdersPage() {
-  const client = useQueryClient();
   const [search, setSearch] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
   const [status, setStatus] = useState("");
   const [page, setPage] = useState(1);
   const [date, setDate] = useState("");
+  const [deliveryDate, setDeliveryDate] = useState(businessDate);
+  const [viewedDeliveryDate, setViewedDeliveryDate] = useState<string | null>(null);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setSearchTerm(search.trim()), 250);
+    return () => clearTimeout(timer);
+  }, [search]);
 
   const queryParams = new URLSearchParams({ page: String(page), limit: "15" });
-  if (search.trim()) queryParams.set("search", search.trim());
+  if (searchTerm) queryParams.set("search", searchTerm);
   if (status) queryParams.set("status", status);
   if (date) queryParams.set("date", date);
 
   const rows = useQuery({
-    queryKey: ["orders", search, status, page, date],
+    queryKey: ["orders", searchTerm, status, page, date],
     queryFn: () => api<PaginatedResponse<Order> | Order[]>(`/orders?${queryParams.toString()}`)
   });
 
-  const confirm = useMutation({
-    mutationFn: (id: string) =>
-      api(`/orders/${id}/confirm`, {
-        method: "POST",
-        headers: { "idempotency-key": mutationKey() }
-      }),
-    onSuccess: async () => { await client.invalidateQueries(); notifySuccess("Order confirmed"); },
-    onError: error => notifyError(error, "Order not saved")
+  const deliveryList = useQuery({
+    queryKey: ["simple", "delivery-list", viewedDeliveryDate],
+    queryFn: () => api<DeliveryList>(`/simple/delivery-list?date=${encodeURIComponent(viewedDeliveryDate!)}`),
+    enabled: viewedDeliveryDate !== null
   });
 
   const rawData = rows.data;
@@ -69,11 +82,85 @@ export default function OrdersPage() {
         title="Dalabyada"
         description="Ka dhex samay dalabyada qiimayaasha la kaydiyay. La soco fulinta laga bilaabo codsiga ilaa gaarsiinta."
         actions={
-          <><PdfButton path={"/simple/delivery-list/pdf?date="+(date||businessDate())} failure="Today's List unavailable">Today's List</PdfButton><ActionLink className="btn primary" href="/orders/new">
+          <ActionLink className="btn primary" href="/orders/new">
             Dalab Cusub
-          </ActionLink></>
+          </ActionLink>
         }
       />
+      <Card>
+        <CardHead
+          title="Liiska Gaarsiinta"
+          description="Dooro taariikh kasta si aad u aragto dalabyadii loo qorsheeyay maalintaas, oo ay ku jiraan gaarsiimaha hore loo dhammeeyay."
+        />
+        <div className="card-body">
+          <div className="delivery-list-toolbar">
+            <label className="delivery-list-date">
+              <span>Taariikhda (Date)</span>
+              <input
+                type="date"
+                className="input"
+                value={deliveryDate}
+                onChange={(event) => {
+                  setDeliveryDate(event.target.value);
+                  setViewedDeliveryDate(null);
+                }}
+              />
+            </label>
+            <div className="delivery-list-actions">
+              <ActionButton
+                className="btn"
+                type="button"
+                disabled={!deliveryDate}
+                onClick={() => setViewedDeliveryDate(deliveryDate)}
+              >
+                View List
+              </ActionButton>
+              {viewedDeliveryDate === deliveryDate && deliveryList.isSuccess && (
+                <PdfButton
+                  path={`/simple/delivery-list/pdf?date=${encodeURIComponent(viewedDeliveryDate)}`}
+                  failure="Delivery list PDF unavailable"
+                  className="btn primary"
+                >
+                  Open PDF
+                </PdfButton>
+              )}
+            </div>
+          </div>
+          {viewedDeliveryDate === deliveryDate && deliveryList.isPending && <LoadingState label="Loading delivery list…" />}
+          {viewedDeliveryDate === deliveryDate && deliveryList.isError && (
+            <ErrorState message={deliveryList.error.message} retry={() => void deliveryList.refetch()} />
+          )}
+          {viewedDeliveryDate === deliveryDate && deliveryList.isSuccess && (
+            <>
+              <div className="table-wrap delivery-list-preview">
+                <table className="data-table responsive-table">
+                  <thead>
+                    <tr>
+                      <th>Macmiilka</th>
+                      <th>Telefoon</th>
+                      <th>Goobta</th>
+                      <th>Shidaalka</th>
+                      <th>Fuusto</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {deliveryList.data.rows.map((item, index) => (
+                      <tr key={`${item.customer}-${item.fuel}-${index}`}>
+                        <td data-label="Customer">{item.customer}</td>
+                        <td data-label="Phone">{item.phone || "—"}</td>
+                        <td data-label="Location">{item.location}</td>
+                        <td data-label="Fuel">{item.fuel}</td>
+                        <td data-label="Fuusto">{fuustoQuantity(item.quantity)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {deliveryList.data.rows.length === 0 && <Empty>Ma jiraan dalabyo gaarsiin oo taariikhdan ah.</Empty>}
+              </div>
+            </>
+          )}
+        </div>
+      </Card>
       <Card>
         <CardHead
           title="Diiwaanka Dalabyada"
@@ -134,7 +221,7 @@ export default function OrdersPage() {
                       <strong>{row.customer.name}</strong>
                     </td>
                     <td data-label="Fuusto">
-                      {row.lines.map((line) => `${formatFuel(line.fuel.displayName)}: ${line.requestedUnits} Fuusto`).join(", ")}
+                      {row.lines.map((line) => `${formatFuel(line.fuel.displayName)}: ${fuustoQuantity(line.requestedUnits)} Fuusto`).join(", ")}
                     </td>
                     <td data-label="Total">{row.totalAmount ? `$${decimal(row.totalAmount)}` : "Qiyaas lama xaqiijin"}</td>
                     <td data-label="Paid">${decimal(row.paidAmount)}</td>
@@ -155,15 +242,7 @@ export default function OrdersPage() {
                       </Badge>
                     </td>
                     <td data-label="" style={{ textAlign: "right" }}>
-                      <ActionLink className="btn small" href={`/orders/${row.id}`}>Faahfaahin</ActionLink> {row.status === "DRAFT" && (
-                        <ActionButton
-                          className="btn primary small"
-                          disabled={confirm.isPending}
-                          onClick={() => confirm.mutate(row.id)}
-                        >
-                          Xaqiiji
-                        </ActionButton>
-                      )}
+                      <ActionLink className="btn small" href={`/orders/${row.id}`}>View</ActionLink>
                     </td>
                   </tr>
                 ))}
@@ -173,10 +252,7 @@ export default function OrdersPage() {
             <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
           </div>
         )}
-        {confirm.isError && <div className="notice warn" style={{ marginTop: 16 }}>{(confirm.error as Error).message}</div>}
       </Card>
     </main>
   );
 }
-
-

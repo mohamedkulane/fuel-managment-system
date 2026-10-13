@@ -1,63 +1,70 @@
 import { Body, Controller, Get, Headers, Inject, Post, Query, Req, Res, UseGuards, BadRequestException } from "@nestjs/common";
 import type { Response } from "express";
 import { PrismaService } from "./prisma.service.js";
-import { Prisma } from "@fuel/database";
-import { exportToPdf } from "./reports.exporter.js";
 import { AuthenticatedRequest, requireActor, SessionGuard } from "./auth.js";
 import { SimpleWorkflowsService, SimpleOrderInput, SimpleReceiptInput, SimplePaymentInput, SimpleDeliveryInput } from "./simple-workflows.service.js";
+import { buildDeliveryList, deliveryListDateBounds, deliveryListOrderWhere } from "./delivery-list.js";
+import { createDeliveryListPdf } from "./delivery-list.pdf.js";
+import { resolveDocumentBranding } from "./document-branding.js";
 @Controller("api/v1/simple")
 @UseGuards(SessionGuard)
 export class SimpleWorkflowsController {
   constructor(@Inject(SimpleWorkflowsService) private readonly service: SimpleWorkflowsService, @Inject(PrismaService) private readonly db: PrismaService) {}
   private async deliveryList(date: string) {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new BadRequestException("Date must be YYYY-MM-DD");
-    const start = new Date(`${date}T00:00:00+03:00`);
-    const end = new Date(start.getTime() + 86_400_000);
-    const rows = await this.db.salesOrder.findMany({
-      where: {
-        status: { in: ["CONFIRMED", "SCHEDULED", "IN_PROGRESS", "PARTIALLY_FULFILLED"] },
-        OR: [
-          { requestedDeliveryDate: new Date(`${date}T00:00:00Z`) },
-          { requestedDeliveryDate: null, orderDate: { gte: start, lt: end } },
-        ],
-      },
-      select: {
-        addressSnapshot: true,
-        customer: { select: { name: true, primaryPhone: true } },
-        lines: {
-          select: {
-            requestedUnits: true,
-            fuel: { select: { displayName: true } },
-            dispatchLines: { select: { confirmations: { select: { acceptedUnits: true } } } },
-          },
-        },
-      },
-    });
+    const bounds = deliveryListDateBounds(date);
+    const [sheets, orders] = await Promise.all([
+      this.db.deliverySheet.findMany({
+        where: { serviceDate: bounds.requestedDateStart },
+        orderBy: [{ createdAt: "asc" }, { sheetNo: "asc" }],
+        select: {
+          lines: {
+            orderBy: { orderLineId: "asc" },
+            select: {
+              orderLineId: true,
+              scheduledUnits: true,
+              displayCustomerNameSnapshot: true,
+              phoneSnapshot: true,
+              addressSnapshot: true,
+              orderLine: { select: { fuel: { select: { code: true } } } }
+            }
+          }
+        }
+      }),
+      this.db.salesOrder.findMany({
+        where: deliveryListOrderWhere(bounds),
+        orderBy: { orderNo: "asc" },
+        select: {
+          id: true,
+          requestedDeliveryDate: true,
+          orderDate: true,
+          addressSnapshot: true,
+          customer: { select: { name: true, primaryPhone: true } },
+          lines: {
+            orderBy: { id: "asc" },
+            select: {
+              id: true,
+              requestedUnits: true,
+              fuel: { select: { code: true } }
+            }
+          }
+        }
+      })
+    ]);
 
-    return rows
-      .flatMap((order) =>
-        order.lines.map((line) => ({
-          customer: order.customer.name,
-          phone: order.customer.primaryPhone ?? "",
-          address: order.addressSnapshot,
-          fuel: line.fuel.displayName,
-          fuusto: line.requestedUnits
-            .sub(
-              line.dispatchLines
-                .flatMap((dispatch) => dispatch.confirmations)
-                .reduce((sum, confirmation) => sum.add(confirmation.acceptedUnits), new Prisma.Decimal(0)),
-            )
-            .toString(),
-        })),
-      )
-      .filter((row) => new Prisma.Decimal(row.fuusto).gt(0));
+    return buildDeliveryList(date, sheets.flatMap((sheet) => sheet.lines), orders);
   }
-  @Get("delivery-list") async manifest(@Query("date") date:string) { return {data:await this.deliveryList(date)}; }
-  @Get("delivery-list/pdf") async manifestPdf(@Query("date") date:string,@Res() res:Response) {
-    const rows=await this.deliveryList(date);
-    if (!rows.length) throw new BadRequestException("No orders for this date");
-    const pdf=await exportToPdf({title:"Liiska Gaarsiinta",subtitle:date,columns:[{header:"Macmiil",key:"customer"},{header:"Telefoon",key:"phone"},{header:"Goobta",key:"address"},{header:"Shidaalka",key:"fuel"},{header:"Fuusto",key:"fuusto"}],rows});
-    res.setHeader("Content-Type","application/pdf");res.setHeader("Content-Disposition",`inline; filename="delivery-list-${date}.pdf"`);res.send(pdf);
+  @Get("delivery-list")
+  async manifest(@Query("date") date: string) {
+    return { data: await this.deliveryList(date) };
+  }
+  @Get("delivery-list/pdf")
+  async manifestPdf(@Query("date") date: string, @Res() response: Response) {
+    const list = await this.deliveryList(date);
+    const settings = await this.db.documentBranding.findUnique({ where: { id: "global" } });
+    const pdf = await createDeliveryListPdf(list, await resolveDocumentBranding(settings));
+    response.setHeader("Content-Type", "application/pdf");
+    response.setHeader("Content-Disposition", `inline; filename="delivery-list-${date}.pdf"`);
+    response.send(pdf);
   }
   @Post("orders") async order(@Req() req:AuthenticatedRequest,@Headers("idempotency-key") key:string|undefined,@Body() input:SimpleOrderInput) { return {data:await this.service.order(requireActor(req),key,input)}; }
   @Post("receipts") async receipt(@Req() req:AuthenticatedRequest,@Headers("idempotency-key") key:string|undefined,@Body() input:SimpleReceiptInput) { return {data:await this.service.receipt(requireActor(req),key,input)}; }

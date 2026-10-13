@@ -4,7 +4,7 @@ import { Fuel as FuelIcon } from "lucide-react";
 import Decimal from "decimal.js";
 import { FuelPrices } from "../../components/fuel-prices";
 import { ReceiveStockForm } from "../../components/simple-forms";
-import { decimal, dateTime, formatStatus, formatFuel } from "../../lib/format";
+import { decimal, dateTime, formatStatus, formatFuel, fuustoQuantity } from "../../lib/format";
 import { FormEvent, useState } from "react";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -134,14 +134,14 @@ export default function StockPage() {
       ) : (
         <div className="simple-stock-grid">
           {balances.data?.filter(row => row.location === "WAREHOUSE").map((row) => {
-            const fuusto = decimal(row.balanceFuusto ?? new Decimal(row.balanceLiters).div(240).toString());
+            const fuusto = fuustoQuantity(row.balanceFuusto ?? new Decimal(row.balanceLiters).div(240).toFixed(3));
             const locationLabel = row.location === "WAREHOUSE" ? "Bakhaarka" : row.location === "IN_TRANSIT" ? "Jidka Ku Jira" : row.location;
             return (
               <MetricCard
                 key={`${row.fuel}-${row.location}`}
                 label={`${formatFuel(row.fuelName)} · ${locationLabel}`}
                 value={`${fuusto} Fuusto`}
-                note={`${decimal(row.balanceLiters, 3)} litar oo sax ah`}
+                note={`${decimal(row.balanceLiters)} litar oo sax ah`}
                 icon={FuelIcon}
                 dark={false}
               />
@@ -201,7 +201,7 @@ export default function StockPage() {
               </thead>
               <tbody>
                 {movementItems.map((row) => {
-                  const fuustoQty = row.quantityFuusto ?? new Decimal(row.quantityLiters).div(240).toFixed(3);
+                  const fuustoQty = fuustoQuantity(row.quantityFuusto ?? new Decimal(row.quantityLiters).div(240).toFixed(3));
                   const locationText = row.location === "WAREHOUSE" ? "Bakhaarka" : row.location === "IN_TRANSIT" ? "Jidka Ku Jira" : row.location;
                   return (
                     <tr key={row.id}>
@@ -222,7 +222,7 @@ export default function StockPage() {
                       </td>
                       <td>{locationText}</td>
                       <td className="mono strong" style={{ fontSize: 13 }}>{fuustoQty} Fuusto</td>
-                      <td className="mono muted">{row.quantityLiters} L</td>
+                      <td className="mono muted">{decimal(row.quantityLiters)} L</td>
                       <td>{formatStatus(row.sourceType)}</td>
                     </tr>
                   );
@@ -237,4 +237,3 @@ export default function StockPage() {
     </main>
   );
 }
-
