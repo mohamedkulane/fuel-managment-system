@@ -7,6 +7,7 @@ import Decimal from "decimal.js";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, apiBase, mutationKey, type PaginatedResponse } from "../../lib/api";
 import { formatStatus, formatFuel, decimal, businessDate } from "../../lib/format";
+import { PdfButton } from "../../components/pdf-button";
 import { notifyError, notifySuccess } from "../../lib/toast";
 import { MetricCard, LoadingState, Badge, Card, CardHead, Empty, ErrorState, PageHeader, Pagination } from "../../components/ui";
 
@@ -53,7 +54,7 @@ export default function OrdersPage() {
         method: "POST",
         headers: { "idempotency-key": mutationKey() }
       }),
-    onSuccess: async () => { await client.invalidateQueries({ queryKey: ["orders"] }); notifySuccess("Order confirmed"); },
+    onSuccess: async () => { await client.invalidateQueries(); notifySuccess("Order confirmed"); },
     onError: error => notifyError(error, "Order not saved")
   });
 
@@ -68,7 +69,7 @@ export default function OrdersPage() {
         title="Dalabyada"
         description="Ka dhex samay dalabyada qiimayaasha la kaydiyay. La soco fulinta laga bilaabo codsiga ilaa gaarsiinta."
         actions={
-          <><ActionLink className="btn" href={`${apiBase}/simple/delivery-list/pdf?date=${businessDate()}`} target="_blank" rel="noreferrer">Today's List</ActionLink><ActionLink className="btn primary" href="/orders/new">
+          <><PdfButton path={"/simple/delivery-list/pdf?date="+(date||businessDate())} failure="Today's List unavailable">Today's List</PdfButton><ActionLink className="btn primary" href="/orders/new">
             Dalab Cusub
           </ActionLink></>
         }
@@ -116,7 +117,7 @@ export default function OrdersPage() {
           <ErrorState message={(rows.error as Error).message} retry={() => void rows.refetch()} />
         ) : (
           <div className="table-wrap">
-            <table className="data-table">
+            <table className="data-table responsive-table">
               <thead>
                 <tr>
                   <th>Macmiilka</th>
@@ -129,16 +130,16 @@ export default function OrdersPage() {
               <tbody>
                 {items.map((row) => (
                   <tr key={row.id}>
-                    <td>
+                    <td data-label="Customer">
                       <strong>{row.customer.name}</strong>
                     </td>
-                    <td>
+                    <td data-label="Fuusto">
                       {row.lines.map((line) => `${formatFuel(line.fuel.displayName)}: ${line.requestedUnits} Fuusto`).join(", ")}
                     </td>
-                    <td>{row.totalAmount ? `$${decimal(row.totalAmount)}` : "Qiyaas lama xaqiijin"}</td>
-                    <td>${decimal(row.paidAmount)}</td>
-                    <td>{row.status === "FULFILLED" ? `$${decimal(row.invoicedBalance)}` : row.totalAmount ? `$${decimal(Decimal.max(0,new Decimal(row.totalAmount).sub(row.paidAmount ?? "0")).toString())}` : "—"}<small className="balance-label">{row.status === "FULFILLED" ? "Deyn rasmi ah" : "Qiyaas"}</small></td>
-                    <td>
+                    <td data-label="Total">{row.totalAmount ? `$${decimal(row.totalAmount)}` : "Qiyaas lama xaqiijin"}</td>
+                    <td data-label="Paid">${decimal(row.paidAmount)}</td>
+                    <td data-label="Remaining">{row.status === "FULFILLED" ? `$${decimal(row.invoicedBalance)}` : row.totalAmount ? `$${decimal(Decimal.max(0,new Decimal(row.totalAmount).sub(row.paidAmount ?? "0")).toString())}` : "—"}<small className="balance-label">{row.status === "FULFILLED" ? "Deyn rasmi ah" : "Qiyaas"}</small></td>
+                    <td data-label="Status">
                       <Badge
                         tone={
                           row.status === "DRAFT"
@@ -153,7 +154,7 @@ export default function OrdersPage() {
                         {formatStatus(row.status)}
                       </Badge>
                     </td>
-                    <td style={{ textAlign: "right" }}>
+                    <td data-label="" style={{ textAlign: "right" }}>
                       <ActionLink className="btn small" href={`/orders/${row.id}`}>Faahfaahin</ActionLink> {row.status === "DRAFT" && (
                         <ActionButton
                           className="btn primary small"

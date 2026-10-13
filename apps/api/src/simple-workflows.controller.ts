@@ -23,7 +23,6 @@ export class SimpleWorkflowsController {
       },
       select: {
         addressSnapshot: true,
-        notes: true,
         customer: { select: { name: true, primaryPhone: true } },
         lines: {
           select: {
@@ -48,8 +47,7 @@ export class SimpleWorkflowsController {
                 .flatMap((dispatch) => dispatch.confirmations)
                 .reduce((sum, confirmation) => sum.add(confirmation.acceptedUnits), new Prisma.Decimal(0)),
             )
-            .toFixed(3),
-          notes: order.notes ?? "",
+            .toString(),
         })),
       )
       .filter((row) => new Prisma.Decimal(row.fuusto).gt(0));
@@ -57,7 +55,8 @@ export class SimpleWorkflowsController {
   @Get("delivery-list") async manifest(@Query("date") date:string) { return {data:await this.deliveryList(date)}; }
   @Get("delivery-list/pdf") async manifestPdf(@Query("date") date:string,@Res() res:Response) {
     const rows=await this.deliveryList(date);
-    const pdf=await exportToPdf({title:"Liiska Gaarsiinta",subtitle:date,columns:[{header:"Macmiil",key:"customer"},{header:"Telefoon",key:"phone"},{header:"Goobta",key:"address"},{header:"Shidaalka",key:"fuel"},{header:"Fuusto",key:"fuusto"},{header:"Faahfaahin",key:"notes"}],rows});
+    if (!rows.length) throw new BadRequestException("No orders for this date");
+    const pdf=await exportToPdf({title:"Liiska Gaarsiinta",subtitle:date,columns:[{header:"Macmiil",key:"customer"},{header:"Telefoon",key:"phone"},{header:"Goobta",key:"address"},{header:"Shidaalka",key:"fuel"},{header:"Fuusto",key:"fuusto"}],rows});
     res.setHeader("Content-Type","application/pdf");res.setHeader("Content-Disposition",`inline; filename="delivery-list-${date}.pdf"`);res.send(pdf);
   }
   @Post("orders") async order(@Req() req:AuthenticatedRequest,@Headers("idempotency-key") key:string|undefined,@Body() input:SimpleOrderInput) { return {data:await this.service.order(requireActor(req),key,input)}; }

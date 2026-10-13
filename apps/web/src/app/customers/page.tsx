@@ -126,7 +126,7 @@ export default function CustomersPage() {
           <ErrorState message={(query.error as Error).message} retry={() => void query.refetch()} />
         ) : (
           <div className="table-wrap">
-            <table className="data-table">
+            <table className="data-table responsive-table">
               <thead>
                 <tr>
                   <th>Macmiilka</th>
@@ -139,15 +139,15 @@ export default function CustomersPage() {
               <tbody>
                 {items.map((row) => (
                   <tr key={row.id}>
-                    <td>
+                    <td data-label="Name">
                       <span className="strong">{row.name}</span>
                       <br />
                       <small className="mono">{row.code}</small>
                     </td>
-                    <td>{row.primaryPhone ?? "—"}</td>
-                    <td>{row.addresses[0]?.addressText ?? "—"}</td>
-                    <td className="strong">${decimal(row.outstandingDebt)}{row.status === "HOLD" && <small className="text-muted"> · La hakiyay</small>}</td>
-                    <td style={{ textAlign: "right" }}>
+                    <td data-label="Phone">{row.primaryPhone ?? "—"}</td>
+                    <td data-label="Location">{row.addresses[0]?.addressText ?? "—"}</td>
+                    <td data-label="Debt" className="strong">${decimal(row.outstandingDebt)}{row.status === "HOLD" && <small className="text-muted"> · La hakiyay</small>}</td>
+                    <td data-label="" style={{ textAlign: "right" }}>
                       <ActionLink className="btn" href={`/customers/${row.id}`}>Eeg Warbixinta</ActionLink>
                     </td>
                   </tr>

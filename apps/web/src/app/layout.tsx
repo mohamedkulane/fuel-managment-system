@@ -6,5 +6,11 @@ import { AppShell } from "../components/app-shell";
 export const metadata: Metadata = { title: "FuelDesk", description: "Wholesale fuel operations" };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="en"><body><Providers><AppShell>{children}</AppShell></Providers></body></html>;
+  return (
+    <html lang="en" suppressHydrationWarning>
+      <body suppressHydrationWarning>
+        <Providers><AppShell>{children}</AppShell></Providers>
+      </body>
+    </html>
+  );
 }

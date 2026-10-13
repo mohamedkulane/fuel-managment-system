@@ -1,3 +1,4 @@
+import { statementBounds, statementRows } from "./customer-statement.js";
 import { Body, Controller, Get, Headers, Inject, Param, Patch, Post, Query, Req, Res, UseGuards, BadRequestException, ForbiddenException, NotFoundException } from "@nestjs/common";
 import type { Response } from "express";
 import argon2 from "argon2";
@@ -2028,80 +2029,28 @@ export class AppController {
     const cust = await this.prisma.customer.findUnique({ where: { id } });
     if (!cust) throw new NotFoundException("Customer not found");
 
-    const where: Prisma.CustomerLedgerEntryWhereInput = {
-      customerId: id,
-      ...(fromDate || toDate
-        ? {
-            occurredAt: {
-              ...(fromDate ? { gte: new Date(fromDate) } : {}),
-              ...(toDate ? { lte: new Date(`${toDate}T23:59:59.999Z`) } : {})
-            }
-          }
-        : {})
-    };
-
-    const entries = await this.prisma.customerLedgerEntry.findMany({
-      where,
-      orderBy: { occurredAt: "asc" }
+    const { start, end } = statementBounds(fromDate, toDate);
+    const rows = await this.prisma.customerLedgerEntry.findMany({
+      where: { customerId: id, ...(end ? { occurredAt: { lt: end } } : {}) },
+      orderBy: [{ occurredAt: "asc" }, { id: "asc" }],
     });
-
-    return {
-      data: {
-        customer: { id: cust.id, code: cust.code, name: cust.name, phone: cust.primaryPhone },
-        entries: entries.map((e) => ({
-          id: e.id,
-          occurredAt: e.occurredAt,
-          entryType: e.entryType,
-          referenceNo: e.referenceNo,
-          debitAmount: e.debitAmount.toFixed(4),
-          creditAmount: e.creditAmount.toFixed(4),
-          runningBalance: e.runningBalance.toFixed(4),
-          notes: e.notes
-        }))
-      }
-    };
+    return { data: { customer: { id: cust.id, code: cust.code, name: cust.name, phone: cust.primaryPhone }, ...statementRows(rows, start) } };
   }
 
   @UseGuards(SessionGuard)
   @Get("customers/:id/statement/pdf")
-  async customerStatementPdf(@Param("id") id: string, @Res() response: Response) {
-    const cust = await this.prisma.customer.findUnique({ where: { id }, include: { addresses: true } });
-    if (!cust) throw new NotFoundException("Customer not found");
-
-    const entries = await this.prisma.customerLedgerEntry.findMany({
-      where: { customerId: id },
-      orderBy: { occurredAt: "asc" }
+  async customerStatementPdf(@Param("id") id: string, @Res() response: Response, @Query("fromDate") fromDate?: string, @Query("toDate") toDate?: string) {
+    const { data } = await this.customerStatement(id, fromDate, toDate);
+    const label = (value: string) => dec(value).lt(0) ? "Customer credit $" + dec(value).abs().toFixed(2) : "Debt $" + dec(value).toFixed(2);
+    const pdf = await exportToPdf({
+      title: "FuelDesk - Customer Statement",
+      subtitle: data.customer.name + " | " + (data.customer.phone ?? "") + " | " + (fromDate ?? "Start") + " to " + (toDate ?? "Today"),
+      filters: { Opening: label(data.openingBalance), Closing: label(data.closingBalance) },
+      columns: [{header:"Date",key:"date"},{header:"Type",key:"type"},{header:"Reference",key:"reference"},{header:"Amount",key:"amount"},{header:"Balance",key:"balance"}],
+      rows: data.entries.map(e=>({date:new Intl.DateTimeFormat("en-GB",{timeZone:"Africa/Mogadishu"}).format(e.occurredAt),type:e.entryType==="INVOICE"?"Sale":e.entryType==="PAYMENT"?"Payment":e.entryType==="REVERSAL"?"Reversal":"Adjustment",reference:e.referenceNo,amount:"$"+dec(e.debitAmount).sub(e.creditAmount).abs().toFixed(2),balance:label(e.runningBalance)})),
     });
-
-    const chunks: Buffer[] = [];
-    const doc = new PDFDocument({ autoFirstPage: true, info: { Title: `Statement - ${cust.name}`, Author: "Fuel Wholesale System" } });
-    doc.on("data", (chunk: Buffer) => chunks.push(chunk));
-    doc.on("end", () => {
-      response.type("application/pdf").send(Buffer.concat(chunks));
-    });
-
-    doc.fontSize(18).text("CUSTOMER STATEMENT OF ACCOUNT", { align: "right" });
-    doc.fontSize(10).text(`Date: ${new Date().toISOString().slice(0, 10)}`, { align: "right" });
-    doc.moveDown();
-
-    doc.fontSize(12).text(`Customer: ${cust.name} (${cust.code})`, { underline: true });
-    if (cust.primaryPhone) doc.text(`Phone: ${cust.primaryPhone}`);
-    if (cust.addresses[0]) doc.text(`Address: ${cust.addresses[0].addressText}`);
-    doc.moveDown();
-
-    doc.fontSize(10).text("Date       | Type       | Reference   | Debit ($)   | Credit ($)  | Balance ($)");
-    doc.text("----------------------------------------------------------------------------------");
-    for (const e of entries) {
-      doc.text(
-        `${e.occurredAt.toISOString().slice(0, 10)} | ${e.entryType.padEnd(10)} | ${e.referenceNo.padEnd(11)} | ${e.debitAmount.toFixed(2).padStart(11)} | ${e.creditAmount.toFixed(2).padStart(11)} | ${e.runningBalance.toFixed(2).padStart(11)}`
-      );
-    }
-    doc.text("----------------------------------------------------------------------------------");
-    doc.moveDown();
-    const finalBalance = entries[entries.length - 1]?.runningBalance ?? dec("0");
-    doc.fontSize(12).text(`Current Outstanding Balance: $${finalBalance.toFixed(4)}`);
-
-    doc.end();
+    response.setHeader("Content-Disposition", "inline; filename=customer-statement.pdf");
+    response.type("application/pdf").send(pdf);
   }
 
   @Get("health")

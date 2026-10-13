@@ -27,7 +27,7 @@ export function LoadingState({ label = "Raraya xogta…" }: { label?: string }) 
 export function ErrorState({ title, message, retry }: { title?: string; message: string; retry?: () => void }) {
   return <div className="error-state" role="alert"><AlertCircle size={24} /><strong>{title ?? "Fadlan u kuurgal"}</strong><span>{message}</span>{retry && <ActionButton className="btn secondary" onClick={retry}>Mar kale isku day</ActionButton>}</div>;
 }
-export function SubmitButton({ busy, children }: { busy?: boolean; children: ReactNode }) { return <ActionButton className="btn primary" type="submit" disabled={busy}>{busy ? <><LoaderCircle size={15} className="spin" /> Kaydinaya…</> : children}</ActionButton>; }
+export function SubmitButton({ busy, disabled, children }: { busy?: boolean; disabled?: boolean; children: ReactNode }) { return <ActionButton className="btn primary" type="submit" disabled={busy || disabled}>{busy ? <><LoaderCircle size={15} className="spin" /> Kaydinaya…</> : children}</ActionButton>; }
 
 // Native dialogs contain focus, make background content inert, and support Escape.
 export function Modal({ isOpen, onClose, title, children }: { isOpen: boolean; onClose: () => void; title: string; children: ReactNode }) {

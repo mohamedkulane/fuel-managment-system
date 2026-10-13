@@ -34,7 +34,7 @@ export default function SettingsPage() {
       <PageHeader
         eyebrow="Maamulka Nidaamka"
         title="Dejinta Nidaamka"
-        description="Maamul isticmaalayaasha nidaamka iyo habaynta ganacsiga shidaalka."
+        description=""
         actions={
           <>
             <ActionButton className="btn" disabled={logout.isPending} onClick={() => logout.mutate()}>
@@ -49,48 +49,10 @@ export default function SettingsPage() {
         }
       />
       {logout.isError && <ErrorState message={logout.error.message} />}
-      {owner && <details className="simple-disclosure"><summary>Maamulka dheeraadka ah (Advanced administration)</summary><div className="actions"><ActionLink className="btn" href="/audits">View Audit Log</ActionLink><ActionLink className="btn" href="/invoices">View Invoices</ActionLink><ActionLink className="btn" href="/payments">View Payments</ActionLink><ActionLink className="btn" href="/dispatches">View Delivery History</ActionLink></div></details>}
-
-      <div className="two-col">
-        <Card>
-          <CardHead title="Aakaonkaaga" description="Xogta isticmaalaha nidaamka ka isticmaalaya." />
-          <div className="card-body">
-            <div className="info-pair"><span>Magaca</span><b>{me.data?.displayName}</b></div>
-            <div className="info-pair"><span>Emaylka</span><b>{me.data?.email}</b></div>
-            <div className="info-pair"><span>Xilka</span><Badge tone="info">{owner ? "Milkiile" : "Shaqaale Xafiis"}</Badge></div>
-            <div className="info-pair"><span>Waqtiga Ganacsiga</span><b>Afrika/Muqdisho (UTC+03:00)</b></div>
-            {owner && (
-              <div className="form-actions" style={{ marginTop: 16 }}>
-                <ActionLink className="btn dark" href="/pricing">
-                  Maamul qiimaha & cabbirka shidaalka
-                </ActionLink>
-              </div>
-            )}
-          </div>
-        </Card>
-
-        <Card>
-          <CardHead title="Business setup" description="Key operating rules for your workspace." />
-          <div className="card-body">
-            <div className="info-pair"><span>Sida Loo Soo Gali karo</span><b>Kulan Cookie (Cookie Sessions)</b></div>
-            <div className="info-pair"><span>Derejooyinka La Ogolyahay</span><b>Milkiile & Shaqaale Xafiis</b></div>
-            <div className="info-pair"><span>Qaybta Kaydka</span><b>Litir</b></div>
-            <div className="info-pair"><span>Noocyada Shidaalka</span><b>Naafto & Basiin</b></div>
-            <div className="notice" style={{ marginTop: 20 }}>
-              Qiimaha iyo cabbirka fuustooyinku waa kuwo leh taariikh (versioned). Hawlihii la xaqiijiyay waxay haysanayaan qiimahoodii hore.
-            </div>
-          </div>
-        </Card>
-      </div>
-
+      <Card><CardHead title="Account"/><div className="card-body"><div className="info-pair"><span>Name</span><b>{me.data?.displayName}</b></div><div className="info-pair"><span>Email</span><b>{me.data?.email}</b></div><div className="info-pair"><span>Role</span><Badge>{formatRole(me.data?.role)}</Badge></div></div></Card>
+      {owner && <details className="simple-disclosure"><summary>Audit history</summary><ActionLink className="btn" href="/audits">View Audit Log</ActionLink></details>}
       {owner && (
         <>
-          <div className="grid team-metrics">
-            <MetricCard label="Shaqaalaha Shaqaynaya" value={users.data?.filter((u) => u.isActive).length ?? "—"} note="Ogolaanshada Nidaamka" icon={Users} />
-            <MetricCard label="Milkiilayaasha" value={users.data?.filter((u) => u.role === "OWNER").length ?? "—"} note="Maamulka Ganacsiga" icon={ShieldCheck} />
-            <MetricCard label="Shaqaalaha Xafiiska" value={users.data?.filter((u) => u.role === "OFFICE_EMPLOYEE").length ?? "—"} note="Hawlaha Maalintii" icon={CircleCheck} />
-          </div>
-
           <Card>
             <CardHead title="Shaqaalaha & Ogolaanshada" description="Milkiilaha iyo shaqaalaha xafiiska kaliya ayaa geli kara nidaamka." />
             {users.isLoading ? (

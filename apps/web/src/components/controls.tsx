@@ -23,11 +23,11 @@ function iconFor(text: string): LucideIcon {
   if (/save|saving|kaydi/i.test(text)) return Save;
   if (/print|daabac/i.test(text)) return Printer;
   if (/excel|xlsx/i.test(text)) return FileSpreadsheet;
-  if (/pdf|download|export/i.test(text)) return Download;
+  if (/statement|report|list|pdf|download|export/i.test(text)) return Download;
   if (/back|previous|dib u/i.test(text)) return ArrowLeft;
   if (/next/i.test(text)) return ArrowRight;
   if (/view|eeg|faahfaahin/i.test(text)) return Eye;
-  if (/payment|lacag/i.test(text)) return Wallet;
+  if (/payment|^pay$|lacag/i.test(text)) return Wallet;
   if (/confirm delivery|reconcile/i.test(text)) return ClipboardCheck;
   if (/confirm|approve|xaqiiji/i.test(text)) return Check;
   if (/stock|dispatch|delivery/i.test(text)) return Truck;
@@ -43,5 +43,5 @@ export function ActionLink({ children, ...props }: ComponentProps<typeof Link>) 
 export function ActionAnchor({ children, ...props }: ComponentProps<"a">) { return <a {...props}>{props.className?.includes("btn") ? <ActionContents>{children}</ActionContents> : children}</a>; }
 export function FormLabel({ children, ...props }: ComponentProps<"label">) {
   const content = Children.map(children, child => { if (typeof child !== "string") return child; const original = child.trim(); const required = original.endsWith("*"); const key = original.replace(/\s*[:*]\s*$/, ""); const english = labels[key]; return english ? `${key} (${english})${required ? " *" : ""}` : child; });
-  return <label {...props} style={{ ...props.style, fontSize: 16 }}>{content}</label>;
+  return <label {...props} style={{ ...props.style, fontSize: 15 }}>{content}</label>;
 }

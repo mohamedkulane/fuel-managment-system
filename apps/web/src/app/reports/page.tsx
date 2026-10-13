@@ -7,6 +7,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api, apiBase } from "../../lib/api";
 import { Badge, Card, CardHead, PageHeader } from "../../components/ui";
+import { PdfButton } from "../../components/pdf-button";
 import { notifyError } from "../../lib/toast";
 
 type ReportCard = {
@@ -84,11 +85,11 @@ export default function ReportsHubPage() {
       <Card className="filter-panel">
         <div style={{ display: "flex", flexWrap: "wrap", gap: 16, alignItems: "center" }}>
           <div>
-            <FormLabel style={{ display: "block", fontSize: 12, fontWeight: "bold", marginBottom: 4 }}>Taariikhda Billaabashada (Mogadishu UTC+3):</FormLabel>
+            <FormLabel style={{ display: "block", fontSize: 12, fontWeight: "bold", marginBottom: 4 }}>From</FormLabel>
             <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="input" />
           </div>
           <div>
-            <FormLabel style={{ display: "block", fontSize: 12, fontWeight: "bold", marginBottom: 4 }}>Taariikhda Dhammaadka:</FormLabel>
+            <FormLabel style={{ display: "block", fontSize: 12, fontWeight: "bold", marginBottom: 4 }}>To</FormLabel>
             <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="input" />
           </div>
 
@@ -111,9 +112,7 @@ export default function ReportsHubPage() {
           )}
 
           <div style={{ marginLeft: "auto", display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <ActionButton className="btn primary" onClick={() => handleDownload("pdf")}>
-              <FileDown size={14} /> Download report
-            </ActionButton>
+            <PdfButton className="btn primary" path={activeReport.endpoint+"/pdf?fromDate="+fromDate+"&toDate="+toDate} failure="Report unavailable">Open Report</PdfButton>
           </div>
         </div>
       </Card>
