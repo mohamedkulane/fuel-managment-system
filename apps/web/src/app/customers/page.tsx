@@ -1,11 +1,13 @@
 "use client";
+import { ActionButton, FormLabel, ActionLink } from "../../components/controls";
 import { Users, ClipboardList, CircleCheck, Clock3 } from "lucide-react";
-import { FormEvent, useState } from "react";
-import Link from "next/link";
+import { FormEvent, useEffect, useState } from "react";
+
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, type PaginatedResponse } from "../../lib/api";
-import { formatStatus } from "../../lib/format";
+import { decimal, formatStatus } from "../../lib/format";
 import { MetricCard, LoadingState, Badge, Card, CardHead, Empty, ErrorState, Modal, PageHeader, Pagination, SubmitButton } from "../../components/ui";
+import { notifyError, notifySuccess } from "../../lib/toast";
 
 type Customer = {
   id: string;
@@ -14,6 +16,7 @@ type Customer = {
   primaryPhone: string | null;
   status: string;
   notes: string | null;
+  outstandingDebt: string;
   addresses: Array<{ id: string; label: string; addressText: string; district: string | null; city: string | null }>;
 };
 
@@ -23,6 +26,7 @@ export default function CustomersPage() {
   const [status, setStatus] = useState<string>("");
   const [page, setPage] = useState(1);
   const [showModal, setShowModal] = useState(false);
+  useEffect(() => { if (new URLSearchParams(window.location.search).get("new") === "1") setShowModal(true); }, []);
 
   const queryParams = new URLSearchParams({ page: String(page), limit: "15" });
   if (search.trim()) queryParams.set("search", search.trim());
@@ -38,7 +42,9 @@ export default function CustomersPage() {
     onSuccess: async () => {
       setShowModal(false);
       await client.invalidateQueries({ queryKey: ["customers"] });
-    }
+      notifySuccess("Customer added");
+    },
+    onError: error => notifyError(error, "Customer not saved")
   });
 
   function submit(e: FormEvent<HTMLFormElement>) {
@@ -64,41 +70,32 @@ export default function CustomersPage() {
         eyebrow="Macaamiisha ganacsiga"
         title="Macaamiisha"
         description="Macmiil kasta, xiriirka iyo ciwaanka gaarsiinta oo hal meel ku wada jira."
-        actions={<button className="btn primary" onClick={() => setShowModal(true)}>Kudhi Macmiil Cusub</button>}
+        actions={<ActionButton className="btn primary" onClick={() => setShowModal(true)}>Kudhi Macmiil Cusub</ActionButton>}
       />
 
-      <div className="grid"><MetricCard label="Macaamiisha ku habboon" value={query.data ? (Array.isArray(query.data) ? query.data.length : query.data.total) : "—"} note="Natiijada raadinta hadda" icon={Users}/><MetricCard label="Firfircoon boggan" value={items.filter(c=>c.status==="ACTIVE").length} note="Koontooyinka dalabka laga qaban karo" icon={CircleCheck}/><MetricCard label="La hakiyay boggan" value={items.filter(c=>c.status==="HOLD").length} note="Xaddidaad uu milkiilaha saaray" icon={Clock3}/><MetricCard label="Bogga diiwaanka" value={page} note={`Bogga ${page} ee ${totalPages}`} icon={ClipboardList}/></div>
       <Modal isOpen={showModal} onClose={() => setShowModal(false)} title="Diiwaangeli Macmiil Cusub">
         <form onSubmit={submit}>
           <div className="form-grid">
             <div className="field">
-              <label htmlFor="name">Magaca macmiilka *</label>
+              <FormLabel htmlFor="name">Magaca macmiilka*</FormLabel>
               <input id="name" className="input" name="name" required placeholder="tusaale: Shirkadda Xassan Trading" />
             </div>
             <div className="field">
-              <label htmlFor="phone">Telefoonka koowaad</label>
+              <FormLabel htmlFor="phone">Telefoonka koowaad</FormLabel>
               <input id="phone" className="input" name="phone" placeholder="+252 61 XXX XXXX" />
             </div>
             <div className="field full">
-              <label htmlFor="address">Ciwaanka gaarsiinta</label>
+              <FormLabel htmlFor="address">Ciwaanka gaarsiinta</FormLabel>
               <input id="address" className="input" name="address" placeholder="Bakhaarka Weyn, Degmada Hodan" />
             </div>
-            <div className="field">
-              <label htmlFor="district">Degmada</label>
-              <input id="district" className="input" name="district" placeholder="Hodan" />
-            </div>
-            <div className="field">
-              <label htmlFor="city">Magaalada</label>
-              <input id="city" className="input" name="city" placeholder="Muqdisho" />
-            </div>
-            <div className="field full">
-              <label htmlFor="notes">Xusuus-qoor hawgalka</label>
+            <details className="simple-disclosure field full"><summary>Faahfaahin dheeraad ah (More details)</summary><div className="field">
+              <FormLabel htmlFor="notes">Xusuus-qoor hawgalka</FormLabel>
               <input id="notes" className="input" name="notes" placeholder="tusaale: Wuxuu doorbidaa gaarsiinta subaxda" />
-            </div>
+            </div></details>
           </div>
           {create.isError && <div className="notice warn" role="alert" style={{ marginTop: 16 }}>{(create.error as Error).message}</div>}
           <div className="form-actions">
-            <button type="button" className="btn" onClick={() => setShowModal(false)}>Ka Noqo</button>
+            <ActionButton type="button" className="btn" onClick={() => setShowModal(false)}>Ka Noqo</ActionButton>
             <SubmitButton busy={create.isPending}>Kaydi Macmiilka</SubmitButton>
           </div>
         </form>
@@ -134,8 +131,8 @@ export default function CustomersPage() {
                 <tr>
                   <th>Macmiilka</th>
                   <th>Telefoonka</th>
-                  <th>Ciwaanka Gaarsiinta Koowaad</th>
-                  <th>Xaaladda</th>
+                  <th>Goobta</th>
+                  <th>Deynta hadda</th>
                   <th style={{ textAlign: "right" }}>Hawgallada</th>
                 </tr>
               </thead>
@@ -149,13 +146,9 @@ export default function CustomersPage() {
                     </td>
                     <td>{row.primaryPhone ?? "—"}</td>
                     <td>{row.addresses[0]?.addressText ?? "—"}</td>
-                    <td>
-                      <Badge tone={row.status === "ACTIVE" ? "ok" : row.status === "HOLD" ? "warn" : "neutral"}>
-                        {formatStatus(row.status)}
-                      </Badge>
-                    </td>
+                    <td className="strong">${decimal(row.outstandingDebt)}{row.status === "HOLD" && <small className="text-muted"> · La hakiyay</small>}</td>
                     <td style={{ textAlign: "right" }}>
-                      <Link className="btn" href={`/customers/${row.id}`}>Eeg Warbixinta</Link>
+                      <ActionLink className="btn" href={`/customers/${row.id}`}>Eeg Warbixinta</ActionLink>
                     </td>
                   </tr>
                 ))}

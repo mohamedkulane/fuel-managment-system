@@ -7,12 +7,10 @@ import { BarChart3, Boxes, CalendarDays, ChevronRight, ClipboardList, Clock3, Fu
 import { api, ApiError, type Actor } from "../lib/api";
 import { ErrorState, LoadingState } from "./ui";
 import { formatRole } from "../lib/format";
+import { WorkspaceHeader } from "./workspace-header";
 
 const groups = [
-  { label: "Goobta Shaqada", links: [{ href: "/", label: "Guudmar", icon: LayoutGrid }, { href: "/customers", label: "Macaamiisha", icon: Users }, { href: "/orders", label: "Dalabyada", icon: ShoppingBag }, { href: "/invoices", label: "Biilasha", icon: Receipt }, { href: "/payments", label: "Lacag-bixinnada", icon: Wallet }, { href: "/debts", label: "Xinta Deynta", icon: TrendingUp }] },
-  { label: "Hawgallada", links: [{ href: "/stock", label: "Kaydka Shidaalka", icon: Boxes }, { href: "/stock/receive", label: "Shidaal Soo Gelin", icon: Truck }, { href: "/pricing", label: "Qiimaha Shidaalka", icon: Fuel }, { href: "/deliveries", label: "Waraaqaha Gaarsiinta", icon: ClipboardList }, { href: "/dispatches", label: "Dhaqdhaqaaqa Dirista", icon: Repeat2 }] },
-  { label: "Warbixinnada & Xogta", links: [{ href: "/reports", label: "Warbixinnada & Soo Dejinta", icon: BarChart3 }, { href: "/audits", label: "Diiwaanka Hawlaha", icon: Clock3 }] },
-  { label: "Maamulka", links: [{ href: "/settings", label: "Dejinta & Ogolaanshaha", icon: Settings }] }
+  { label: "", links: [{ href: "/", label: "Guudmar", icon: LayoutGrid }, { href: "/customers", label: "Macaamiisha", icon: Users }, { href: "/orders", label: "Dalabyada", icon: ShoppingBag }, { href: "/stock", label: "Kaydka Shidaalka", icon: Boxes }, { href: "/reports", label: "Warbixinnada", icon: BarChart3 }, { href: "/settings", label: "Dejinta", icon: Settings }] }
 ];
 export function Brand() { return <div className="brand"><span className="brand-mark">f.</span><div><strong>fueldesk.</strong><small>Hoolka Jumladlaha Shidaalka</small></div></div>; }
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -37,14 +35,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     return () => { document.body.style.overflow = previous; document.removeEventListener("keydown", keydown); menu.current?.focus(); };
   }, [open]);
   if (login) return children;
-  const activeLink = groups.flatMap(g => g.links).filter(l => l.href === "/" ? path === "/" : path === l.href || path.startsWith(`${l.href}/`)).sort((a,b) => b.href.length-a.href.length)[0];
+  // The daily manifest is deliberately isolated from search and financial widgets,
+  // including hidden print DOM and the header's dashboard response.
+  if (path === "/deliveries") return me.data ? children : <main className="page">{me.isError ? <ErrorState message={me.error.message}/> : <LoadingState/>}</main>;
+  const sectionPath = /^\/(payments|debts|invoices)(\/|$)/.test(path) ? "/customers" : /^\/(deliveries|dispatches)(\/|$)/.test(path) ? "/orders" : path === "/pricing" ? "/stock" : path === "/audits" ? "/settings" : path;
+  const activeLink = groups.flatMap(g => g.links).filter(l => l.href === "/" ? sectionPath === "/" : sectionPath === l.href || sectionPath.startsWith(`${l.href}/`)).sort((a,b) => b.href.length-a.href.length)[0];
   const initials = me.data?.displayName.split(" ").map(n => n[0]).slice(0,2).join("") ?? "";
   return <div className="app-shell"><a href="#workspace-content" className="skip-link">U gudub nuxurka</a><button className={`backdrop ${open ? "open" : ""}`} aria-label="Xir meertada" onClick={() => setOpen(false)} tabIndex={-1} />
     <aside ref={sidebar} className={`sidebar ${open ? "open" : ""}`} aria-label="Meertada goobta shaqada"><div className="brand-row"><Brand /><button className="sidebar-close icon-btn" aria-label="Xir meertada" onClick={() => setOpen(false)}><X size={19} /></button></div>
       <nav className="side-nav" aria-label="Meertada koowaad">{groups.map(group => <div key={group.label}><p>{group.label}</p>{group.links.filter(l => l.href !== "/audits" || me.data?.role === "OWNER").map(({ href, label, icon: Icon }) => <Link key={href} href={href} onClick={() => setOpen(false)} aria-current={activeLink?.href === href ? "page" : undefined} className={activeLink?.href === href ? "active" : ""}><Icon size={17} strokeWidth={1.7} aria-hidden="true" />{label}</Link>)}</div>)}</nav>
       <div className="sidebar-foot"><div className="avatar">{initials}</div><div className="sidebar-user"><b>{me.data?.displayName ?? "Raraya…"}</b><small>{formatRole(me.data?.role)}</small></div><button className="logout-btn" aria-label="Ka bax" title="Ka bax" disabled={logout.isPending} onClick={() => logout.mutate()}><LogOut size={17} /></button></div>
     </aside>
-    <div className="workspace" inert={open ? true : undefined}><header className="topbar"><div className="crumb"><button ref={menu} className="menu-btn icon-btn" aria-label="Fur meertada" aria-expanded={open} onClick={() => setOpen(true)}><Menu size={20} /></button><span>Goobta Shaqada</span><ChevronRight size={13} /><b>{activeLink?.label ?? "Guudmar"}</b>{path.split("/").length > 2 && <span className="detail-crumb"> / Faahfaahin</span>}</div><div className="top-actions"><span className="business-date"><CalendarDays size={14} />{new Intl.DateTimeFormat("en-GB", { timeZone: "Africa/Mogadishu", day: "2-digit", month: "short", year: "numeric" }).format(new Date())}</span><span className="role-label">{me.data?.role === "OWNER" ? "Milkiile" : "Xafiis"}</span><div className="top-avatar" title={me.data?.displayName}>{initials}</div></div></header>
+    <div className="workspace" inert={open ? true : undefined}><header className="topbar"><button ref={menu} className="menu-btn icon-btn" aria-label="Open menu" aria-expanded={open} onClick={() => setOpen(true)}><Menu size={20} /></button><WorkspaceHeader actor={me.data} onLogout={() => logout.mutate()} busy={logout.isPending} /></header>
       <div id="workspace-content" tabIndex={-1}>{logout.isError && <ErrorState message={logout.error.message} />}{me.isLoading ? <main className="page"><LoadingState label="Soo raraya goobtaada shaqada…" /></main> : me.isError ? <main className="page"><ErrorState message={me.error.message} retry={() => void me.refetch()} /></main> : me.data ? children : null}</div>
     </div></div>;
 }

@@ -1,4 +1,5 @@
 "use client";
+import { ActionButton, FormLabel } from "../../components/controls";
 import { Fuel as FuelIcon, Pencil } from "lucide-react";
 import { decimal, formatFuel, dateTime } from "../../lib/format";
 import { FormEvent, useState } from "react";
@@ -60,9 +61,9 @@ export default function PricingPage() {
         description="Maamul qiimaha Naaftada iyo Basiinka. Dalabyadii hore ee la xaqiijiyay waxay haysanayaan qiimahoodii hore."
         actions={
           owner ? (
-            <button className="btn primary" onClick={() => setMode("price")}>
+            <ActionButton className="btn primary" onClick={() => setMode("price")}>
               Cusboonaysii Qiimaha Iibka
-            </button>
+            </ActionButton>
           ) : undefined
         }
       />
@@ -91,9 +92,9 @@ export default function PricingPage() {
                     <div className="price-meta">
                       <span>Dhaqangal: {dateTime(price.effectiveFromUtc)}</span>
                       {owner && (
-                        <button className="btn dark small" onClick={() => setMode("price")}>
+                        <ActionButton className="btn dark small" onClick={() => setMode("price")}>
                           <Pencil size={13} /> Wax Ka Beddel Qiimaha
-                        </button>
+                        </ActionButton>
                       )}
                     </div>
                   </div>
@@ -119,7 +120,7 @@ export default function PricingPage() {
         <form onSubmit={submit}>
           <div className="form-grid">
             <div className="field">
-              <label htmlFor="fuelId">Nooca Shidaalka *</label>
+              <FormLabel htmlFor="fuelId">Nooca Shidaalka *</FormLabel>
               <select id="fuelId" className="select" name="fuelId" required>
                 <option value="">Dooro shidaal</option>
                 {fuels.data?.map((x) => (
@@ -130,7 +131,7 @@ export default function PricingPage() {
               </select>
             </div>
             <div className="field">
-              <label htmlFor="salesUnitId">Qaybta Iibka *</label>
+              <FormLabel htmlFor="salesUnitId">Qaybta Iibka *</FormLabel>
               <select id="salesUnitId" className="select" name="salesUnitId" required>
                 <option value="">Dooro qayb</option>
                 {units.data?.map((x) => (
@@ -141,23 +142,23 @@ export default function PricingPage() {
               </select>
             </div>
             <div className="field">
-              <label htmlFor="value">Qiimaha Fuustadii ($ USD) *</label>
+              <FormLabel htmlFor="value">Qiimaha Fuustadii ($ USD) *</FormLabel>
               <input id="value" className="input" name="value" inputMode="decimal" placeholder="Geli qiimaha iibka" required />
             </div>
             <div className="field">
-              <label htmlFor="effectiveFromUtc">Taariikhda & Waqtiga Dhaqangalinta *</label>
+              <FormLabel htmlFor="effectiveFromUtc">Taariikhda & Waqtiga Dhaqangalinta *</FormLabel>
               <input id="effectiveFromUtc" className="input" name="effectiveFromUtc" type="datetime-local" required defaultValue={new Date().toISOString().slice(0, 16)} />
             </div>
             <div className="field full">
-              <label htmlFor="reason">Sababta Wax ka Beddelka</label>
+              <FormLabel htmlFor="reason">Sababta Wax ka Beddelka</FormLabel>
               <input id="reason" className="input" name="reason" placeholder="tusaale: Isbeddelka qiimaha shidaalka soo galay" />
             </div>
           </div>
           {save.isError && <div className="notice warn" role="alert" style={{ marginTop: 16 }}>{(save.error as Error).message}</div>}
           <div className="form-actions">
-            <button type="button" className="btn" onClick={() => setMode(null)}>
+            <ActionButton type="button" className="btn" onClick={() => setMode(null)}>
               Ka Noqo
-            </button>
+            </ActionButton>
             <SubmitButton busy={save.isPending}>Kaydi Qiimaha Cusub</SubmitButton>
           </div>
         </form>

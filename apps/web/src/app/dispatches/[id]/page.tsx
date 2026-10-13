@@ -1,8 +1,9 @@
 "use client";
+import { ActionButton, ActionLink } from "../../../components/controls";
 import { sum, decimal, formatStatus, formatFuel } from "../../../lib/format";
 import { Boxes, Truck, CircleCheck } from "lucide-react";
 import { useParams } from "next/navigation";
-import Link from "next/link";
+
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, mutationKey } from "../../../lib/api";
 import { MetricCard, Badge, Card, CardHead, ErrorState, PageHeader } from "../../../components/ui";
@@ -72,18 +73,18 @@ export default function DispatchDetailPage() {
           row ? (
             <>
               {row.status === "PREPARED" && (
-                <button className="btn primary" disabled={post.isPending} onClick={() => post.mutate()}>
+                <ActionButton className="btn primary" disabled={post.isPending} onClick={() => post.mutate()}>
                   {post.isPending ? "Diiwaangelinaya…" : "Diiwaangeli Dirista Rasmiga Ah"}
-                </button>
+                </ActionButton>
               )}
               {["POSTED", "PARTIALLY_RECONCILED"].includes(row.status) && (
-                <Link className="btn primary" href={`/dispatches/${id}/reconcile`}>
+                <ActionLink className="btn primary" href={`/dispatches/${id}/reconcile`}>
                   Heshiisii Gaarsiinta
-                </Link>
+                </ActionLink>
               )}
-              <Link className="btn" href="/dispatches">
+              <ActionLink className="btn" href="/dispatches">
                 Dib u laab Dirisyada
-              </Link>
+              </ActionLink>
             </>
           ) : undefined
         }

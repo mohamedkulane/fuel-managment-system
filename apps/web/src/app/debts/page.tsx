@@ -1,7 +1,8 @@
 "use client";
+import { ActionLink } from "../../components/controls";
 import { PageHeader, CardHead } from "../../components/ui";
 import { decimal, formatStatus } from "../../lib/format";
-import Link from "next/link";
+
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../../lib/api";
 
@@ -41,7 +42,7 @@ export default function DebtsPage() {
 
   return (
     <main className="page finance-page">
-      <PageHeader eyebrow="Maaliyadda macaamiisha" title="Xinta Deynta & Xisaabaadka" description="La soco deynta harsan, kireeditka aan la isticmaalin iyo meesha ay xisaabta macmiilka joogto." actions={<Link href="/payments" className="btn primary">Diiwaangeli Lacag-bixin</Link>} />
+      <PageHeader eyebrow="Maaliyadda macaamiisha" title="Xinta Deynta & Xisaabaadka" description="La soco deynta harsan, kireeditka aan la isticmaalin iyo meesha ay xisaabta macmiilka joogto." actions={<ActionLink href="/payments" className="btn primary">Diiwaangeli Lacag-bixin</ActionLink>} />
 
       {debtsQuery.isLoading ? (
         <div className="skeleton tall" />
@@ -98,9 +99,9 @@ export default function DebtsPage() {
                   {debtsQuery.data.customers.map((c) => (
                     <tr key={c.customerId}>
                       <td>
-                        <Link href={`/customers/${c.customerId}`} className="link font-semibold">
+                        <ActionLink href={`/customers/${c.customerId}`} className="link font-semibold">
                           {c.name}
-                        </Link>
+                        </ActionLink>
                         <div className="text-xs text-muted">{c.code} {c.primaryPhone ? `| ${c.primaryPhone}` : ""}</div>
                       </td>
                       <td>
@@ -118,9 +119,9 @@ export default function DebtsPage() {
                       <td className="font-mono text-amber-400">${decimal(c.unappliedCredit, 2)}</td>
                       <td className="font-mono font-bold text-sky-400">${decimal(c.netBalance, 2)}</td>
                       <td>
-                        <Link href={`/customers/${c.customerId}`} className="btn ghost sm">
+                        <ActionLink href={`/customers/${c.customerId}`} className="btn ghost sm">
                           Eeg Warbixinta
-                        </Link>
+                        </ActionLink>
                       </td>
                     </tr>
                   ))}

@@ -6,4 +6,5 @@ coverage/
 *.log
 prisma/*.db
 *.tsbuildinfo
+.edge-qa-profile/
 

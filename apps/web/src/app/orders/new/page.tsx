@@ -1,184 +1,27 @@
 "use client";
-import { FormEvent, useState } from "react";
-import Link from "next/link";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, ShieldCheck } from "lucide-react";
-import { api, type PaginatedResponse } from "../../../lib/api";
-import { formatFuel } from "../../../lib/format";
+import { useQuery } from "@tanstack/react-query";
+import Decimal from "decimal.js";
+import { api, type Actor, type PaginatedResponse } from "../../../lib/api";
+import { decimal, formatFuel } from "../../../lib/format";
+import { ActionLink, FormLabel } from "../../../components/controls";
+import { useWorkflow } from "../../../components/simple-forms";
 import { Card, CardHead, ErrorState, PageHeader, SubmitButton } from "../../../components/ui";
-type Customer = { id:string; name:string; addresses:Array<{addressText:string}> };
-type Fuel = { id:string; displayName:string }; type Unit = { id:string; name:string };
-export default function NewOrderPage() {
-  const router = useRouter();
-  const client = useQueryClient();
-  const [customerId, setCustomerId] = useState("");
-  const [fuelId, setFuelId] = useState("");
-  const [salesUnitId, setSalesUnitId] = useState("");
-  const [quantity, setQuantity] = useState("");
-  const [discount, setDiscount] = useState("0");
-  const [discountReason, setDiscountReason] = useState("");
-
-  const customers = useQuery({ queryKey: ["customers", "order-options"], queryFn: () => api<Customer[] | PaginatedResponse<Customer>>("/customers") });
-  const fuels = useQuery({ queryKey: ["fuels"], queryFn: () => api<Fuel[]>("/fuels") });
-  const units = useQuery({ queryKey: ["sales-units"], queryFn: () => api<Unit[]>("/sales-units") });
-
-  const create = useMutation({
-    mutationFn: (body: object) => api<{ id: string }>("/orders", { method: "POST", body: JSON.stringify(body) }),
-    onSuccess: async (row) => {
-      await client.invalidateQueries({ queryKey: ["orders"] });
-      router.push(`/orders/${row.id}`);
-    }
-  });
-
-  function submit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const d = new FormData(e.currentTarget);
-    create.mutate({
-      customerId: d.get("customerId"),
-      addressSnapshot: d.get("addressSnapshot"),
-      requestedDeliveryDate: d.get("deliveryDate") || undefined,
-      fixedDiscountAmount: d.get("fixedDiscountAmount") || "0",
-      discountReason: d.get("discountReason") || undefined,
-      notes: d.get("notes"),
-      lines: [{ fuelId: d.get("fuelId"), salesUnitId: d.get("salesUnitId"), requestedUnits: d.get("requestedUnits") }]
-    });
-  }
-
-  const raw = customers.data;
-  const customerList = Array.isArray(raw) ? raw : raw?.items ?? [];
-
-  return (
-    <main className="page">
-      <PageHeader
-        eyebrow="Dalabyada / cusub"
-        title="Diiwaangeli dalab cusub"
-        description="Qabo codsiga oo kaydi. Qiimaha, lacag-dhimista, iyo kuleetarka litarada waxay ku xirnadaan xaqiijinta."
-        actions={
-          <Link className="btn" href="/orders">
-            <ArrowLeft size={14} /> Dib u laab dalabyada
-          </Link>
-        }
-      />
-      <ol className="workflow-steps">
-        <li className="active">Faahfaahinta dalabka</li>
-        <li>Eegista & xaqiijinta</li>
-        <li>Dirista</li>
-      </ol>
-
-      {(customers.isError || fuels.isError || units.isError) && (
-        <ErrorState
-          message={(customers.error || fuels.error || units.error)?.message ?? "Ma kleen in la raro xogta dalabka"}
-          retry={() => {
-            void customers.refetch();
-            void fuels.refetch();
-            void units.refetch();
-          }}
-        />
-      )}
-
-      <form onSubmit={submit}>
-        <div className="two-col">
-          <Card>
-            <CardHead title="Macmiilka & shidaalka" description="Geli xogta macmiilka, tirada la codsaday, iyo lacag-dhimista tooska ah ee lagu heshiiyay." />
-            <div className="card-body">
-              <div className="form-grid">
-                <div className="field">
-                  <label htmlFor="customerId">Macmiilka *</label>
-                  <select id="customerId" className="select" name="customerId" required value={customerId} onChange={(e) => setCustomerId(e.target.value)}>
-                    <option value="">Dooro macmiilka</option>
-                    {customerList.map((x) => (
-                      <option key={x.id} value={x.id}>
-                        {x.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="field">
-                  <label htmlFor="fuelId">Nooca shidaalka *</label>
-                  <select id="fuelId" className="select" name="fuelId" required value={fuelId} onChange={(e) => setFuelId(e.target.value)}>
-                    <option value="">Dooro shidaalka</option>
-                    {fuels.data?.map((x) => (
-                      <option key={x.id} value={x.id}>
-                        {formatFuel(x.displayName)}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="field">
-                  <label htmlFor="requestedUnits">Tirada la codsaday *</label>
-                  <input id="requestedUnits" className="input" name="requestedUnits" required inputMode="decimal" pattern="[0-9]+(\.[0-9]+)?" value={quantity} onChange={(e) => setQuantity(e.target.value)} placeholder="Geli tirada fuustooyinka" />
-                </div>
-                <div className="field">
-                  <label htmlFor="salesUnitId">Halbeegka iibka *</label>
-                  <select id="salesUnitId" className="select" name="salesUnitId" required value={salesUnitId} onChange={(e) => setSalesUnitId(e.target.value)}>
-                    <option value="">Dooro halbeegka</option>
-                    {units.data?.map((x) => (
-                      <option key={x.id} value={x.id}>
-                        Fuusto
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="field">
-                  <label htmlFor="fixedDiscountAmount">Lacag-dhimista Tooska ah ee Order-ka ($)</label>
-                  <input id="fixedDiscountAmount" className="input" name="fixedDiscountAmount" inputMode="decimal" pattern="[0-9]+(\.[0-9]+)?" value={discount} onChange={(e) => setDiscount(e.target.value)} placeholder="0.00" />
-                  <span className="text-muted text-xs">Lacag-dhimis go'an oo doolar ah oo lagu sameeyay wadarta dalabka.</span>
-                </div>
-                <div className="field">
-                  <label htmlFor="discountReason">Sababta Ogolaanshaha Lacag-dhimista</label>
-                  <input id="discountReason" className="input" name="discountReason" value={discountReason} onChange={(e) => setDiscountReason(e.target.value)} placeholder="tusaale: Milkiilaha ayaa ogolaaday heshiiska iibka weyn" />
-                </div>
-                <div className="field full">
-                  <label htmlFor="addressSnapshot">Ciwaanka gaarsiinta *</label>
-                  <input key={customerId} id="addressSnapshot" className="input" name="addressSnapshot" required defaultValue={customerList.find((c) => c.id === customerId)?.addresses[0]?.addressText ?? ""} placeholder="Geli goobta gaarsiinta" />
-                </div>
-                <div className="field">
-                  <label htmlFor="deliveryDate">Taariikhda la rabo in lagu gaarsiiyo</label>
-                  <input id="deliveryDate" className="input" name="deliveryDate" type="date" />
-                </div>
-                <div className="field full">
-                  <label htmlFor="notes">Fariimo dheeraad ah</label>
-                  <textarea id="notes" className="textarea" name="notes" placeholder="Xusuus-qoor hawgalka xafiiska" />
-                </div>
-              </div>
-            </div>
-          </Card>
-
-          <Card>
-            <CardHead title="Hor-u-eegista dalabka" description="Dalabyada qabyada ah ma abuuraan deyn ilaa la xaqiijiyo." />
-            <div className="card-body">
-              <div className="info-pair">
-                <span>Macmiilka</span>
-                <b>{customerList.find((c) => c.id === customerId)?.name ?? "Aan la dooran"}</b>
-              </div>
-              <div className="info-pair">
-                <span>Shidaalka</span>
-                <b>{formatFuel(fuels.data?.find((f) => f.id === fuelId)?.displayName) || "Aan la dooran"}</b>
-              </div>
-              <div className="info-pair">
-                <span>Tirada</span>
-                <b>
-                  {quantity || "—"} Fuusto
-                </b>
-              </div>
-              <div className="info-pair">
-                <span>Lacag-dhimista Tooska ah</span>
-                <b className="text-emerald-400">-${discount ? parseFloat(discount || "0").toFixed(2) : "0.00"}</b>
-              </div>
-              <div className="notice" style={{ marginTop: 20 }}>
-                <ShieldCheck size={16} />
-                Qiimaha iibka ee lagu heshiiyay, lacag-dhimista tooska ah, iyo kuleetarka litarada waxay noqon doonaan kuwa aan ka noqosho lahayn marka dalabka la xaqiijiyo.
-              </div>
-              {create.isError && <ErrorState message={create.error.message} />}
-              <div className="form-actions">
-                <SubmitButton busy={create.isPending}>Kaydi dalabka qabyada ah</SubmitButton>
-              </div>
-            </div>
-          </Card>
-        </div>
-      </form>
-    </main>
-  );
+import { notifyError, notifySuccess } from "../../../lib/toast";
+type Customer={id:string;name:string;primaryPhone:string|null;addresses:{addressText:string}[]};
+export default function NewOrderPage(){
+ const router=useRouter(); const [search,setSearch]=useState(""); const [customer,setCustomer]=useState<Customer|null>(null); const [fuelId,setFuelId]=useState(""); const [qty,setQty]=useState(""); const [discount,setDiscount]=useState(""); const [paid,setPaid]=useState(""); const [address,setAddress]=useState("");
+ const customers=useQuery({queryKey:["customers","order-search",search],queryFn:()=>api<PaginatedResponse<Customer>>("/customers?limit=20&search="+encodeURIComponent(search))});
+ const fuels=useQuery({queryKey:["fuels"],queryFn:()=>api<{id:string;displayName:string}[]>("/fuels")});
+ const units=useQuery({queryKey:["sales-units"],queryFn:()=>api<{id:string;code:string}[]>("/sales-units")});
+ const me=useQuery({queryKey:["me"],queryFn:()=>api<Actor>("/auth/me")});
+ const unit=units.data?.find(u=>u.code.toUpperCase()==="FUUSTO");
+ const price=useQuery({queryKey:["prices","current",fuelId,unit?.id],queryFn:()=>api<{id:string;unitPrice:string}|null>("/prices/current?fuelId="+fuelId+"&unitId="+unit?.id),enabled:!!fuelId&&!!unit});
+ const save=useWorkflow<{customerId:string;fuelId:string;salesUnitId:string;quantity:string;expectedPriceId:string;address:string;discount:string;paidNow:string;notes:string}>("/simple/orders",result=>{notifySuccess(result.status === "DRAFT" ? "Order saved" : "Order confirmed");router.push("/orders/"+result.id);},{error:"Order not saved"});
+ const safe=(value:string)=>/^\d+(\.\d{1,4})?$/.test(value)?new Decimal(value):new Decimal(0);
+ const subtotal=safe(qty).mul(price.data?.unitPrice??"0"); const total=subtotal.sub(safe(discount)); const remaining=total.sub(safe(paid)); const pending=safe(discount).gt(0)&&me.data?.role==="OFFICE_EMPLOYEE";
+ function submit(event:FormEvent<HTMLFormElement>){event.preventDefault();if(!customer||!unit||!price.data)return;const data=new FormData(event.currentTarget);save.mutate({customerId:customer.id,fuelId,salesUnitId:unit.id,quantity:qty,expectedPriceId:price.data.id,address,discount:discount||"0",paidNow:paid||"0",notes:String(data.get("notes")||"")});}
+ return <main className="page"><PageHeader eyebrow="" title="Dalab Cusub" description="Dooro macmiilka, shidaalka iyo tirada." actions={<ActionLink className="btn" href="/orders">Back to Orders</ActionLink>}/><form onSubmit={submit}><div className="two-col"><Card><CardHead title="Faahfaahinta dalabka"/><div className="card-body"><div className="form-grid"><div className="field full"><FormLabel htmlFor="customer-search">Raadi macmiilka (Search customer)</FormLabel><input id="customer-search" className="input" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Magac ama telefoon / Name or phone"/></div><div className="field full"><FormLabel htmlFor="customer">Macmiilka (Customer)</FormLabel><select id="customer" className="select" value={customer?.id??""} required onChange={e=>{const selected=customers.data?.items.find(c=>c.id===e.target.value)??null;setCustomer(selected);setAddress(selected?.addresses[0]?.addressText??"");}}><option value="">Dooro macmiilka / Select customer</option>{customer&&!customers.data?.items.some(c=>c.id===customer.id)&&<option value={customer.id}>{customer.name}</option>}{customers.data?.items.map(c=><option key={c.id} value={c.id}>{c.name} · {c.primaryPhone}</option>)}</select></div>{customer&&<div className="field full"><p>{customer.primaryPhone??"Telefoon lama diiwaangelin"} · {address||"Goob lama diiwaangelin"}</p><details><summary>Goobta (Delivery address)</summary><FormLabel htmlFor="order-address">Goobta (Address)</FormLabel><input id="order-address" className="input" value={address} onChange={e=>setAddress(e.target.value)}/></details></div>}<div className="field"><FormLabel htmlFor="fuel">Nooca shidaalka (Fuel type)</FormLabel><select id="fuel" className="select" value={fuelId} onChange={e=>setFuelId(e.target.value)} required><option value="">Dooro / Select</option>{fuels.data?.map(f=><option key={f.id} value={f.id}>{formatFuel(f.displayName)}</option>)}</select></div><div className="field"><FormLabel htmlFor="quantity">Tirada fuustooyinka (Quantity in fuusto)</FormLabel><input id="quantity" className="input" value={qty} onChange={e=>setQty(e.target.value)} inputMode="numeric" pattern="[0-9]+" required/></div><div className="field full"><FormLabel htmlFor="current-price">Qiimaha fuustadii (Current price per fuusto)</FormLabel><input id="current-price" className="input" readOnly value={price.isFetching?"Raraya…":price.data?"$"+decimal(price.data.unitPrice):"Qiime lama dejin"}/></div></div><details className="simple-disclosure"><summary>Faahfaahin dheeraad ah (More details)</summary><div className="form-grid"><div className="field"><FormLabel htmlFor="discount">Lacag-dhimista dalabka (Fixed order discount $)</FormLabel><input id="discount" className="input" value={discount} onChange={e=>setDiscount(e.target.value)} inputMode="decimal" pattern="[0-9]+(\.[0-9]{1,4})?"/></div><div className="field"><FormLabel htmlFor="paid-now">Hadda la bixiyey (Paid now $)</FormLabel><input id="paid-now" className="input" value={paid} onChange={e=>setPaid(e.target.value)} inputMode="decimal" pattern="[0-9]+(\.[0-9]{1,4})?"/></div><div className="field full"><FormLabel htmlFor="notes">Faahfaahin (Notes)</FormLabel><textarea id="notes" name="notes" className="textarea"/></div></div></details></div></Card><Card><CardHead title="Hubi dalabka"/><div className="card-body"><div className="info-pair"><span>Macmiil</span><b>{customer?.name??"—"}</b></div><div className="info-pair"><span>{qty||"0"} Fuusto × ${decimal(price.data?.unitPrice)}</span><b>${decimal(subtotal.toString())}</b></div><div className="info-pair"><span>Lacag-dhimis guud</span><b>${decimal(discount||"0")}</b></div><div className="info-pair"><span>Wadarta dalabka</span><b>${decimal(total.toString())}</b></div><div className="info-pair"><span>Hadda la bixiyey</span><b>${decimal(paid||"0")}</b></div><div className="info-pair"><span>Inta ka dhiman (Qiyaas)</span><b>${decimal(Decimal.max(0,remaining).toString())}</b></div><p className="text-muted">Haraaga dalabku waa qiyaas ilaa shidaalka la geeyo. Lacagta hore loo bixiyey waxay u taal macmiilka.</p>{pending&&<p className="notice warn">Sugaya oggolaanshaha milkiilaha.</p>}{save.isError&&<ErrorState message={save.error.message} retry={()=>void price.refetch()}/>} {(price.isError||customers.isError||fuels.isError)&&<ErrorState message="Xogta lama soo rari karin." retry={()=>{void price.refetch();void customers.refetch();void fuels.refetch();}}/>}<SubmitButton busy={save.isPending||!price.data||!customer||!address||total.lt(0)||safe(qty).lte(0)}>Save Order</SubmitButton></div></Card></div></form></main>;
 }
 

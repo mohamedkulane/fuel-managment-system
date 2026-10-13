@@ -1,12 +1,14 @@
 "use client";
+import { ActionButton, FormLabel, ActionLink } from "../../components/controls";
 import { FinanceMetrics } from "../../components/finance-metrics";
 import { PageHeader, CardHead, Badge } from "../../components/ui";
 import Decimal from "decimal.js";
 import { decimal, formatStatus } from "../../lib/format";
 import { useState } from "react";
-import Link from "next/link";
+
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, type PaginatedResponse } from "../../lib/api";
+import { notifyError, notifySuccess } from "../../lib/toast";
 import { Modal, Pagination } from "../../components/ui";
 
 type CustomerOption = { id: string; name: string; code: string };
@@ -94,8 +96,9 @@ export default function PaymentsPage() {
       setNotesInput("");
       setAllocationsInput({});
       setFormError("");
+      notifySuccess("Payment recorded");
     },
-    onError: (err: Error) => setFormError(err.message)
+    onError: (err: Error) => { setFormError(err.message); notifyError(err, "Payment failed"); }
   });
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -127,7 +130,7 @@ export default function PaymentsPage() {
         eyebrow="Xisaabta Macaamiisha"
         title="Lacag-bixinnada"
         description="Diiwaangeli lacagaha ay bixiyeen macaamiishu oo u qaybi biilasha furan."
-        actions={<button className="btn primary" onClick={() => setOpenModal(true)}>Diiwaangeli Lacag-bixin</button>}
+        actions={<ActionButton className="btn primary" onClick={() => setOpenModal(true)}>Diiwaangeli Lacag-bixin</ActionButton>}
       />
 
       <FinanceMetrics kind="payments" />
@@ -153,7 +156,7 @@ export default function PaymentsPage() {
               ["EVC_PLUS", "EVC Plus"],
               ["EDAHAB", "eDahab"]
             ].map(([val, label]) => (
-              <button
+              <ActionButton
                 key={val}
                 className={`tab ${methodFilter === val ? "active" : ""}`}
                 onClick={() => {
@@ -162,7 +165,7 @@ export default function PaymentsPage() {
                 }}
               >
                 {label}
-              </button>
+              </ActionButton>
             ))}
           </div>
         </div>
@@ -195,9 +198,9 @@ export default function PaymentsPage() {
                   {paymentsQuery.data.items.map((p) => (
                     <tr key={p.id}>
                       <td>
-                        <Link href={`/payments/${p.id}`} className="font-mono link">
+                        <ActionLink href={`/payments/${p.id}`} className="font-mono link">
                           {p.paymentNo}
-                        </Link>
+                        </ActionLink>
                       </td>
                       <td>
                         <strong>{p.customer.name}</strong>
@@ -217,9 +220,9 @@ export default function PaymentsPage() {
                         </Badge>
                       </td>
                       <td>
-                        <Link href={`/payments/${p.id}`} className="btn ghost sm">
+                        <ActionLink href={`/payments/${p.id}`} className="btn ghost sm">
                           Eeg faahfaahinta
-                        </Link>
+                        </ActionLink>
                       </td>
                     </tr>
                   ))}
@@ -242,7 +245,7 @@ export default function PaymentsPage() {
           {formError && <div className="callout error">{formError}</div>}
 
           <div>
-            <label className="label">Macmiilka *</label>
+            <FormLabel className="label">Macmiilka *</FormLabel>
             <select
               value={selectedCustomerId}
               onChange={(e) => {
@@ -263,7 +266,7 @@ export default function PaymentsPage() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="label">Lacagta La Bixiyay ($) *</label>
+              <FormLabel className="label">Lacagta La Bixiyay ($) *</FormLabel>
               <input
                 type="number"
                 step="0.01"
@@ -276,7 +279,7 @@ export default function PaymentsPage() {
               />
             </div>
             <div>
-              <label className="label">Taariikhda Bixinta *</label>
+              <FormLabel className="label">Taariikhda Bixinta *</FormLabel>
               <input
                 type="date"
                 value={dateInput}
@@ -289,7 +292,7 @@ export default function PaymentsPage() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="label">Qaabka Bixinta *</label>
+              <FormLabel className="label">Qaabka Bixinta *</FormLabel>
               <select
                 value={methodInput}
                 onChange={(e) => setMethodInput(e.target.value as typeof methodInput)}
@@ -304,7 +307,7 @@ export default function PaymentsPage() {
               </select>
             </div>
             <div>
-              <label className="label">Tixraaca / Lambar Transaksi (Waa Ikhtiyaari)</label>
+              <FormLabel className="label">Tixraaca / Lambar Transaksi (Waa Ikhtiyaari)</FormLabel>
               <input
                 type="text"
                 value={refInput}
@@ -318,7 +321,7 @@ export default function PaymentsPage() {
           {/* Manual Invoice Allocations optional list */}
           {selectedCustomerId && customerInvoicesQuery.data?.items.length ? (
             <div className="space-y-2 border-t border-border pt-3">
-              <label className="label">U Qaybi Biilasha Furan (Waa Ikhtiyaari — ka tag maran si loogu qaybiyo tan ugu horeysa)</label>
+              <FormLabel className="label">U Qaybi Biilasha Furan (Waa Ikhtiyaari — ka tag maran si loogu qaybiyo tan ugu horeysa)</FormLabel>
               <div className="space-y-2 max-h-48 overflow-y-auto border border-border rounded p-2">
                 {customerInvoicesQuery.data.items.map((inv) => (
                   <div key={inv.id} className="flex items-center justify-between text-sm p-2 rounded bg-card-hover">
@@ -351,7 +354,7 @@ export default function PaymentsPage() {
           ) : null}
 
           <div>
-            <label className="label">Xusuusin (Waa Ikhtiyaari)</label>
+            <FormLabel className="label">Xusuusin (Waa Ikhtiyaari)</FormLabel>
             <textarea
               value={notesInput}
               onChange={(e) => setNotesInput(e.target.value)}
@@ -361,12 +364,12 @@ export default function PaymentsPage() {
           </div>
 
           <div className="modal-actions">
-            <button type="button" className="btn ghost" onClick={() => setOpenModal(false)}>
+            <ActionButton type="button" className="btn ghost" onClick={() => setOpenModal(false)}>
               Ka Noqo
-            </button>
-            <button type="submit" className="btn primary" disabled={recordPaymentMutation.isPending || !selectedCustomerId}>
+            </ActionButton>
+            <ActionButton type="submit" className="btn primary" disabled={recordPaymentMutation.isPending || !selectedCustomerId}>
               {recordPaymentMutation.isPending ? "Waa la diiwaangelinayaa..." : "Diiwaangeli Lacag-bixinta"}
-            </button>
+            </ActionButton>
           </div>
         </form>
       </Modal>

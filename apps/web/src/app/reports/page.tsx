@@ -1,11 +1,13 @@
 "use client";
+import { ActionButton, FormLabel } from "../../components/controls";
 
-import { ArrowRight, FileDown, FileSpreadsheet, BarChart3 } from "lucide-react";
+import { ArrowRight, FileDown, BarChart3 } from "lucide-react";
 import { ReportPreview, type ReportData } from "../../components/report-preview";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api, apiBase } from "../../lib/api";
 import { Badge, Card, CardHead, PageHeader } from "../../components/ui";
+import { notifyError } from "../../lib/toast";
 
 type ReportCard = {
   id: string;
@@ -17,77 +19,10 @@ type ReportCard = {
 };
 
 const reports: ReportCard[] = [
-  {
-    id: "customers",
-    title: "Diiwaanka Macaamiisha & Xaaladda Xisaabaadka",
-    category: "Financial",
-    description: "Liiska dhameystiran ee macaamiisha, xaaladda, wadarta biilasha, wadarta la bixiyay, deynta harsan iyo natiijada xisaabta.",
-    endpoint: "/reports/customers"
-  },
-  {
-    id: "debts",
-    title: "Warbixinta Deynta Harsan (Aging Report)",
-    category: "Financial",
-    description: "Kala qaybinta deynta harsan (Hadda, 31-60, 61-90, 90+ maalmood) ee dhammaan macaamiisha.",
-    endpoint: "/reports/debts"
-  },
-  {
-    id: "statement",
-    title: "Warbixinta Xisaabta Macmiilka (Statement)",
-    category: "Financial",
-    description: "Diiwaanka faahfaahsan ee dhaqdhaqaaqa xisaabta macmiilka (biilasha, lacag-bixinnada, iyo baaqiga harsan).",
-    endpoint: "/reports/statement"
-  },
-  {
-    id: "sales",
-    title: "Warbixinta Dalabyada Iibka & Cabbirrada",
-    category: "Operations",
-    description: "Safaf ka mid ah dalabyada iibka oo leh tirada fuustooyinka, litirada, qiimaha fuustadii, iyo wadarta.",
-    endpoint: "/reports/sales"
-  },
-  {
-    id: "collections",
-    title: "Warbixinta Qabashada Lacagaha",
-    category: "Financial",
-    description: "Rasiidhada lacag-bixinnada ee qaababka kala duwan (Cash, EVC Plus, eDahab, Bank) iyo qaybinta biilasha.",
-    endpoint: "/reports/collections"
-  },
-  {
-    id: "inventory",
-    title: "Warbixinta Kaydka Shidaalka & Dhaqdhaqaaqa",
-    category: "Inventory",
-    description: "Heerka kaydka shidaalka ee Bakhaarka ama Wadada ku jira iyo diiwaanka dhaqdhaqaaqa.",
-    endpoint: "/reports/inventory"
-  },
-  {
-    id: "stock-receipts",
-    title: "Warbixinta Shidaal Soo Gelinta & Iibsiga",
-    category: "Inventory",
-    description: "Shidaalka soo galay oo fuusto lagu iibsaday, litirada la xisaabiyay iyo qiimaha iibsiga (Milkiilaha kaliya).",
-    endpoint: "/reports/stock-receipts"
-  },
-  {
-    id: "deliveries",
-    title: "Warbixinta Shidaal Gaarsiinta & Dib-u-heshiisiinta",
-    category: "Operations",
-    description: "Warbixinta gaarsiinta shidaalka oo muujineysa tiradii la diray, tan la aqbalay, iyo shidaalka dib loo soo celiyay.",
-    endpoint: "/reports/deliveries"
-  },
-  {
-    id: "invoices",
-    title: "Warbixinta Biilasha & Dakhliga",
-    category: "Financial",
-    description: "Biilasha la xaqiijiyay, wadarta guud, la bixiyay, deynta harsan, iyo xaaladaha kansalaadda.",
-    endpoint: "/reports/invoices"
-  },
-  {
-    id: "profitability",
-    title: "Warbixinta Faaydada & Dakhliga",
-    category: "Owner",
-    description: "Wadarta dakhliga biilasha la soo saaray marka loo barbardhigo qiimaha shidaalka lagu soo iibsaday (Milkiilaha kaliya).",
-    endpoint: "/reports/profitability",
-    ownerOnly: true
-  }
+ {id:"customers",title:"Macaamiisha iyo deymaha",category:"Financial",description:"Xisaabta iyo deynta macaamiisha.",endpoint:"/reports/customers"},
+ {id:"sales",title:"Iibka",category:"Financial",description:"Iibka shidaalka la geeyey iyo biilasha.",endpoint:"/reports/invoices"},
+ {id:"collections",title:"Lacagihii la qabtay",category:"Financial",description:"Lacagaha macaamiisha laga qabtay.",endpoint:"/reports/collections"},
+ {id:"inventory",title:"Kaydka Shidaalka",category:"Inventory",description:"Kaydka iyo shidaalka soo galay ama baxay.",endpoint:"/reports/inventory"}
 ];
 
 export default function ReportsHubPage() {
@@ -129,7 +64,7 @@ export default function ReportsHubPage() {
     let url = `${apiBase}${activeReport.endpoint}/${format}?fromDate=${fromDate}&toDate=${toDate}`;
     if (activeReport.id === "statement") {
       if (!selectedCustomerId) {
-        alert("Fadlan dooro macmiil si aad u soo dejiso warbixinta xisaabta macmiilka.");
+        notifyError(new Error("Customer required"), "Select a customer first");
         return;
       }
       url += `&customerId=${selectedCustomerId}`;
@@ -141,7 +76,7 @@ export default function ReportsHubPage() {
     <main className="page reports-page">
       <PageHeader
         eyebrow="Warbixinnada & Falanqaynta"
-        title="Warbixinnada & Soo Dejinta"
+        title="Warbixinnada"
         description="Ka hel diiwaanada aad u baahan tahay. Soo dejiso warbixinnada PDF ama Excel oo cad."
       />
 
@@ -149,17 +84,17 @@ export default function ReportsHubPage() {
       <Card className="filter-panel">
         <div style={{ display: "flex", flexWrap: "wrap", gap: 16, alignItems: "center" }}>
           <div>
-            <label style={{ display: "block", fontSize: 12, fontWeight: "bold", marginBottom: 4 }}>Taariikhda Billaabashada (Mogadishu UTC+3):</label>
+            <FormLabel style={{ display: "block", fontSize: 12, fontWeight: "bold", marginBottom: 4 }}>Taariikhda Billaabashada (Mogadishu UTC+3):</FormLabel>
             <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="input" />
           </div>
           <div>
-            <label style={{ display: "block", fontSize: 12, fontWeight: "bold", marginBottom: 4 }}>Taariikhda Dhammaadka:</label>
+            <FormLabel style={{ display: "block", fontSize: 12, fontWeight: "bold", marginBottom: 4 }}>Taariikhda Dhammaadka:</FormLabel>
             <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="input" />
           </div>
 
           {activeReport.id === "statement" && (
             <div>
-              <label style={{ display: "block", fontSize: 12, fontWeight: "bold", marginBottom: 4 }}>Dooro Macmiilka Warbixinta:</label>
+              <FormLabel style={{ display: "block", fontSize: 12, fontWeight: "bold", marginBottom: 4 }}>Dooro Macmiilka Warbixinta:</FormLabel>
               <select
                 value={selectedCustomerId}
                 onChange={(e) => setSelectedCustomerId(e.target.value)}
@@ -175,20 +110,17 @@ export default function ReportsHubPage() {
             </div>
           )}
 
-          <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
-            <button className="btn" onClick={() => handleDownload("pdf")}>
-              <FileDown size={14} /> Soo Dejiso PDF
-            </button>
-            <button className="btn primary" onClick={() => handleDownload("xlsx")}>
-              <FileSpreadsheet size={14} /> Soo Dejiso Excel
-            </button>
+          <div style={{ marginLeft: "auto", display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <ActionButton className="btn primary" onClick={() => handleDownload("pdf")}>
+              <FileDown size={14} /> Download report
+            </ActionButton>
           </div>
         </div>
       </Card>
 
       <div className="report-grid">
         {reports.filter(r => !r.ownerOnly || isOwner).map(r => (
-          <button
+          <ActionButton
             type="button"
             key={r.id}
             className={`report-option ${r.id === selectedReport ? "selected" : ""}`}
@@ -202,7 +134,7 @@ export default function ReportsHubPage() {
               {r.id === selectedReport ? "Eegaya warbixinta" : "Eeg warbixinta"} <ArrowRight size={13} />
             </span>
             {r.ownerOnly && <Badge tone="warn">Milkiilaha Kaliya</Badge>}
-          </button>
+          </ActionButton>
         ))}
       </div>
 
@@ -211,16 +143,6 @@ export default function ReportsHubPage() {
         <CardHead
           title={`Kormeerka Warbixinta — ${activeReport.title}`}
           description={`Diiwaanka taariikhda la shaandheeyay · ${fromDate} ilaa ${toDate}`}
-          action={
-            <div style={{ display: "flex", gap: 8 }}>
-              <button className="btn small" onClick={() => handleDownload("pdf")}>
-                PDF
-              </button>
-              <button className="btn small primary" onClick={() => handleDownload("xlsx")}>
-                Excel (.xlsx)
-              </button>
-            </div>
-          }
         />
 
         {previewQuery.isLoading ? (

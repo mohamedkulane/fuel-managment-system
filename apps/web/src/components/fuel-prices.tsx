@@ -1,0 +1,20 @@
+"use client";
+import { useState, type FormEvent } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { api, type Actor } from "../lib/api";
+import { decimal, dateTime, formatFuel } from "../lib/format";
+import { ActionButton, FormLabel } from "./controls";
+import { Card, CardHead, ErrorState, LoadingState, Modal, SubmitButton } from "./ui";
+import { notifyError, notifySuccess } from "../lib/toast";
+type Price={id:string;unitPrice:string;effectiveFromUtc:string;effectiveToUtc:string|null;fuel:{id:string;displayName:string};salesUnit:{id:string;name:string}};
+export function FuelPrices() {
+ const client=useQueryClient(); const [open,setOpen]=useState(false);
+ const me=useQuery({queryKey:["me"],queryFn:()=>api<Actor>("/auth/me")});
+ const fuels=useQuery({queryKey:["fuels"],queryFn:()=>api<{id:string;displayName:string}[]>("/fuels")});
+ const units=useQuery({queryKey:["sales-units"],queryFn:()=>api<{id:string;code:string}[]>("/sales-units")});
+ const prices=useQuery({queryKey:["prices"],queryFn:()=>api<Price[]>("/prices/history")});
+ const unit=units.data?.find(u=>u.code.toUpperCase()==="FUUSTO");
+ const save=useMutation({mutationFn:(body:object)=>api("/prices",{method:"POST",body:JSON.stringify(body)}),onSuccess:async()=>{await client.invalidateQueries({queryKey:["prices"]});setOpen(false);notifySuccess("Price updated");},onError:error=>notifyError(error,"Price not updated")});
+ function submit(event:FormEvent<HTMLFormElement>){event.preventDefault();const data=new FormData(event.currentTarget);save.mutate({fuelId:data.get("fuelId"),salesUnitId:unit?.id,unitPrice:data.get("price"),effectiveFromUtc:new Date().toISOString(),reason:data.get("reason")});}
+ return <Card><CardHead title="Qiimaha maanta" description="Qiimaha iibka fuusto kasta." action={me.data?.role==="OWNER"?<ActionButton className="btn" onClick={()=>setOpen(true)}>Edit Price</ActionButton>:undefined}/><div className="card-body">{prices.isError?<ErrorState message={prices.error.message} retry={()=>void prices.refetch()}/>:prices.isPending?<LoadingState/>:fuels.data?.map(fuel=>{const current=prices.data?.find(p=>p.fuel.id===fuel.id&&new Date(p.effectiveFromUtc)<=new Date()&&(!p.effectiveToUtc||new Date(p.effectiveToUtc)>new Date()));return <div className="info-pair" key={fuel.id}><strong>{formatFuel(fuel.displayName)}</strong><b>{current?`$${decimal(current.unitPrice)} / Fuusto`:"Qiime lama dejin"}</b></div>;})}</div><details className="simple-disclosure"><summary>Taariikhda qiimaha (Price history)</summary><div className="table-wrap"><table className="data-table"><thead><tr><th>Taariikhda</th><th>Shidaalka</th><th>Qiimaha / Fuusto</th></tr></thead><tbody>{prices.data?.map(price=><tr key={price.id}><td>{dateTime(price.effectiveFromUtc)}</td><td>{formatFuel(price.fuel.displayName)}</td><td>${decimal(price.unitPrice)}</td></tr>)}</tbody></table></div></details><Modal isOpen={open} onClose={()=>setOpen(false)} title="Beddel qiimaha / Edit Price"><form onSubmit={submit}><div className="form-grid"><div className="field"><FormLabel htmlFor="price-fuel">Nooca shidaalka (Fuel type)</FormLabel><select id="price-fuel" className="select" name="fuelId" required><option value="">Dooro / Select</option>{fuels.data?.map(f=><option key={f.id} value={f.id}>{formatFuel(f.displayName)}</option>)}</select></div><div className="field"><FormLabel htmlFor="fuel-price">Qiimaha fuustadii (Price per fuusto $)</FormLabel><input id="fuel-price" className="input" name="price" inputMode="decimal" pattern="[0-9]+(\.[0-9]{1,4})?" required/></div><div className="field full"><FormLabel htmlFor="price-reason">Sababta (Reason)</FormLabel><input id="price-reason" className="input" name="reason"/></div></div><p>Qiimahan wuxuu khuseeyaa dalabyada cusub. Dalabyadii la xaqiijiyay isma beddelayaan.</p>{save.isError&&<ErrorState message={save.error.message}/>}<div className="form-actions"><ActionButton className="btn" type="button" onClick={()=>setOpen(false)}>Cancel</ActionButton><SubmitButton busy={save.isPending||!unit}>Save Price</SubmitButton></div></form></Modal></Card>;
+}

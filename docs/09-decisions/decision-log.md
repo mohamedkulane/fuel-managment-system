@@ -13,7 +13,7 @@ Use this as a living ADR-lite. `CONFIRMED` items reflect user requirements, `PRO
 | D-007 | CONFIRMED | Pricing | Mutable master price, immutable confirmed-order line price snapshot. Configured per fuusto. |
 | D-008 | CONFIRMED | Credit | Outstanding customer debt does not itself prevent further orders; installment payments allowed. |
 | D-009 | CONFIRMED | Exports | Customer/debt/stock/sales/collections reports exported as clean tables to PDF and Excel. |
-| D-010 | PROPOSED | Canonical inventory | Liters with decimal precision (240 L/fuusto); Fuusto as primary display unit. |
+| D-010 | CONFIRMED | Canonical inventory | Liters with decimal precision (240 L/fuusto); Fuusto as primary display unit. |
 | D-011 | PROPOSED | Architecture | Single-business modular monolith (Next.js, NestJS, PostgreSQL, Prisma, pnpm). |
 | D-012 | PROPOSED | Billing | Invoice after accepted delivery; every posted delivery billing event unique. |
 | D-013 | PROPOSED | Stock physical states | Warehouse and in-transit; reserves nonphysical; manual dispatch/reconcile. |
@@ -21,7 +21,7 @@ Use this as a living ADR-lite. `CONFIRMED` items reflect user requirements, `PRO
 | D-015 | PROPOSED | Accounting | Posted invoice - allocations - applied credits, plus separate unapplied customer credit. |
 | D-016 | CONFIRMED | Fuusto size | Confirmed: **1 fuusto = 240 liters**. Primary unit for purchasing, inventory, and sales. |
 | D-017 | CONFIRMED | Incoming stock | Stock received in fuusto containers with automatic 240 L/fuusto canonical conversion. |
-| D-018 | OWNER CONFIRMATION | Fractional units | May a customer buy partial fuusto or always whole containers? Initial UI whole unit. |
+| D-018 | CONFIRMED | Fractional units | Purchasing, receiving and ordinary customer orders use whole fuusto containers. |
 | D-019 | OWNER CONFIRMATION | Orders | May customer negotiate price? If so owner approval and reason required. |
 | D-020 | OWNER CONFIRMATION | Credit terms | Due date default and optional limits/holds; new sales allowed by default. |
 | D-021 | OWNER CONFIRMATION | Payment methods | Cash, bank, EVC Plus, eDahab — choose enabled methods and references. No automatic gateway integration. |
@@ -33,3 +33,8 @@ Use this as a living ADR-lite. `CONFIRMED` items reflect user requirements, `PRO
 | D-027 | CONFIRMED | Fixed Order Discount | Supports exclusively a single Fixed Amount Discount on the entire order (`fixedDiscountAmount`). No percentage or unit-based discounts. `OFFICE_EMPLOYEE` can request a discount; `OWNER` approval is required for order confirmation with discount. Subtotal, fixed discount, and net order total freeze on confirmation. On partial deliveries, the fixed discount is pro-rated proportionally across generated invoices based on accepted units relative to requested units, capped so cumulative invoice discounts never exceed `fixedDiscountAmount`. |
 
 When an answer arrives, update its row to `CONFIRMED`, document any changed contract and add tests. **Never fill unanswered owner decisions with convenient fake production data.**
+
+## 2026-10-11 — Simple UX approvals
+
+- CONFIRMED D-028: Payments recorded with a new order remain unapplied customer credit until accepted delivery. Then apply them to that order's invoices first. Payments recorded from the customer account pay the oldest outstanding invoices first. Preserve excess unapplied credit and auditable allocations; never bill an undelivered order.
+- CONFIRMED D-029: Six-link simple UX approved. Action buttons use English with appropriate leading icons. Form labels use Somali plus English in parentheses, e.g. Magaca macmiilka (Customer name). The header includes working search, operational notifications and profile controls. The user explicitly requested direct implementation without another preview.

@@ -1,4 +1,7 @@
 "use client";
+import { ReceiveStockForm } from "../../../components/simple-forms";
+import { ActionLink } from "../../../components/controls";
+import { ActionButton, FormLabel } from "../../../components/controls";
 
 import Decimal from "decimal.js";
 import { dateTime, decimal, formatStatus, formatFuel } from "../../../lib/format";
@@ -154,11 +157,7 @@ export default function ReceivePage() {
         eyebrow="Iibka kaydka shidaalka"
         title="Shidaal Soo Gelin"
         description="Diiwaangeli iibka shidaalka ee cusub ee fuustooyinka (1 fuusto = 240 litar). Qiimaha iibka waa dookh oo waxaa u furan kaliya Milkiilaha."
-        actions={
-          <button className="btn primary" onClick={() => setShowCreate(!showCreate)}>
-            {showCreate ? "Xir foomka soo gelinta" : "+ Diiwaangeli iibka shidaalka"}
-          </button>
-        }
+        
       />
 
       {/* Receipt Detail Modal */}
@@ -224,13 +223,13 @@ export default function ReceivePage() {
 
                 {receiptDetail.data.status === "DRAFT" && (
                   <div className="form-actions" style={{ marginTop: 20 }}>
-                    <button
+                    <ActionButton
                       className="btn primary"
                       disabled={post.isPending}
                       onClick={() => post.mutate(receiptDetail.data!.id)}
                     >
                       {post.isPending ? "Diiwaangelinaya…" : "Ku Diiwaangeli Kaydka Bakhaarka"}
-                    </button>
+                    </ActionButton>
                   </div>
                 )}
               </div>
@@ -240,128 +239,8 @@ export default function ReceivePage() {
       )}
 
       {/* New Stock Purchase Form */}
-      {showCreate && (
-        <div className="two-col">
-          <Card>
-            <CardHead title="Diiwaangeli Iibka Shidaalka" description="Tirada lagu geliyo fuustooyinka waxay si avtomaatik ah u xisaabisaa litarada rasmiga ah (240 L/fuusto)." />
-            <form className="card-body" onSubmit={submit}>
-              <div className="form-grid">
-                <div className="field">
-                  <label htmlFor="supplier">Ila-heleyda / Xogta Tixraaca</label>
-                  <input id="supplier" className="input" name="supplier" placeholder="tusaale: Qeybiyaha Bakhaarka Muqdisho #4" />
-                </div>
-                <div className="field">
-                  <label htmlFor="purchaseDate">Taariikhda & Waqtiga Iibka *</label>
-                  <input id="purchaseDate" className="input" name="purchaseDate" type="datetime-local" required defaultValue={new Date().toISOString().slice(0, 16)} />
-                </div>
-                <div className="field">
-                  <label htmlFor="fuelId">Nooca Shidaalka *</label>
-                  <select id="fuelId" className="select" name="fuelId" required>
-                    <option value="">Dooro nooca shidaalka</option>
-                    {fuels.data?.map((f) => (
-                      <option key={f.id} value={f.id}>
-                        {formatFuel(f.displayName)}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="field">
-                  <label htmlFor="quantityFuusto">Tirada Fuustooyinka *</label>
-                  <input
-                    id="quantityFuusto"
-                    className="input"
-                    name="quantityFuusto"
-                    type="number"
-                    min="1"
-                    step="1"
-                    inputMode="decimal"
-                    required
-                    placeholder="tusaale: 50"
-                    value={fuustoInput}
-                    onChange={(e) => handleFuustoChange(e.target.value)}
-                  />
-                  <small className="muted" style={{ display: "block", marginTop: 4 }}>
-                    Litarada la xisaabiyay: <b>{calculatedLitersPreview} L</b> (1 fuusto = 240 L)
-                  </small>
-                </div>
+      <Card><CardHead title="Shidaal Soo Geli" action={<ActionLink className="btn" href="/stock">Back to Stock</ActionLink>}/><div className="card-body"><ReceiveStockForm onSaved={() => setShowCreate(false)} /></div></Card>
 
-                {isOwner && (
-                  <>
-                    <div className="field">
-                      <label htmlFor="unitPurchaseCost">
-                        Qiimaha Fuustadii USD <span className="muted">(Dookh - Milkiilaha Kaliya)</span>
-                      </label>
-                      <input
-                        id="unitPurchaseCost"
-                        className="input"
-                        name="unitPurchaseCost"
-                        inputMode="decimal"
-                        placeholder="tusaale: 192.0000"
-                        value={unitCostInput}
-                        onChange={(e) => handleUnitCostChange(e.target.value)}
-                      />
-                    </div>
-                    <div className="field">
-                      <label htmlFor="totalPurchaseCost">
-                        Wadarta Kharashka Iibka USD <span className="muted">(Dookh - Milkiilaha Kaliya)</span>
-                      </label>
-                      <input
-                        id="totalPurchaseCost"
-                        className="input"
-                        name="totalPurchaseCost"
-                        inputMode="decimal"
-                        placeholder="tusaale: 9600.00"
-                        value={totalCostInput}
-                        onChange={(e) => handleTotalCostChange(e.target.value)}
-                      />
-                    </div>
-                  </>
-                )}
-
-                <div className="field full">
-                  <label htmlFor="notes">Xusuus-qoor / Fariimaha Audit-ka</label>
-                  <input id="notes" className="input" name="notes" placeholder="tusaale: Lagula soo wareegay bakhaarka Muqdisho" />
-                </div>
-              </div>
-              {create.isError && <div className="notice warn" style={{ marginTop: 16 }}>{(create.error as Error).message}</div>}
-              <div className="form-actions">
-                <button type="button" className="btn" onClick={() => setShowCreate(false)}>Ka Noqo</button>
-                <SubmitButton busy={create.isPending}>Kaydi Qabyada Iibka</SubmitButton>
-              </div>
-            </form>
-          </Card>
-
-          <Card>
-            <CardHead title="Hantida & Qawaaniinta Iibka Shidaalka" />
-            <div className="card-body">
-              <p>
-                <b>01 · Iibka Fuustooyinka</b>
-                <br />
-                Dhammaan iibka shidaalka waxaa lagu diiwaangeliyaa <b>fuustooyin</b>.
-              </p>
-              <p>
-                <b>02 · Kuleetarka Litarada</b>
-                <br />
-                1 fuusto waxaa si joogto ah loogu beddelaa <b>240 Litar</b> si loo maamulo kaydka rasmiga ah.
-              </p>
-              <p>
-                <b>03 · Kharashka Iibka ee Dookha ah</b>
-                <br />
-                Geliinta kharashka iibka waa ku <b>dookh</b>. Geliinta qiimaha fuustadii ama wadarta kharashka waxay si avtomaatik ah u xisaabisaa kharashka kale. Xogta ka dhiman waxaa loo kaydiyaa null.
-              </p>
-              <p>
-                <b>04 · Sirta Maaliyadda</b>
-                <br />
-                {isOwner
-                  ? "Waxaad leedahay ixtiyaarka Milkiilaha. Qiimaha iibka fuustadii waa la diiwaangeliyaa waana muuqdaa."
-                  : "Shaqaalaha Xafiisku waxay diiwaangeliyaan shidaalka fuustooyinka; kharashka iibka waxaa u gaar ah Milkiilaha."}
-              </p>
-            </div>
-          </Card>
-        </div>
-      )}
-
-      {/* Stock Purchases Register */}
       <Card>
         <CardHead title="Diiwaanka Shidaal Soo Gelinta" description="Iibka shidaalka ee qabyada ah iyo kan la diiwaangeliyay" />
         {receipts.isLoading ? (
@@ -410,13 +289,13 @@ export default function ReceivePage() {
                       <Badge tone={row.status === "POSTED" ? "ok" : "warn"}>{formatStatus(row.status)}</Badge>
                     </td>
                     <td style={{ textAlign: "right", display: "flex", gap: "6px", justifyContent: "flex-end" }}>
-                      <button className="btn" onClick={() => setSelectedReceiptId(row.id)}>
+                      <ActionButton className="btn" onClick={() => setSelectedReceiptId(row.id)}>
                         Eeg Faahfaahinta
-                      </button>
+                      </ActionButton>
                       {row.status === "DRAFT" && (
-                        <button className="btn primary" disabled={post.isPending} onClick={() => post.mutate(row.id)}>
+                        <ActionButton className="btn primary" disabled={post.isPending} onClick={() => post.mutate(row.id)}>
                           Diiwaangeli Rasiidhka
-                        </button>
+                        </ActionButton>
                       )}
                     </td>
                   </tr>

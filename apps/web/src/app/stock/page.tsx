@@ -1,11 +1,16 @@
 "use client";
+import { ActionButton, FormLabel, ActionLink } from "../../components/controls";
 import { Fuel as FuelIcon } from "lucide-react";
+import Decimal from "decimal.js";
+import { FuelPrices } from "../../components/fuel-prices";
+import { ReceiveStockForm } from "../../components/simple-forms";
 import { decimal, dateTime, formatStatus, formatFuel } from "../../lib/format";
 import { FormEvent, useState } from "react";
-import Link from "next/link";
+
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, type Actor, type PaginatedResponse } from "../../lib/api";
 import { MetricCard, LoadingState, Badge, Card, CardHead, Empty, ErrorState, Modal, PageHeader, Pagination, SubmitButton } from "../../components/ui";
+import { notifyError, notifySuccess } from "../../lib/toast";
 
 type Balance = { fuel: string; fuelName: string; location: string; balanceFuusto?: string; balanceLiters: string };
 type Fuel = { id: string; code: string; displayName: string };
@@ -24,6 +29,7 @@ type Movement = {
 export default function StockPage() {
   const client = useQueryClient();
   const [showAdjust, setShowAdjust] = useState(false);
+  const [showReceive, setShowReceive] = useState(false);
   const [selectedFuel, setSelectedFuel] = useState("");
   const [selectedEvent, setSelectedEvent] = useState("");
   const [page, setPage] = useState(1);
@@ -49,7 +55,9 @@ export default function StockPage() {
         client.invalidateQueries({ queryKey: ["stock", "balances"] }),
         client.invalidateQueries({ queryKey: ["stock", "movements"] })
       ]);
-    }
+      notifySuccess("Stock adjusted");
+    },
+    onError: error => notifyError(error, "Stock not added")
   });
 
   function handleAdjustSubmit(e: FormEvent<HTMLFormElement>) {
@@ -76,13 +84,11 @@ export default function StockPage() {
         actions={
           <>
             {isOwner && (
-              <button className="btn" onClick={() => setShowAdjust(true)}>
+              <ActionButton className="btn" onClick={() => setShowAdjust(true)}>
                 Wax Ka Beddelka Kaydka
-              </button>
+              </ActionButton>
             )}
-            <Link className="btn primary" href="/stock/receive">
-              + Shidaal Soo Gelin
-            </Link>
+            <ActionButton className="btn primary" onClick={() => setShowReceive(true)}>Receive Stock</ActionButton>
           </>
         }
       />
@@ -94,7 +100,7 @@ export default function StockPage() {
           </div>
           <div className="form-grid">
             <div className="field">
-              <label htmlFor="fuelId">Nooca Shidaalka *</label>
+              <FormLabel htmlFor="fuelId">Nooca Shidaalka *</FormLabel>
               <select id="fuelId" className="select" name="fuelId" required>
                 <option value="">Dooro nooca shidaalka</option>
                 {fuels.data?.map((f) => (
@@ -105,19 +111,19 @@ export default function StockPage() {
               </select>
             </div>
             <div className="field">
-              <label htmlFor="delta">Kala duwanaanshaha Litarada * (+ / -)</label>
+              <FormLabel htmlFor="delta">Kala duwanaanshaha Litarada * (+ / -)</FormLabel>
               <input id="delta" className="input" name="delta" required placeholder="tusaale: 12000 ama -2400" inputMode="decimal" />
             </div>
             <div className="field full">
-              <label htmlFor="reason">Sababta Rasmiga ah ee Audit-ka *</label>
+              <FormLabel htmlFor="reason">Sababta Rasmiga ah ee Audit-ka *</FormLabel>
               <input id="reason" className="input" name="reason" required placeholder="tusaale: Wax ka beddelka cabbirka taangiga ee uu milkiiluhu ogolaaday" />
             </div>
           </div>
           {adjust.isError && <div className="notice warn" role="alert" style={{ marginTop: 16 }}>{(adjust.error as Error).message}</div>}
           <div className="form-actions">
-            <button type="button" className="btn" onClick={() => setShowAdjust(false)}>
+            <ActionButton type="button" className="btn" onClick={() => setShowAdjust(false)}>
               Ka Noqo
-            </button>
+            </ActionButton>
             <SubmitButton busy={adjust.isPending}>Diiwaangeli Beddelka</SubmitButton>
           </div>
         </form>
@@ -126,9 +132,9 @@ export default function StockPage() {
       {balances.isLoading ? <LoadingState /> : balances.isError ? (
         <ErrorState message={(balances.error as Error).message} retry={() => void balances.refetch()} />
       ) : (
-        <div className="grid">
-          {balances.data?.map((row) => {
-            const fuusto = row.balanceFuusto ?? (Number(row.balanceLiters) / 240).toFixed(3);
+        <div className="simple-stock-grid">
+          {balances.data?.filter(row => row.location === "WAREHOUSE").map((row) => {
+            const fuusto = decimal(row.balanceFuusto ?? new Decimal(row.balanceLiters).div(240).toString());
             const locationLabel = row.location === "WAREHOUSE" ? "Bakhaarka" : row.location === "IN_TRANSIT" ? "Jidka Ku Jira" : row.location;
             return (
               <MetricCard
@@ -137,15 +143,17 @@ export default function StockPage() {
                 value={`${fuusto} Fuusto`}
                 note={`${decimal(row.balanceLiters, 3)} litar oo sax ah`}
                 icon={FuelIcon}
-                dark={row.fuel === "DIESEL" && row.location === "WAREHOUSE"}
+                dark={false}
               />
             );
           })}
         </div>
       )}
 
-      <Card>
-        <CardHead title="Diiwaanka Dhaqdhaqaaqa Kaydka" description="Shidaal soo gelinta, dirista, aqbalada, soo celinta iyo wax ka beddelka ee lagu cabbiro fuustooyinka" />
+      <Modal isOpen={showReceive} onClose={() => setShowReceive(false)} title="Shidaal Soo Geli / Receive Stock"><ReceiveStockForm onSaved={() => setShowReceive(false)} /></Modal>
+      <FuelPrices />
+      <Card><CardHead title="Shidaalkii soo galay" action={<ActionLink className="btn" href="/stock/receive">View Receipts</ActionLink>} /><div className="card-body"><p>Eeg shidaalka la soo iibsaday iyo rasiidhadiisa.</p></div></Card>
+      <Card><details className="simple-disclosure"><summary>Taariikhda kaydka (Stock history)</summary>
         <div className="toolbar">
           <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", width: "100%" }}>
             <select
@@ -193,7 +201,7 @@ export default function StockPage() {
               </thead>
               <tbody>
                 {movementItems.map((row) => {
-                  const fuustoQty = row.quantityFuusto ?? (Number(row.quantityLiters) / 240).toFixed(3);
+                  const fuustoQty = row.quantityFuusto ?? new Decimal(row.quantityLiters).div(240).toFixed(3);
                   const locationText = row.location === "WAREHOUSE" ? "Bakhaarka" : row.location === "IN_TRANSIT" ? "Jidka Ku Jira" : row.location;
                   return (
                     <tr key={row.id}>
@@ -225,7 +233,7 @@ export default function StockPage() {
             <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
           </div>
         )}
-      </Card>
+      </details></Card>
     </main>
   );
 }

@@ -1,9 +1,10 @@
 "use client";
+import { ActionButton, FormLabel, ActionLink } from "../../components/controls";
 import { FinanceMetrics } from "../../components/finance-metrics";
 import { PageHeader, CardHead, Badge } from "../../components/ui";
 import { decimal, formatStatus, formatFuel } from "../../lib/format";
 import { useState } from "react";
-import Link from "next/link";
+
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, type PaginatedResponse } from "../../lib/api";
 import { Modal, Pagination } from "../../components/ui";
@@ -95,7 +96,7 @@ export default function InvoicesPage() {
         eyebrow="Xisaabta Macaamiisha"
         title="Biilasha"
         description="Biilal bixintu waxay ka timaadaa shidaalka la gaarsiiyay ee macmiilku hoos u dhigay/aqbalay. Eeg biilasha la soo saaray iyo baaqiga harsan."
-        actions={<button className="btn primary" onClick={() => setOpenModal(true)}>Soo Saar Biil Cusub</button>}
+        actions={<ActionButton className="btn primary" onClick={() => setOpenModal(true)}>Soo Saar Biil Cusub</ActionButton>}
       />
 
       <FinanceMetrics kind="invoices" />
@@ -121,7 +122,7 @@ export default function InvoicesPage() {
               ["PAID", "La Bixiyay"],
               ["REVERSED", "La Celiyay"]
             ].map(([val, label]) => (
-              <button
+              <ActionButton
                 key={val}
                 className={`tab ${statusFilter === val ? "active" : ""}`}
                 onClick={() => {
@@ -130,7 +131,7 @@ export default function InvoicesPage() {
                 }}
               >
                 {label}
-              </button>
+              </ActionButton>
             ))}
           </div>
         </div>
@@ -162,9 +163,9 @@ export default function InvoicesPage() {
                   {invoicesQuery.data.items.map((inv) => (
                     <tr key={inv.id}>
                       <td>
-                        <Link href={`/invoices/${inv.id}`} className="font-mono link">
+                        <ActionLink href={`/invoices/${inv.id}`} className="font-mono link">
                           {inv.invoiceNo}
-                        </Link>
+                        </ActionLink>
                       </td>
                       <td>
                         <strong>{inv.customer.name}</strong>
@@ -181,9 +182,9 @@ export default function InvoicesPage() {
                       <td className="font-mono text-emerald-400">${decimal(inv.paidAmount, 2)}</td>
                       <td className="font-mono text-amber-400 font-semibold">${decimal(inv.balanceDue, 2)}</td>
                       <td>
-                        <Link href={`/invoices/${inv.id}`} className="btn ghost sm">
+                        <ActionLink href={`/invoices/${inv.id}`} className="btn ghost sm">
                           Eeg faahfaahinta
-                        </Link>
+                        </ActionLink>
                       </td>
                     </tr>
                   ))}
@@ -205,7 +206,7 @@ export default function InvoicesPage() {
           {formError && <div className="callout error">{formError}</div>}
 
           <div>
-            <label className="label">Dooro Shidaal La Gaarsiiyay oo aan Biil Loo Jarayn *</label>
+            <FormLabel className="label">Dooro Shidaal La Gaarsiiyay oo aan Biil Loo Jarayn *</FormLabel>
             {unbilledQuery.isLoading ? (
               <div className="skeleton" />
             ) : !unbilledQuery.data?.length ? (
@@ -213,7 +214,7 @@ export default function InvoicesPage() {
             ) : (
               <div className="select-list space-y-2 max-h-60 overflow-y-auto border border-border rounded p-2">
                 {unbilledQuery.data.map((item) => (
-                  <label
+                  <FormLabel
                     key={item.id}
                     className={`block p-3 rounded border cursor-pointer transition ${
                       selectedUnbilledId === item.id ? "border-primary bg-primary/10" : "border-border hover:bg-card-hover"
@@ -241,19 +242,19 @@ export default function InvoicesPage() {
                         </div>
                       </div>
                     </div>
-                  </label>
+                  </FormLabel>
                 ))}
               </div>
             )}
           </div>
 
           <div>
-            <label className="label">Taariikhda Bixinta Dambaysa (Waa Ikhtiyaari)</label>
+            <FormLabel className="label">Taariikhda Bixinta Dambaysa (Waa Ikhtiyaari)</FormLabel>
             <input type="date" value={dueDateInput} onChange={(e) => setDueDateInput(e.target.value)} className="input" />
           </div>
 
           <div>
-            <label className="label">Xusuusin Biilka (Waa Ikhtiyaari)</label>
+            <FormLabel className="label">Xusuusin Biilka (Waa Ikhtiyaari)</FormLabel>
             <textarea
               value={notesInput}
               onChange={(e) => setNotesInput(e.target.value)}
@@ -263,16 +264,16 @@ export default function InvoicesPage() {
           </div>
 
           <div className="modal-actions">
-            <button type="button" className="btn ghost" onClick={() => setOpenModal(false)}>
+            <ActionButton type="button" className="btn ghost" onClick={() => setOpenModal(false)}>
               Ka Noqo
-            </button>
-            <button
+            </ActionButton>
+            <ActionButton
               type="submit"
               className="btn primary"
               disabled={createInvoiceMutation.isPending || !selectedUnbilledId}
             >
               {createInvoiceMutation.isPending ? "Waa la soo saarayaa..." : "Soo Saar Biilka"}
-            </button>
+            </ActionButton>
           </div>
         </form>
       </Modal>

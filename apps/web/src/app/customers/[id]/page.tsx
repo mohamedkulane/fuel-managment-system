@@ -1,13 +1,16 @@
 "use client";
+import { ActionButton, FormLabel, ActionAnchor, ActionLink } from "../../../components/controls";
 import Decimal from "decimal.js";
+import { PaymentDialog } from "../../../components/simple-forms";
 import { Receipt, Wallet, CircleCheck, TrendingUp } from "lucide-react";
 import { sum, dateTime, decimal, formatStatus, formatFuel } from "../../../lib/format";
 
 import { FormEvent, useState } from "react";
 import { useParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import Link from "next/link";
+
 import { api, apiBase, type PaginatedResponse } from "../../../lib/api";
+import { notifyError, notifySuccess } from "../../../lib/toast";
 import { Badge, Card, CardHead, Empty, ErrorState, LoadingState, MetricCard, Modal, PageHeader, Pagination, SubmitButton } from "../../../components/ui";
 
 type Address = { id: string; label: string; addressText: string; district: string | null; city: string | null };
@@ -102,8 +105,9 @@ type StatementData = {
 export default function CustomerDetailPage() {
   const { id } = useParams<{ id: string }>();
   const client = useQueryClient();
-  const [activeTab, setActiveTab] = useState<"overview" | "orders" | "invoices" | "payments" | "ledger">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "orders" | "invoices" | "payments" | "ledger">("ledger");
   const [showEdit, setShowEdit] = useState(false);
+  const [showPayment, setShowPayment] = useState(false);
 
   // Customer Master Query
   const customerQuery = useQuery({
@@ -127,7 +131,9 @@ export default function CustomerDetailPage() {
         client.invalidateQueries({ queryKey: ["customers"] }),
         client.invalidateQueries({ queryKey: ["customer-financial", id] })
       ]);
-    }
+      notifySuccess("Customer updated");
+    },
+    onError: error => notifyError(error, "Update failed")
   });
 
   function handleEditSubmit(e: FormEvent<HTMLFormElement>) {
@@ -196,7 +202,8 @@ export default function CustomerDetailPage() {
         }
         actions={
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <a
+            {cust && <ActionButton className="btn primary" onClick={() => setShowPayment(true)}>Record Payment</ActionButton>}
+            <ActionAnchor
               className="btn"
               href={`${apiBase}/customers/${id}/statement/pdf`}
               target="_blank"
@@ -204,18 +211,18 @@ export default function CustomerDetailPage() {
               title="Soo dejiso warbixinta rasmiga ah ee PDF"
             >
               Soo Dejiso PDF Warbixinta
-            </a>
-            <button className="btn" onClick={() => window.print()} title="Daabac warbixinta maaliyadda">
+            </ActionAnchor>
+            <ActionButton className="btn" onClick={() => window.print()} title="Daabac warbixinta maaliyadda">
               Daabac Warbixinta
-            </button>
+            </ActionButton>
             {cust && (
-              <button className="btn primary" onClick={() => setShowEdit(true)}>
+              <ActionButton className="btn primary" onClick={() => setShowEdit(true)}>
                 Wax Ka Beddel Macmiilka
-              </button>
+              </ActionButton>
             )}
-            <Link className="btn" href="/customers">
+            <ActionLink className="btn" href="/customers">
               ← Dib u laab Diiwaanka
-            </Link>
+            </ActionLink>
           </div>
         }
       />
@@ -227,15 +234,15 @@ export default function CustomerDetailPage() {
             <form onSubmit={handleEditSubmit}>
               <div className="form-grid">
                 <div className="field">
-                  <label htmlFor="name">Magaca macmiilka *</label>
+                  <FormLabel htmlFor="name">Magaca macmiilka *</FormLabel>
                   <input id="name" className="input" name="name" defaultValue={cust.name} required />
                 </div>
                 <div className="field">
-                  <label htmlFor="phone">Telefoonka koowaad</label>
+                  <FormLabel htmlFor="phone">Telefoonka koowaad</FormLabel>
                   <input id="phone" className="input" name="phone" defaultValue={cust.primaryPhone ?? ""} />
                 </div>
                 <div className="field">
-                  <label htmlFor="status">Xaaladda koontada</label>
+                  <FormLabel htmlFor="status">Xaaladda koontada</FormLabel>
                   <select id="status" className="select" name="status" defaultValue={cust.status}>
                     <option value="ACTIVE">Firfircoon (Ganacsi Kawaad)</option>
                     <option value="HOLD">La Hakiyay (Hakinta Dalabyada Deynta)</option>
@@ -243,11 +250,11 @@ export default function CustomerDetailPage() {
                   </select>
                 </div>
                 <div className="field full">
-                  <label htmlFor="address">Ciwaanka gaarsiinta koowaad</label>
+                  <FormLabel htmlFor="address">Ciwaanka gaarsiinta koowaad</FormLabel>
                   <input id="address" className="input" name="address" defaultValue={cust.addresses[0]?.addressText ?? ""} />
                 </div>
                 <div className="field full">
-                  <label htmlFor="notes">Xusuus-qoor hawgalka</label>
+                  <FormLabel htmlFor="notes">Xusuus-qoor hawgalka</FormLabel>
                   <input id="notes" className="input" name="notes" defaultValue={cust.notes ?? ""} />
                 </div>
               </div>
@@ -257,15 +264,15 @@ export default function CustomerDetailPage() {
                 </div>
               )}
               <div className="form-actions">
-                <button type="button" className="btn" onClick={() => setShowEdit(false)}>
+                <ActionButton type="button" className="btn" onClick={() => setShowEdit(false)}>
                   Ka Noqo
-                </button>
+                </ActionButton>
                 <SubmitButton busy={updateCustomer.isPending}>Kaydi Beddelka</SubmitButton>
               </div>
             </form>
           </Modal>
 
-          <Card className="profile-identity"><div className="avatar">{cust.name.split(" ").slice(0,2).map(n => n[0]).join("")}</div><div><h2>{cust.name}</h2><p>{cust.code} · {cust.primaryPhone ?? "Telefoon ma jiro"} · <Badge tone={cust.status === "ACTIVE" ? "ok" : "warn"}>{formatStatus(cust.status)}</Badge></p></div><div className="actions"><button className="btn" onClick={() => setShowEdit(true)}>Wax ka beddel macmiilka</button><Link className="btn primary" href="/orders/new">Dalab cusub</Link></div></Card>
+          <Card className="profile-identity"><div className="avatar">{cust.name.split(" ").slice(0,2).map(n => n[0]).join("")}</div><div><h2>{cust.name}</h2><p>{cust.code} · {cust.primaryPhone ?? "Telefoon ma jiro"} · <Badge tone={cust.status === "ACTIVE" ? "ok" : "warn"}>{formatStatus(cust.status)}</Badge></p></div><div className="actions"><ActionButton className="btn" onClick={() => setShowEdit(true)}>Wax ka beddel macmiilka</ActionButton><ActionLink className="btn primary" href="/orders/new">Dalab cusub</ActionLink></div></Card>
           {financialQuery.isError ? <ErrorState message={financialQuery.error.message} retry={() => void financialQuery.refetch()} /> : financialQuery.isLoading ? <LoadingState label="Raraya xisaabta macmiilka…" /> : <div className="grid profile-metrics">
             <MetricCard label="Wadarta biilasha lagu jaray" value={`$${decimal(fin?.totalInvoiced)}`} note="Biilasha la diiwaangeliyay" icon={Receipt} />
             <MetricCard label="Wadarta la helay" value={`$${decimal(fin?.totalPaid)}`} note="Lacagaha la diiwaangeliyay" icon={Wallet} />
@@ -275,16 +282,14 @@ export default function CustomerDetailPage() {
           </div>}
           <nav className="tabs-header no-print" aria-label="Seefaha koontada macmiilka">
             {([
-              { id: "overview", label: "Guudmar" },
-              { id: "orders", label: "Dalabyada & Gaarsiinta" },
-              { id: "invoices", label: "Biilasha & Deynta" },
+              { id: "ledger", label: "Xisaabta" },
+              { id: "orders", label: "Dalabyada" },
               { id: "payments", label: "Lacag-bixinnada" },
-              { id: "ledger", label: "Diiwaanka Xisaabta" }
-            ] as const).map(tab => <button key={tab.id} className={activeTab === tab.id ? "active" : ""} aria-current={activeTab === tab.id ? "page" : undefined} onClick={() => setActiveTab(tab.id)}>{tab.label}</button>)}
+            ] as const).map(tab => <ActionButton key={tab.id} className={activeTab === tab.id ? "active" : ""} aria-current={activeTab === tab.id ? "page" : undefined} onClick={() => setActiveTab(tab.id)}>{tab.label}</ActionButton>)}
           </nav>
 
           {/* Tab 1: Overview */}
-          {activeTab === "overview" && <CustomerOverviewTab customer={cust} fin={fin} />}
+          {activeTab === "overview" && <CustomerLedgerTab customerId={id} customerName={cust.name} customerCode={cust.code} />}
 
           {/* Tab 2: Orders & Deliveries */}
           {activeTab === "orders" && <CustomerOrdersTab customerId={id} />}
@@ -296,7 +301,8 @@ export default function CustomerDetailPage() {
           {activeTab === "payments" && <CustomerPaymentsTab customerId={id} />}
 
           {/* Tab 5: Account Ledger */}
-          {activeTab === "ledger" && <CustomerLedgerTab customerId={id} customerName={cust.name} customerCode={cust.code} />}
+          {activeTab === "ledger" && <><CustomerLedgerTab customerId={id} customerName={cust.name} customerCode={cust.code} /><details className="simple-disclosure"><summary>Biilasha (Invoices)</summary><CustomerInvoicesTab customerId={id}/></details></>}
+          <PaymentDialog customerId={id} customerName={cust.name} open={showPayment} onClose={() => setShowPayment(false)} />
         </>
       )}
     </main>
@@ -409,7 +415,7 @@ function CustomerOverviewTab({ customer, fin }: { customer: Customer; fin?: Fina
               {customer.orders.slice(0, 5).map((ord) => (
                 <tr key={ord.id}>
                   <td className="mono strong">
-                    <Link href={`/orders/${ord.id}`}>{ord.orderNo}</Link>
+                    <ActionLink href={`/orders/${ord.id}`}>{ord.orderNo}</ActionLink>
                   </td>
                   <td>{ord.orderDate.slice(0, 10)}</td>
                   <td>{ord.lines.map((l) => `${formatFuel(l.fuel.displayName)}: ${l.requestedUnits} Fuusto`).join(", ")}</td>
@@ -419,7 +425,7 @@ function CustomerOverviewTab({ customer, fin }: { customer: Customer; fin?: Fina
                     </Badge>
                   </td>
                   <td style={{ textAlign: "right" }}>
-                    <Link className="btn small" href={`/orders/${ord.id}`}>Eeg Faahfaahinta</Link>
+                    <ActionLink className="btn small" href={`/orders/${ord.id}`}>Eeg Faahfaahinta</ActionLink>
                   </td>
                 </tr>
               ))}
@@ -497,9 +503,9 @@ function CustomerOrdersTab({ customerId }: { customerId: string }) {
               {items.map((row) => (
                 <tr key={row.id}>
                   <td>
-                    <Link href={`/orders/${row.id}`} className="mono strong">
+                    <ActionLink href={`/orders/${row.id}`} className="mono strong">
                       {row.orderNo}
-                    </Link>
+                    </ActionLink>
                   </td>
                   <td>{row.orderDate.slice(0, 10)}</td>
                   <td>
@@ -529,7 +535,7 @@ function CustomerOrdersTab({ customerId }: { customerId: string }) {
                     </Badge>
                   </td>
                   <td style={{ textAlign: "right" }}>
-                    <Link className="btn small" href={`/orders/${row.id}`}>Faahfaahinta Dalabka</Link>
+                    <ActionLink className="btn small" href={`/orders/${row.id}`}>Faahfaahinta Dalabka</ActionLink>
                   </td>
                 </tr>
               ))}
@@ -606,9 +612,9 @@ function CustomerInvoicesTab({ customerId }: { customerId: string }) {
               {items.map((inv) => (
                 <tr key={inv.id}>
                   <td>
-                    <Link href={`/invoices/${inv.id}`} className="mono strong">
+                    <ActionLink href={`/invoices/${inv.id}`} className="mono strong">
                       {inv.invoiceNo}
-                    </Link>
+                    </ActionLink>
                   </td>
                   <td>{inv.issueDate.slice(0, 10)}</td>
                   <td>{inv.dueDate ? inv.dueDate.slice(0, 10) : "—"}</td>
@@ -623,7 +629,7 @@ function CustomerInvoicesTab({ customerId }: { customerId: string }) {
                     ${decimal(inv.balanceDue, 2)}
                   </td>
                   <td style={{ textAlign: "right" }}>
-                    <Link className="btn small" href={`/invoices/${inv.id}`}>Eeg Biilka</Link>
+                    <ActionLink className="btn small" href={`/invoices/${inv.id}`}>Eeg Biilka</ActionLink>
                   </td>
                 </tr>
               ))}
@@ -702,9 +708,9 @@ function CustomerPaymentsTab({ customerId }: { customerId: string }) {
               {items.map((p) => (
                 <tr key={p.id}>
                   <td>
-                    <Link href={`/payments/${p.id}`} className="mono strong">
+                    <ActionLink href={`/payments/${p.id}`} className="mono strong">
                       {p.paymentNo}
-                    </Link>
+                    </ActionLink>
                   </td>
                   <td>{p.paymentDate.slice(0, 10)}</td>
                   <td><Badge tone="neutral">{p.paymentMethod}</Badge></td>
@@ -719,7 +725,7 @@ function CustomerPaymentsTab({ customerId }: { customerId: string }) {
                   </td>
                   <td>{p.recordedBy.displayName}</td>
                   <td style={{ textAlign: "right" }}>
-                    <Link className="btn small" href={`/payments/${p.id}`}>Faahfaahinta Rasiidhka</Link>
+                    <ActionLink className="btn small" href={`/payments/${p.id}`}>Faahfaahinta Rasiidhka</ActionLink>
                   </td>
                 </tr>
               ))}
@@ -773,17 +779,17 @@ function CustomerLedgerTab({ customerId, customerName, customerCode }: { custome
         description="Diiwaanka rasmiga ah ee maaliyadda. Deynta (Debit +); Lacag-bixinta (Credit -)."
         action={
           <div style={{ display: "flex", gap: 8 }}>
-            <button className="btn small" onClick={() => window.print()}>
+            <ActionButton className="btn small" onClick={() => window.print()}>
               Daabac
-            </button>
-            <a
+            </ActionButton>
+            <ActionAnchor
               className="btn small primary"
               href={`${apiBase}/customers/${customerId}/statement/pdf?fromDate=${fromDate}&toDate=${toDate}`}
               target="_blank"
               rel="noreferrer"
             >
               Soo Dejiso PDF
-            </a>
+            </ActionAnchor>
           </div>
         }
       />
@@ -791,7 +797,7 @@ function CustomerLedgerTab({ customerId, customerName, customerCode }: { custome
       {/* Date Range & Type Filter Toolbar */}
       <div className="toolbar no-print" style={{ marginBottom: 16, display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
         <div>
-          <label style={{ display: "block", fontSize: 12, fontWeight: 700, marginBottom: 4 }}>Ka soo bilaabato (Muqdisho UTC+3):</label>
+          <FormLabel style={{ display: "block", fontSize: 12, fontWeight: 700, marginBottom: 4 }}>Ka soo bilaabato (Muqdisho UTC+3):</FormLabel>
           <input
             type="date"
             className="input"
@@ -800,7 +806,7 @@ function CustomerLedgerTab({ customerId, customerName, customerCode }: { custome
           />
         </div>
         <div>
-          <label style={{ display: "block", fontSize: 12, fontWeight: 700, marginBottom: 4 }}>Ku dhamaato:</label>
+          <FormLabel style={{ display: "block", fontSize: 12, fontWeight: 700, marginBottom: 4 }}>Ku dhamaato:</FormLabel>
           <input
             type="date"
             className="input"
@@ -809,7 +815,7 @@ function CustomerLedgerTab({ customerId, customerName, customerCode }: { custome
           />
         </div>
         <div>
-          <label style={{ display: "block", fontSize: 12, fontWeight: 700, marginBottom: 4 }}>Shaandhaynta Nooca Diiwaanka:</label>
+          <FormLabel style={{ display: "block", fontSize: 12, fontWeight: 700, marginBottom: 4 }}>Shaandhaynta Nooca Diiwaanka:</FormLabel>
           <select className="select" value={entryTypeFilter} onChange={(e) => setEntryTypeFilter(e.target.value)}>
             <option value="">Dhammaan Hawgallada</option>
             <option value="INVOICE">Biilasha (Deynta +)</option>

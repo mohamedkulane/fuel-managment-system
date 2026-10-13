@@ -1,12 +1,16 @@
 "use client";
+import { ActionLink, ActionButton } from "../../../components/controls";
+import { OrderDelivery } from "../../../components/order-delivery";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import Decimal from "decimal.js";
 import { ShoppingBag, Boxes, Truck, AlertCircle } from "lucide-react";
 import { dateTime, sum, decimal, formatStatus, formatFuel } from "../../../lib/format";
 import { useParams } from "next/navigation";
-import Link from "next/link";
+
 import { useQuery } from "@tanstack/react-query";
-import { api } from "../../../lib/api";
+import { api, mutationKey, type Actor } from "../../../lib/api";
 import { MetricCard, Badge, Card, CardHead, ErrorState, PageHeader } from "../../../components/ui";
+import { notifyError, notifySuccess } from "../../../lib/toast";
 
 type OrderLine = {
   id: string;
@@ -44,6 +48,9 @@ type Order = {
 export default function OrderPage() {
   const { id } = useParams<{ id: string }>();
   const query = useQuery({ queryKey: ["order", id], queryFn: () => api<Order>(`/orders/${id}`) });
+  const client = useQueryClient();
+  const me = useQuery({ queryKey: ["me"], queryFn: () => api<Actor>("/auth/me") });
+  const confirm = useMutation({ mutationFn: () => api(`/orders/${id}/confirm`, { method: "POST", headers: { "idempotency-key": mutationKey() } }), onSuccess: async () => { await client.invalidateQueries(); notifySuccess(new Decimal(query.data?.fixedDiscountAmount ?? "0").gt(0) ? "Discount approved" : "Order confirmed"); }, onError: error => notifyError(error, new Decimal(query.data?.fixedDiscountAmount ?? "0").gt(0) ? "Approval failed" : "Order not saved") });
 
   if (query.isError)
     return (
@@ -56,8 +63,8 @@ export default function OrderPage() {
 
   const isDraft = row?.status === "DRAFT";
   const hasPriceChangeNotice = isDraft && row?.lines.some((l) => l.currentActiveUnitPrice);
-  const fixedDiscountNum = parseFloat(row?.fixedDiscountAmount || "0");
-  const hasDiscount = fixedDiscountNum > 0;
+  const fixedDiscountNum = row?.fixedDiscountAmount || "0";
+  const hasDiscount = new Decimal(fixedDiscountNum).gt(0);
 
   return (
     <main className="page detail-page">
@@ -65,10 +72,11 @@ export default function OrderPage() {
         eyebrow="Faahfaahinta dalabka"
         title={row?.orderNo ?? "Raraya dalabka…"}
         description={row ? `${row.customer.name} · ${row.addressSnapshot}` : ""}
-        actions={<Link className="btn" href="/orders">Dib u laab dalabyada</Link>}
+        actions={<><ActionLink className="btn" href="/orders">Back to Orders</ActionLink>{row && ["CONFIRMED","SCHEDULED","IN_PROGRESS","PARTIALLY_FULFILLED"].includes(row.status) && <OrderDelivery orderId={row.id} lines={row.lines}/>}</>}
       />
       {row && (
         <>
+          {isDraft && (!hasDiscount || me.data?.role === "OWNER") && <div className="notice"><p>Hubi qiimaha hadda ka hor xaqiijinta dalabka.</p><ActionButton className="btn primary" disabled={confirm.isPending} onClick={() => confirm.mutate()}>{hasDiscount ? "Approve Discount & Confirm" : "Confirm Order"}</ActionButton>{confirm.isError && <ErrorState message={confirm.error.message}/>}</div>}
           {hasPriceChangeNotice && (
             <div className="notice warn" style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 16 }}>
               <AlertCircle size={18} />

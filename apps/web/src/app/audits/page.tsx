@@ -1,4 +1,5 @@
 "use client";
+import { ActionButton, FormLabel } from "../../components/controls";
 import { dateTime, formatRole, formatStatus } from "../../lib/format";
 
 import { useState } from "react";
@@ -68,12 +69,12 @@ export default function AuditsPage() {
         description="Diiwaanka Milkiilaha kaliya ee dhammaan isbeddelada, ogolaanshaha, iyo ka noqoshada xisaabaadka."
         actions={
           <>
-            <button className="btn" onClick={() => handleExport("pdf")}>
+            <ActionButton className="btn" onClick={() => handleExport("pdf")}>
               Soo Dejiso PDF
-            </button>
-            <button className="btn primary" onClick={() => handleExport("xlsx")}>
+            </ActionButton>
+            <ActionButton className="btn primary" onClick={() => handleExport("xlsx")}>
               Soo Dejiso Excel (.xlsx)
-            </button>
+            </ActionButton>
           </>
         }
       />
@@ -82,7 +83,7 @@ export default function AuditsPage() {
       <Card className="filter-panel">
         <div style={{ display: "flex", flexWrap: "wrap", gap: 16, alignItems: "center" }}>
           <div>
-            <label style={{ display: "block", fontSize: 12, fontWeight: "bold", marginBottom: 4 }}>Nooca Qaybta:</label>
+            <FormLabel style={{ display: "block", fontSize: 12, fontWeight: "bold", marginBottom: 4 }}>Nooca Qaybta:</FormLabel>
             <select value={entityType} onChange={(e) => { setEntityType(e.target.value); setPage(1); }} className="input">
               <option value="">Dhammaan Qaybaha</option>
               <option value="Customer">Macmiilka (Customer)</option>
@@ -100,7 +101,7 @@ export default function AuditsPage() {
           </div>
 
           <div>
-            <label style={{ display: "block", fontSize: 12, fontWeight: "bold", marginBottom: 4 }}>Hawsha:</label>
+            <FormLabel style={{ display: "block", fontSize: 12, fontWeight: "bold", marginBottom: 4 }}>Hawsha:</FormLabel>
             <select value={action} onChange={(e) => { setAction(e.target.value); setPage(1); }} className="input">
               <option value="">Dhammaan Hawlaha</option>
               <option value="CREATED">Diiwaangelin (CREATED)</option>
@@ -114,18 +115,18 @@ export default function AuditsPage() {
           </div>
 
           <div>
-            <label style={{ display: "block", fontSize: 12, fontWeight: "bold", marginBottom: 4 }}>Taariikhda Billaabashada:</label>
+            <FormLabel style={{ display: "block", fontSize: 12, fontWeight: "bold", marginBottom: 4 }}>Taariikhda Billaabashada:</FormLabel>
             <input type="date" value={fromDate} onChange={(e) => { setFromDate(e.target.value); setPage(1); }} className="input" />
           </div>
 
           <div>
-            <label style={{ display: "block", fontSize: 12, fontWeight: "bold", marginBottom: 4 }}>Taariikhda Dhammaadka:</label>
+            <FormLabel style={{ display: "block", fontSize: 12, fontWeight: "bold", marginBottom: 4 }}>Taariikhda Dhammaadka:</FormLabel>
             <input type="date" value={toDate} onChange={(e) => { setToDate(e.target.value); setPage(1); }} className="input" />
           </div>
 
-          <button className="btn small" onClick={() => { setEntityType(""); setAction(""); setFromDate(""); setToDate(""); setPage(1); }} style={{ marginLeft: "auto" }}>
+          <ActionButton className="btn small" onClick={() => { setEntityType(""); setAction(""); setFromDate(""); setToDate(""); setPage(1); }} style={{ marginLeft: "auto" }}>
             Nadiifi Shaandheynta
-          </button>
+          </ActionButton>
         </div>
       </Card>
 

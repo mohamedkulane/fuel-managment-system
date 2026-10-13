@@ -196,7 +196,7 @@ export class AppController {
   @Get("prices/history")
   async priceHistory() {
     const rows = await this.prisma.priceVersion.findMany({
-      include: { fuel: true, salesUnit: true, createdBy: true },
+      include: { fuel: true, salesUnit: true, createdBy: { select: { displayName: true } } },
       orderBy: { effectiveFromUtc: "desc" }
     });
     return {
@@ -441,9 +441,12 @@ export class AppController {
       this.prisma.customer.count({ where })
     ]);
 
+    const debts = await this.prisma.invoice.groupBy({ by: ["customerId"], where: { customerId: { in: items.map(item => item.id) }, status: { in: ["UNPAID", "PARTIALLY_PAID"] } }, _sum: { balanceDue: true } });
+    const debtByCustomer = new Map(debts.map(row => [row.customerId, row._sum.balanceDue?.toFixed(4) ?? "0.0000"]));
+
     return {
       data: {
-        items,
+        items: items.map(item => ({ ...item, outstandingDebt: debtByCustomer.get(item.id) ?? "0.0000" })),
         total,
         page,
         limit,
@@ -607,13 +610,15 @@ export class AppController {
     @Query("status") status?: string,
     @Query("customerId") customerId?: string,
     @Query("page") pageQuery?: string,
-    @Query("limit") limitQuery?: string
+    @Query("limit") limitQuery?: string,
+    @Query("date") date?: string
   ) {
     const page = Math.max(1, parseInt(pageQuery ?? "1", 10) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(limitQuery ?? "50", 10) || 50));
     const skip = (page - 1) * limit;
 
     const where: Prisma.SalesOrderWhereInput = {
+      ...(date ? { orderDate: { gte: new Date(`${localDate(date).toISOString().slice(0, 10)}T00:00:00+03:00`), lt: new Date(new Date(`${date}T00:00:00+03:00`).getTime() + 86400000) } } : {}),
       ...(customerId ? { customerId } : {}),
       ...(status ? { status: status as Prisma.EnumOrderStatusFilter } : {}),
       ...(search?.trim()
@@ -629,7 +634,7 @@ export class AppController {
     const [rows, total] = await Promise.all([
       this.prisma.salesOrder.findMany({
         where,
-        include: { customer: true, discountApprovedBy: { select: { displayName: true } }, lines: { include: { fuel: true, salesUnit: true } } },
+        include: { customer: true, discountApprovedBy: { select: { displayName: true } }, payments: { where: { status: "POSTED" } }, lines: { include: { fuel: true, salesUnit: true, invoiceLines: { include: { invoice: { include: { allocations: { include: { payment: true } } } } } } } } },
         orderBy: { orderDate: "desc" },
         skip,
         take: limit
@@ -644,9 +649,13 @@ export class AppController {
           subtotal: jsonDecimal(row.subtotal),
           fixedDiscountAmount: row.fixedDiscountAmount.toFixed(4),
           totalAmount: jsonDecimal(row.totalAmount),
+          paidAmount: row.payments.reduce((sum,p) => sum.add(p.amount), dec("0")).add(row.lines.flatMap(l=>l.invoiceLines).filter(il=>!["REVERSED","CANCELLED"].includes(il.invoice.status)).flatMap(il=>il.invoice.allocations).filter(a=>a.payment.status==="POSTED" && a.payment.orderId!==row.id).reduce((sum,a)=>sum.add(a.amount),dec("0"))).toFixed(4),
+          invoicedBalance: row.lines.flatMap(l=>l.invoiceLines).filter(il=>["UNPAID","PARTIALLY_PAID"].includes(il.invoice.status)).reduce((sum,il)=>sum.add(il.invoice.balanceDue),dec("0")).toFixed(4),
+          payments: undefined,
           discountApprovedByName: row.discountApprovedBy?.displayName ?? null,
           lines: row.lines.map((line) => ({
             ...line,
+            invoiceLines: undefined,
             requestedUnits: line.requestedUnits.toFixed(3),
             requestedLitersSnapshot: jsonDecimal(line.requestedLitersSnapshot),
             litersPerUnitSnapshot: jsonDecimal(line.litersPerUnitSnapshot),
@@ -1540,6 +1549,13 @@ export class AppController {
     if (Number.isNaN(paymentDate.getTime())) throw new BadRequestException("Invalid paymentDate");
 
     const payment = await this.prisma.$transaction(async (tx) => {
+      const [debtTotal, creditTotal] = await Promise.all([
+        tx.invoice.aggregate({ where: { customerId: body.customerId!, status: { in: ["UNPAID", "PARTIALLY_PAID"] } }, _sum: { balanceDue: true } }),
+        tx.payment.aggregate({ where: { customerId: body.customerId!, status: "POSTED" }, _sum: { unappliedAmount: true } })
+      ]);
+      const payable = Prisma.Decimal.max(dec("0"), (debtTotal._sum.balanceDue ?? dec("0")).sub(creditTotal._sum.unappliedAmount ?? dec("0")));
+      if (paymentAmount.gt(payable)) throw new BadRequestException(`Debt is $${payable.toFixed(2)}. You cannot pay more.`);
+      if (payable.isZero()) throw new BadRequestException("No debt to pay");
       const openInvoices = await tx.invoice.findMany({
         where: { customerId: body.customerId, status: { in: ["UNPAID", "PARTIALLY_PAID"] } },
         orderBy: { issueDate: "asc" }
@@ -2096,6 +2112,10 @@ export class AppController {
   @UseGuards(SessionGuard)
   @Get("dashboard/overview")
   async dashboardOverview() {
+    const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Mogadishu", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+    const dayStart = new Date(`${today}T00:00:00+03:00`);
+    const dayEnd = new Date(dayStart.getTime() + 86400000);
+    const collectedToday = await this.prisma.payment.aggregate({ where: { status: "POSTED", paymentDate: { gte: dayStart, lt: dayEnd } }, _sum: { amount: true } });
     const [
       totalCustomers,
       activeCustomers,
@@ -2137,7 +2157,7 @@ export class AppController {
         customers: { total: totalCustomers, active: activeCustomers, hold: holdCustomers },
         stock: { warehouse: warehouseByFuel, inTransit: inTransitByFuel },
         operations: { pendingOrders, dispatched: dispatchedCount, unbilledDeliveries: unbilledCount },
-        financials: { totalOutstandingDebt: outstandingDebt, totalUnappliedCredit: unappliedCredit }
+        financials: { totalOutstandingDebt: outstandingDebt, totalUnappliedCredit: unappliedCredit, collectedToday: collectedToday._sum.amount?.toFixed(4) ?? "0.0000" }
       }
     };
   }

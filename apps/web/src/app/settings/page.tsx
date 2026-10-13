@@ -1,12 +1,14 @@
 "use client";
+import { ActionButton, FormLabel, ActionLink } from "../../components/controls";
 import { FormEvent, useState } from "react";
-import Link from "next/link";
+
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { CircleCheck, ShieldCheck, Users } from "lucide-react";
 import { api, type Actor } from "../../lib/api";
 import { dateTime, formatRole } from "../../lib/format";
 import { Badge, Card, CardHead, Empty, ErrorState, LoadingState, MetricCard, Modal, PageHeader, SubmitButton } from "../../components/ui";
+import { notifyError, notifySuccess } from "../../lib/toast";
 
 type User = { id: string; displayName: string; email: string; role: "OWNER" | "OFFICE_EMPLOYEE"; isActive: boolean; lastLoginAt: string | null };
 
@@ -16,7 +18,7 @@ export default function SettingsPage() {
   const [showCreate, setShowCreate] = useState(false);
   const me = useQuery({ queryKey: ["me"], queryFn: () => api<Actor>("/auth/me") });
   const users = useQuery({ queryKey: ["users"], queryFn: () => api<User[]>("/users"), enabled: me.data?.role === "OWNER", retry: false });
-  const create = useMutation({ mutationFn: (body: object) => api<User>("/users", { method: "POST", body: JSON.stringify(body) }), onSuccess: async () => { setShowCreate(false); await client.invalidateQueries({ queryKey: ["users"] }); } });
+  const create = useMutation({ mutationFn: (body: object) => api<User>("/users", { method: "POST", body: JSON.stringify(body) }), onSuccess: async () => { setShowCreate(false); await client.invalidateQueries({ queryKey: ["users"] }); notifySuccess("User added"); }, onError: error => notifyError(error, "Could not save user") });
   const logout = useMutation({ mutationFn: () => api("/auth/logout", { method: "POST" }), onSuccess: () => { client.clear(); router.replace("/login"); } });
 
   function submit(e: FormEvent<HTMLFormElement>) {
@@ -35,18 +37,19 @@ export default function SettingsPage() {
         description="Maamul isticmaalayaasha nidaamka iyo habaynta ganacsiga shidaalka."
         actions={
           <>
-            <button className="btn" disabled={logout.isPending} onClick={() => logout.mutate()}>
+            <ActionButton className="btn" disabled={logout.isPending} onClick={() => logout.mutate()}>
               Kabax Nidaamka
-            </button>
+            </ActionButton>
             {owner && (
-              <button className="btn primary" onClick={() => setShowCreate(true)}>
+              <ActionButton className="btn primary" onClick={() => setShowCreate(true)}>
                 Kudar Isticmaale Cusub
-              </button>
+              </ActionButton>
             )}
           </>
         }
       />
       {logout.isError && <ErrorState message={logout.error.message} />}
+      {owner && <details className="simple-disclosure"><summary>Maamulka dheeraadka ah (Advanced administration)</summary><div className="actions"><ActionLink className="btn" href="/audits">View Audit Log</ActionLink><ActionLink className="btn" href="/invoices">View Invoices</ActionLink><ActionLink className="btn" href="/payments">View Payments</ActionLink><ActionLink className="btn" href="/dispatches">View Delivery History</ActionLink></div></details>}
 
       <div className="two-col">
         <Card>
@@ -58,16 +61,16 @@ export default function SettingsPage() {
             <div className="info-pair"><span>Waqtiga Ganacsiga</span><b>Afrika/Muqdisho (UTC+03:00)</b></div>
             {owner && (
               <div className="form-actions" style={{ marginTop: 16 }}>
-                <Link className="btn dark" href="/pricing">
+                <ActionLink className="btn dark" href="/pricing">
                   Maamul qiimaha & cabbirka shidaalka
-                </Link>
+                </ActionLink>
               </div>
             )}
           </div>
         </Card>
 
         <Card>
-          <CardHead title="Xaqiijinta Amaanka & Shuruudaha" description="Qawaaniinta loo isticmaalo nidaamka oo dhan." />
+          <CardHead title="Business setup" description="Key operating rules for your workspace." />
           <div className="card-body">
             <div className="info-pair"><span>Sida Loo Soo Gali karo</span><b>Kulan Cookie (Cookie Sessions)</b></div>
             <div className="info-pair"><span>Derejooyinka La Ogolyahay</span><b>Milkiile & Shaqaale Xafiis</b></div>
@@ -135,31 +138,31 @@ export default function SettingsPage() {
         <form onSubmit={submit}>
           <div className="form-grid">
             <div className="field full">
-              <label htmlFor="displayName">Magaca Muuqda *</label>
+              <FormLabel htmlFor="displayName">Magaca Muuqda *</FormLabel>
               <input id="displayName" className="input" name="displayName" required />
             </div>
             <div className="field full">
-              <label htmlFor="email">Cinwaanka Emaylka *</label>
+              <FormLabel htmlFor="email">Cinwaanka Emaylka *</FormLabel>
               <input id="email" className="input" name="email" type="email" required />
             </div>
             <div className="field">
-              <label htmlFor="role">Xilka</label>
+              <FormLabel htmlFor="role">Xilka</FormLabel>
               <select id="role" className="select" name="role">
                 <option value="OFFICE_EMPLOYEE">Shaqaale Xafiis (Office Employee)</option>
                 <option value="OWNER">Milkiile (Owner)</option>
               </select>
             </div>
             <div className="field">
-              <label htmlFor="password">Furaha Ku-meel-gaarka ah *</label>
+              <FormLabel htmlFor="password">Furaha Ku-meel-gaarka ah *</FormLabel>
               <input id="password" className="input" name="password" type="password" autoComplete="new-password" minLength={12} required />
               <small className="muted">Ugu yaraan 12 xaraf</small>
             </div>
           </div>
           {create.isError && <ErrorState message={create.error.message} />}
           <div className="form-actions">
-            <button className="btn" type="button" onClick={() => setShowCreate(false)}>
+            <ActionButton className="btn" type="button" onClick={() => setShowCreate(false)}>
               Ka Noqo
-            </button>
+            </ActionButton>
             <SubmitButton busy={create.isPending}>Samee Isticmaale</SubmitButton>
           </div>
         </form>

@@ -49,8 +49,8 @@ async function main(): Promise<void> {
 
   const fuusto = await prisma.salesUnit.upsert({
     where: { code: "FUUSTO" },
-    update: { name: "Fuusto Container (Owner Configured Liters)" },
-    create: { code: "FUUSTO", name: "Fuusto Container (Owner Configured Liters)", active: true }
+    update: { name: "Fuusto Standard 240L" },
+    create: { code: "FUUSTO", name: "Fuusto Standard 240L", active: true }
   });
 
   // 3. Conversions & Price Versions
@@ -150,7 +150,7 @@ async function main(): Promise<void> {
     });
   }
 
-  // 4. Stock Balances & Booyad Tanker Receipts
+  // 4. Stock balances and fuel stock purchase receipts
   for (const fuel of [diesel, petrol]) {
     await prisma.stockBalance.upsert({
       where: { fuelId_location: { fuelId: fuel.id, location: "WAREHOUSE" } },
@@ -164,13 +164,13 @@ async function main(): Promise<void> {
     });
   }
 
-  // Posted Diesel Tanker Receipt (10,000L @ $0.80/L)
+  // Posted diesel stock receipt (10,000L historical example)
   const tankerReceipt1 = await prisma.tankerReceipt.upsert({
     where: { receiptNo: "BR-UAT-001" },
     update: {},
     create: {
       receiptNo: "BR-UAT-001",
-      tankerReference: "Booyad Truck #SOM-901",
+      tankerReference: "Fuel supplier delivery #SOM-901",
       arrivedAt: new Date("2026-09-01T08:00:00.000Z"),
       status: "POSTED",
       createdById: owner.id,

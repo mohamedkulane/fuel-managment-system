@@ -1,7 +1,8 @@
 "use client";
+import { ActionLink } from "../../components/controls";
 import { ClipboardList, Clock3, CircleCheck, Truck } from "lucide-react";
 import { sum, formatStatus } from "../../lib/format";
-import Link from "next/link";
+
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../../lib/api";
 import { MetricCard, LoadingState, Badge, Card, CardHead, Empty, ErrorState, PageHeader } from "../../components/ui";
@@ -50,9 +51,9 @@ export default function DispatchesPage() {
                 {query.data?.map((row) => (
                   <tr key={row.id}>
                     <td>
-                      <Link className="strong mono" href={`/dispatches/${row.id}`}>
+                      <ActionLink className="strong mono" href={`/dispatches/${row.id}`}>
                         {row.dispatchNo}
-                      </Link>
+                      </ActionLink>
                     </td>
                     <td>{row.deliverySheet?.sheetNo ?? "Toos"}</td>
                     <td className="strong mono">
@@ -75,13 +76,13 @@ export default function DispatchesPage() {
                       </Badge>
                     </td>
                     <td style={{ textAlign: "right" }}>
-                      <Link className="btn" href={`/dispatches/${row.id}`}>
+                      <ActionLink className="btn" href={`/dispatches/${row.id}`}>
                         Eeg Faahfaahinta
-                      </Link>
+                      </ActionLink>
                       {["POSTED", "PARTIALLY_RECONCILED"].includes(row.status) && (
-                        <Link className="btn primary" href={`/dispatches/${row.id}/reconcile`} style={{ marginLeft: 6 }}>
+                        <ActionLink className="btn primary" href={`/dispatches/${row.id}/reconcile`} style={{ marginLeft: 6 }}>
                           Heshiisii
-                        </Link>
+                        </ActionLink>
                       )}
                     </td>
                   </tr>

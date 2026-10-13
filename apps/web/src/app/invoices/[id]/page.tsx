@@ -1,8 +1,9 @@
 "use client";
+import { ActionButton, FormLabel, ActionAnchor, ActionLink } from "../../../components/controls";
 import { decimal, formatStatus, formatFuel } from "../../../lib/format";
 import { useState } from "react";
 import { useParams } from "next/navigation";
-import Link from "next/link";
+
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, apiBase, type Actor } from "../../../lib/api";
 import { Modal, PageHeader, Badge } from "../../../components/ui";
@@ -95,14 +96,14 @@ export default function InvoiceDetailPage() {
         description={inv.customer.name}
         actions={
           <div className="actions">
-            <a href={`${apiBase}/invoices/${inv.id}/pdf`} target="_blank" rel="noreferrer" className="btn secondary">
+            <ActionAnchor href={`${apiBase}/invoices/${inv.id}/pdf`} target="_blank" rel="noreferrer" className="btn secondary">
               Soo Dejiso PDF
-            </a>
+            </ActionAnchor>
 
             {me.data?.role === "OWNER" && inv.status !== "REVERSED" && (
-              <button className="btn danger" onClick={() => setReverseModal(true)}>
+              <ActionButton className="btn danger" onClick={() => setReverseModal(true)}>
                 Kansal Biilka
-              </button>
+              </ActionButton>
             )}
           </div>
         }
@@ -139,9 +140,9 @@ export default function InvoiceDetailPage() {
           <div className="space-y-1 mt-2 text-sm">
             <div>
               <strong>Magaca:</strong>{" "}
-              <Link href={`/customers/${inv.customer.id}`} className="link">
+              <ActionLink href={`/customers/${inv.customer.id}`} className="link">
                 {inv.customer.name}
-              </Link>
+              </ActionLink>
             </div>
             <div>
               <strong>Koodhka Macmiilka:</strong> {inv.customer.code}
@@ -240,9 +241,9 @@ export default function InvoiceDetailPage() {
                 {inv.allocations.map((a) => (
                   <tr key={a.id}>
                     <td>
-                      <Link href={`/payments/${a.payment.id}`} className="font-mono link">
+                      <ActionLink href={`/payments/${a.payment.id}`} className="font-mono link">
                         {a.payment.paymentNo}
-                      </Link>
+                      </ActionLink>
                     </td>
                     <td>{a.payment.paymentDate.slice(0, 10)}</td>
                     <td>{a.payment.paymentMethod}</td>
@@ -276,7 +277,7 @@ export default function InvoiceDetailPage() {
           </div>
 
           <div>
-            <label className="label">Sababta Kansalaadda *</label>
+            <FormLabel className="label">Sababta Kansalaadda *</FormLabel>
             <textarea
               value={reasonInput}
               onChange={(e) => setReasonInput(e.target.value)}
@@ -286,12 +287,12 @@ export default function InvoiceDetailPage() {
           </div>
 
           <div className="modal-actions">
-            <button type="button" className="btn ghost" onClick={() => setReverseModal(false)}>
+            <ActionButton type="button" className="btn ghost" onClick={() => setReverseModal(false)}>
               Ka Noqo
-            </button>
-            <button type="submit" className="btn danger" disabled={reverseMutation.isPending || !reasonInput.trim()}>
+            </ActionButton>
+            <ActionButton type="submit" className="btn danger" disabled={reverseMutation.isPending || !reasonInput.trim()}>
               {reverseMutation.isPending ? "Waa la kansalayay..." : "Xaqiiji Kansalaadda"}
-            </button>
+            </ActionButton>
           </div>
         </form>
       </Modal>

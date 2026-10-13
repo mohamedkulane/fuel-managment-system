@@ -1,8 +1,9 @@
 "use client";
+import { ActionButton, FormLabel, ActionAnchor, ActionLink } from "../../../components/controls";
 import { decimal, formatStatus } from "../../../lib/format";
 import { useState } from "react";
 import { useParams } from "next/navigation";
-import Link from "next/link";
+
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, apiBase, type Actor } from "../../../lib/api";
 import { Modal, PageHeader, Badge } from "../../../components/ui";
@@ -83,14 +84,14 @@ export default function PaymentDetailPage() {
         description={pay.customer.name}
         actions={
           <div className="actions">
-            <a href={`${apiBase}/payments/${pay.id}/receipt-pdf`} target="_blank" rel="noreferrer" className="btn secondary">
+            <ActionAnchor href={`${apiBase}/payments/${pay.id}/receipt-pdf`} target="_blank" rel="noreferrer" className="btn secondary">
               Soo Dejiso Rasiidhka (PDF)
-            </a>
+            </ActionAnchor>
 
             {me.data?.role === "OWNER" && pay.status === "POSTED" && (
-              <button className="btn danger" onClick={() => setReverseModal(true)}>
+              <ActionButton className="btn danger" onClick={() => setReverseModal(true)}>
                 Kansal Lacag-bixinta
-              </button>
+              </ActionButton>
             )}
           </div>
         }
@@ -127,9 +128,9 @@ export default function PaymentDetailPage() {
           <div className="space-y-1 mt-2 text-sm">
             <div>
               <strong>Macmiilka:</strong>{" "}
-              <Link href={`/customers/${pay.customer.id}`} className="link">
+              <ActionLink href={`/customers/${pay.customer.id}`} className="link">
                 {pay.customer.name}
-              </Link>
+              </ActionLink>
             </div>
             <div>
               <strong>Koodhka Macmiilka:</strong> {pay.customer.code}
@@ -190,9 +191,9 @@ export default function PaymentDetailPage() {
                 {pay.allocations.map((a) => (
                   <tr key={a.id}>
                     <td>
-                      <Link href={`/invoices/${a.invoice.id}`} className="font-mono link">
+                      <ActionLink href={`/invoices/${a.invoice.id}`} className="font-mono link">
                         {a.invoice.invoiceNo}
-                      </Link>
+                      </ActionLink>
                     </td>
                     <td className="font-mono">${decimal(a.invoice.totalAmount, 2)}</td>
                     <td className="font-mono font-semibold text-emerald-400">${decimal(a.amount, 2)}</td>
@@ -225,7 +226,7 @@ export default function PaymentDetailPage() {
           </div>
 
           <div>
-            <label className="label">Sababta Kansalaadda *</label>
+            <FormLabel className="label">Sababta Kansalaadda *</FormLabel>
             <textarea
               value={reasonInput}
               onChange={(e) => setReasonInput(e.target.value)}
@@ -235,12 +236,12 @@ export default function PaymentDetailPage() {
           </div>
 
           <div className="modal-actions">
-            <button type="button" className="btn ghost" onClick={() => setReverseModal(false)}>
+            <ActionButton type="button" className="btn ghost" onClick={() => setReverseModal(false)}>
               Ka Noqo
-            </button>
-            <button type="submit" className="btn danger" disabled={reverseMutation.isPending || !reasonInput.trim()}>
+            </ActionButton>
+            <ActionButton type="submit" className="btn danger" disabled={reverseMutation.isPending || !reasonInput.trim()}>
               {reverseMutation.isPending ? "Waa la kansalayay..." : "Xaqiiji Kansalaadda"}
-            </button>
+            </ActionButton>
           </div>
         </form>
       </Modal>

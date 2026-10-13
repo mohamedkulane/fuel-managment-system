@@ -7,11 +7,11 @@
 5. `docs/05-phases/phase-XX-*.md`: work authorized for a phase.
 6. `docs/06-quality/`: verification; `docs/07-operations/`: safe deployment.
 
-Where a document conflicts with a confirmed user requirement, the confirmed requirement wins and documents must be updated consistently. No booyad/fuusto conflation, no driver role and no hidden stock/financial shortcuts.
+Where a document conflicts with a confirmed user requirement, the confirmed requirement wins and documents must be updated consistently. One fuusto is exactly 240 liters. No Booyad receiving workflow, no driver role and no hidden stock/financial shortcuts.
 
 ## End-to-end conceptual flow
 ```
-BOOYAD ARRIVAL (record ACTUAL liters per fuel)
+FUEL STOCK RECEIVING (record whole fuusto; snapshot 240 L/fuusto)
   -> warehouse stock increase
   -> OWNER updates price list as needed
   -> OFFICE creates and confirms customer order (price + fuusto L snapshot)
@@ -27,7 +27,7 @@ BOOYAD ARRIVAL (record ACTUAL liters per fuel)
 **System of record:** accepted-delivery records for billable quantity; immutable stock movements for physical balance; posted invoices/allocations/credit notes for receivables; cash/bank receipt records for collections.
 
 ## Review checkpoints
-- Before phase 1: owner selects liter-per-fuusto settings and confirms how incoming booyado are measured; software must support configurable units regardless.
-- Before phase 2: choose whether all fuusto orders are whole numbers, whether multiple deliveries per order are allowed (this design supports them), and whether deliveries can be rescheduled/backordered.
+- Confirmed for phase 1: the operational unit is whole fuusto and the fixed conversion is 240 liters per fuusto. Incoming stock uses Fuel Stock Receiving / Stock Purchases.
+- Confirmed for phase 2: ordinary orders use whole fuusto. Multiple accepted deliveries per order are supported, and any undelivered physical quantity is explicitly recorded as returned or still in transit.
 - Before phase 3: due-date policy, allowed payment methods, receipt numbering and sale tax handling (MVP assumes no tax until configured).
 - Before phase 4: confirm the purchase cost inclusion and valuation reporting policy; owner-only profitability stays hidden if costs are incomplete.

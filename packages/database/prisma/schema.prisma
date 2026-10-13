@@ -295,6 +295,7 @@ model SalesOrder {
   createdBy User @relation("OrderCreator", fields: [createdById], references: [id], onDelete: Restrict)
   lines SalesOrderLine[]
   events OrderEvent[]
+  payments Payment[]
   createdAt DateTime @default(now())
   @@index([customerId, orderDate])
   @@index([discountApprovedById])
@@ -487,6 +488,7 @@ model Payment {
   id              String        @id @default(uuid()) @db.Uuid
   paymentNo       String        @unique
   customerId      String        @db.Uuid
+  orderId         String?       @db.Uuid
   amount          Decimal       @db.Decimal(20, 4)
   allocatedAmount Decimal       @db.Decimal(20, 4) @default(0)
   unappliedAmount Decimal       @db.Decimal(20, 4)
@@ -500,10 +502,21 @@ model Payment {
   createdAt       DateTime      @default(now())
 
   customer    Customer            @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  order       SalesOrder?         @relation(fields: [orderId], references: [id], onDelete: Restrict)
   recordedBy  User                @relation("PaymentRecorder", fields: [recordedById], references: [id], onDelete: Restrict)
   allocations PaymentAllocation[]
   reversals   PaymentReversal[]
   @@index([customerId, paymentDate])
+  @@index([orderId])
+}
+
+model WorkflowRequest {
+  key String @id
+  actorId String @db.Uuid
+  kind String
+  payloadHash String
+  result Json
+  createdAt DateTime @default(now())
 }
 
 model PaymentAllocation {
