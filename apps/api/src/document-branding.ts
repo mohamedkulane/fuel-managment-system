@@ -158,7 +158,7 @@ export async function resolveDocumentBranding(settings: DocumentBrandingSettings
 
 export function drawDocumentLogo(doc: InstanceType<typeof PDFDocument>, branding: ResolvedDocumentBranding, x = 36, y = 30, width = 104, height = 48): void {
   if (branding.logo) doc.image(branding.logo, x, y, { fit: [width, height] });
-  doc.font("Helvetica-Bold").fontSize(10).fillColor("#1b2923")
+  doc.font("Helvetica-Bold").fontSize(10).fillColor("#111111")
     .text(branding.companyName, branding.logo ? x + width + 9 : x, y + 14, { width: branding.logo ? 170 : 230, height: 30, ellipsis: true });
 }
 
@@ -171,7 +171,7 @@ export function addDocumentFooter(doc: InstanceType<typeof PDFDocument>, brandin
     const footerY = doc.page.height - 46;
     doc.save();
     doc.moveTo(34, footerY).lineTo(pageWidth - 34, footerY).strokeColor("#b8c2bd").lineWidth(0.5).stroke();
-    doc.font("Helvetica").fontSize(7.5).fillColor("#5d6b64")
+    doc.font("Helvetica").fontSize(7.5).fillColor("#555555")
       .text(footer, 34, footerY + 7, { width: pageWidth - 68, align: "center", lineBreak: false, ellipsis: true });
     doc.restore();
   }

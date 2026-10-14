@@ -9,6 +9,7 @@ import { AuthenticatedRequest, hashToken, newSessionToken, requireActor, require
 import { PrismaService } from "./prisma.service.js";
 import { exportToPdf, exportToExcel, ColumnDef } from "./reports.exporter.js";
 import { compactPaymentReference, createCustomerStatementPdf } from "./customer-statement.pdf.js";
+import { createOrderInvoicePdf } from "./order-invoice.pdf.js";
 import { addDocumentFooter, drawDocumentLogo, resolveDocumentBranding, validateLogoUrl } from "./document-branding.js";
 import { CustomerAccountService } from "./customer-account.service.js";
 import { SimpleWorkflowsService } from "./simple-workflows.service.js";
@@ -690,6 +691,67 @@ export class AppController {
         totalPages: Math.ceil(total / limit) || 1
       }
     };
+  }
+
+  @UseGuards(SessionGuard)
+  @Get("orders/:id/invoice-pdf")
+  async orderInvoicePdf(@Param("id") id: string, @Res() response: Response) {
+    const order = await this.prisma.salesOrder.findUnique({
+      where: { id },
+      include: {
+        customer: { include: { addresses: true } },
+        createdBy: true,
+        payments: { where: { status: "POSTED" } },
+        lines: {
+          include: {
+            fuel: true,
+            invoiceLines: {
+              include: { invoice: { include: { allocations: { include: { payment: true } } } } }
+            }
+          }
+        }
+      }
+    });
+    if (!order) throw new NotFoundException("Order not found");
+    if (order.status === "DRAFT" || order.lines.some((line) => !line.unitPriceSnapshot)) {
+      throw new BadRequestException("Confirm the order before opening its invoice");
+    }
+
+    const activeInvoices = order.lines.flatMap((line) => line.invoiceLines.map((invoiceLine) => invoiceLine.invoice))
+      .filter((invoice) => !["REVERSED", "CANCELLED"].includes(invoice.status));
+    const directPaid = order.payments.reduce((sum, payment) => sum.add(payment.amount), dec("0"));
+    const fifoPaid = activeInvoices.flatMap((invoice) => invoice.allocations)
+      .filter((allocation) => allocation.payment.status === "POSTED" && allocation.payment.orderId !== order.id)
+      .reduce((sum, allocation) => sum.add(allocation.amount), dec("0"));
+    const subtotal = order.subtotal ?? order.lines.reduce((sum, line) => sum.add(line.requestedUnits.mul(line.unitPriceSnapshot!)), dec("0"));
+    const total = order.totalAmount ?? subtotal.sub(order.fixedDiscountAmount);
+    const paid = Prisma.Decimal.min(total, directPaid.add(fifoPaid));
+    const formatter = new Intl.DateTimeFormat("en-GB", { timeZone: "Africa/Mogadishu", day: "2-digit", month: "short", year: "numeric" });
+    const customerAddress = order.customer.addresses.find((address) => address.isDefault) ?? order.customer.addresses[0];
+    const pdf = await createOrderInvoicePdf({
+      orderNo: order.orderNo,
+      orderDate: formatter.format(order.orderDate),
+      deliveryDate: order.requestedDeliveryDate ? formatter.format(order.requestedDeliveryDate) : null,
+      createdBy: order.createdBy.displayName,
+      status: order.status.replaceAll("_", " "),
+      customer: { name: order.customer.name, phone: order.customer.primaryPhone, location: customerAddress?.addressText ?? null },
+      deliveryLocation: order.addressSnapshot,
+      lines: order.lines.map((line) => ({
+        fuel: line.fuel.code === "PETROL" ? "Basiin" : "Naafto",
+        quantity: line.requestedUnits.toFixed(0),
+        unitPrice: line.unitPriceSnapshot!.toFixed(2),
+        amount: line.requestedUnits.mul(line.unitPriceSnapshot!).toFixed(2)
+      })),
+      subtotal: subtotal.toFixed(2),
+      discount: order.fixedDiscountAmount.toFixed(2),
+      total: total.toFixed(2),
+      paid: paid.toFixed(2),
+      remaining: Prisma.Decimal.max(dec("0"), total.sub(paid)).toFixed(2),
+      deliveryPending: activeInvoices.length === 0,
+      branding: await this.documentBranding()
+    });
+    response.setHeader("Content-Disposition", `inline; filename=${order.orderNo}-invoice.pdf`);
+    response.type("application/pdf").send(pdf);
   }
 
   @UseGuards(SessionGuard)

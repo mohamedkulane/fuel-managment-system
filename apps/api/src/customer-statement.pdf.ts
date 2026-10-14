@@ -31,91 +31,98 @@ export async function createCustomerStatementPdf(input: {
   orders: CustomerStatementOrder[];
   branding: ResolvedDocumentBranding;
 }): Promise<Buffer> {
-  const doc = new PDFDocument({ size: "A4", margins: { top: 34, right: 34, bottom: 42, left: 34 }, bufferPages: true });
+  const doc = new PDFDocument({ size: "A4", margins: { top: 35, right: 38, bottom: 48, left: 38 }, bufferPages: true });
   const chunks: Buffer[] = [];
   doc.on("data", (chunk: Buffer) => chunks.push(chunk));
 
   return new Promise<Buffer>((resolve, reject) => {
     doc.on("end", () => resolve(Buffer.concat(chunks)));
     doc.on("error", reject);
-    const left = 34;
-    const width = 527;
-    const columns = [70, 85, 112, 82, 82, 96];
-    const labels = ["Date", "Order", "Fuel", "Accepted Sale", "Paid", "Remaining"];
+    const left = 38;
+    const right = 557;
+    const width = right - left;
+    const columns = [25, 65, 50, 72, 157, 75, 75];
+    const labels = ["#", "Date", "Type", "Reference", "Description", "Amount", "Balance"];
     let page = 0;
     let y = 0;
 
     const pageHeader = () => {
       if (page > 0) doc.addPage();
       page += 1;
-      drawDocumentLogo(doc, input.branding, left, 34, 44, 38);
-      doc.font("Helvetica-Bold").fontSize(15).fillColor("#111111").text("CUSTOMER STATEMENT", 280, 38, { width: 281, align: "right" });
-      doc.font("Helvetica").fontSize(8).fillColor("#444444").text(input.period, 280, 60, { width: 281, align: "right" });
-      doc.text(`Generated ${input.generatedAt}`, 280, 73, { width: 281, align: "right" });
-      doc.moveTo(left, 94).lineTo(left + width, 94).strokeColor("#777777").lineWidth(0.6).stroke();
-      y = 108;
+      drawDocumentLogo(doc, input.branding, left, 35, 45, 32);
+      doc.font("Helvetica-Bold").fontSize(14).fillColor("#111111").text("CUSTOMER STATEMENT", 297, 41, { width: 260, align: "right" });
+      doc.font("Helvetica").fontSize(7).fillColor("#444444").text(`Period: ${input.period}`, 297, 60, { width: 260, align: "right" });
+      doc.text(`Generated: ${input.generatedAt}`, 297, 71, { width: 260, align: "right" });
+      doc.moveTo(left, 99).lineTo(right, 99).strokeColor("#777777").lineWidth(0.55).stroke();
+      y = 117;
     };
     const tableHeader = () => {
-      doc.rect(left, y, width, 24).fill("#eeeeee");
-      doc.font("Helvetica-Bold").fontSize(7.5).fillColor("#111111");
+      doc.rect(left, y, width, 25).fill("#f3f3f3");
+      doc.font("Helvetica-Bold").fontSize(7).fillColor("#111111");
       let x = left;
-      labels.forEach((label, index) => { doc.text(label, x + 5, y + 8, { width: columns[index]! - 10, align: index > 2 ? "right" : "left" }); x += columns[index]!; });
-      y += 24;
+      labels.forEach((label, index) => { doc.text(label, x + 4, y + 9, { width: columns[index]! - 8, align: index > 4 ? "right" : "left" }); x += columns[index]!; });
+      y += 25;
     };
-    const ensure = (height: number) => { if (y + height > 744) { pageHeader(); tableHeader(); } };
+    const ensure = (height: number) => { if (y + height > 655) { pageHeader(); tableHeader(); } };
 
     pageHeader();
-    doc.font("Helvetica-Bold").fontSize(13).fillColor("#111111").text(input.customer.name, left, y);
-    doc.font("Helvetica").fontSize(8).fillColor("#444444").text([input.customer.phone, input.customer.location].filter(Boolean).join(" · ") || "—", left, y + 19);
-    y += 47;
-
+    doc.font("Helvetica-Bold").fontSize(7.5).fillColor("#333333").text("CUSTOMER", left, y);
+    doc.font("Helvetica-Bold").fontSize(11).fillColor("#111111").text(input.customer.name, left, y + 17, { width: 235, ellipsis: true });
+    const customerMeta = [input.customer.phone, input.customer.location].filter(Boolean).join("  ·  ");
+    if (customerMeta) doc.font("Helvetica").fontSize(7.5).fillColor("#333333").text(customerMeta, left, y + 37, { width: 235, ellipsis: true });
+    doc.moveTo(279, y - 2).lineTo(279, y + 85).strokeColor("#bbbbbb").lineWidth(0.45).stroke();
     const summary = [
-      ["Opening debt", input.openingDebt], ["Delivered sales", input.totalSales], ["Payments received", input.totalPaid],
-      ["Remaining debt", input.remainingDebt], ["Pending orders", input.pendingOrderRemaining], ["Closing debt", input.closingDebt]
+      ["Opening Debt", input.openingDebt], ["Total Sales", input.totalSales], ["Total Payments", input.totalPaid],
+      ["Current Balance", input.remainingDebt], ["Pending Orders", input.pendingOrderRemaining]
     ];
-    const cellWidth = width / 3;
+    let summaryY = y;
     summary.forEach(([label, value], index) => {
-      const col = index % 3;
-      const row = Math.floor(index / 3);
-      const x = left + col * cellWidth;
-      const sy = y + row * 39;
-      doc.rect(x, sy, cellWidth, 39).strokeColor("#cccccc").lineWidth(0.35).stroke();
-      doc.font("Helvetica").fontSize(7).fillColor("#555555").text(label!, x + 7, sy + 7, { width: cellWidth - 14 });
-      doc.font("Helvetica-Bold").fontSize(10).fillColor("#111111").text(`$${value}`, x + 7, sy + 20, { width: cellWidth - 14 });
+      const bold = index === 3;
+      doc.font(bold ? "Helvetica-Bold" : "Helvetica").fontSize(bold ? 8.5 : 7.5).fillColor("#222222").text(label, 300, summaryY, { width: 110 });
+      doc.font(bold ? "Helvetica-Bold" : "Helvetica").fontSize(bold ? 8.5 : 7.5).text(`$${value}`, 414, summaryY, { width: 143, align: "right" });
+      summaryY += 16;
+      if (index === 2) doc.moveTo(300, summaryY - 4).lineTo(right, summaryY - 4).strokeColor("#777777").lineWidth(0.45).stroke();
     });
-    y += 90;
+    y += 104;
     if (!/^0(?:\.0+)?$/.test(input.moneyToReview)) {
-      doc.font("Helvetica-Bold").fontSize(8).fillColor("#111111").text(`OWNER REVIEW NEEDED · $${input.moneyToReview}`, left, y, { width });
-      y += 20;
+      doc.font("Helvetica").fontSize(7.5).fillColor("#333333").text(`Owner review needed: $${input.moneyToReview}`, left, y - 10, { width });
     }
     tableHeader();
 
     if (!input.orders.length) {
-      doc.rect(left, y, width, 38).strokeColor("#dddddd").stroke();
-      doc.font("Helvetica").fontSize(8).fillColor("#555555").text("No order activity in this period.", left + 8, y + 14, { width: width - 16, align: "center" });
-      y += 38;
+      doc.rect(left, y, width, 34).strokeColor("#d4d4d4").lineWidth(0.4).stroke();
+      doc.font("Helvetica").fontSize(8).fillColor("#555555").text("No order activity in this period.", left + 8, y + 13, { width: width - 16, align: "center" });
+      y += 34;
     }
-    for (const order of input.orders) {
-      const paymentHeight = order.payments.length ? order.payments.length * 15 + 8 : 0;
-      const rowHeight = 32 + paymentHeight;
-      ensure(rowHeight);
-      doc.rect(left, y, width, rowHeight).strokeColor("#d7d7d7").lineWidth(0.35).stroke();
-      const values = [order.date, order.orderNo, order.fuel, `$${order.acceptedSale}`, `$${order.paid}`, `${order.remainingLabel}\n$${order.remaining}`];
+    let record = 0;
+    const drawRow = (values: string[], height = 26) => {
+      ensure(height);
+      doc.rect(left, y, width, height).strokeColor("#d4d4d4").lineWidth(0.4).stroke();
       let x = left;
-      values.forEach((value, index) => { doc.font(index === 1 ? "Helvetica-Bold" : "Helvetica").fontSize(7.5).fillColor("#222222").text(value, x + 5, y + 7, { width: columns[index]! - 10, align: index > 2 ? "right" : "left", lineGap: 1 }); x += columns[index]!; });
-      let py = y + 32;
+      values.forEach((value, index) => {
+        doc.font(index === 3 ? "Helvetica-Bold" : "Helvetica").fontSize(7).fillColor("#222222").text(value, x + 4, y + 8, { width: columns[index]! - 8, align: index > 4 ? "right" : "left", lineGap: 1, ellipsis: true });
+        x += columns[index]!;
+      });
+      y += height;
+    };
+    for (const order of input.orders) {
+      record += 1;
+      const hasSale = !/^0(?:\.0+)?$/.test(order.acceptedSale);
+      const description = hasSale ? `${order.fuel} delivered sale` : `${order.fuel} order — delivery pending`;
+      const balance = order.remainingLabel === "Settled" ? "Settled" : `${order.remainingLabel} $${order.remaining}`;
+      drawRow([String(record), order.date, hasSale ? "Sale" : "Order", order.orderNo, description, hasSale ? `$${order.acceptedSale}` : "—", balance], 26);
       for (const payment of order.payments) {
-        doc.font("Helvetica").fontSize(7).fillColor("#555555").text(`↳ ${payment.date}  ${payment.reference}`, left + columns[0]! + 5, py, { width: 270 });
-        doc.font("Helvetica-Bold").text(`$${payment.amount} · ${payment.status}`, left + 385, py, { width: 130, align: "right" });
-        py += 15;
+        record += 1;
+        drawRow([String(record), payment.date, "Payment", payment.reference, payment.status === "Reversed" ? "Payment reversed" : "Payment received", payment.status === "Reversed" ? "—" : `$${payment.amount}`, balance], 26);
       }
-      y += rowHeight;
     }
 
-    y += 18;
-    ensure(54);
-    doc.moveTo(left, y).lineTo(left + width, y).strokeColor("#999999").lineWidth(0.5).stroke();
-    doc.font("Helvetica").fontSize(7.5).fillColor("#444444").text("Debt includes delivered and posted sales only. Pending order amounts are shown separately until delivery is accepted.", left, y + 10, { width });
+    const notesY = Math.max(y + 28, 620);
+    doc.moveTo(left, notesY).lineTo(left + 225, notesY).strokeColor("#777777").lineWidth(0.45).stroke();
+    doc.font("Helvetica-Bold").fontSize(8).fillColor("#222222").text("NOTES", left, notesY + 9);
+    doc.font("Helvetica").fontSize(7.2).fillColor("#333333").text("• Delivered sales form the customer debt.\n• Pending orders stay separate until delivery is accepted.", left, notesY + 23, { lineGap: 3 });
+    doc.moveTo(386, notesY + 42).lineTo(right, notesY + 42).strokeColor("#777777").lineWidth(0.45).stroke();
+    doc.font("Helvetica").fontSize(8).fillColor("#333333").text("Thank you!", 386, notesY + 50, { width: right - 386, align: "center" });
     addDocumentFooter(doc, input.branding);
     doc.end();
   });
