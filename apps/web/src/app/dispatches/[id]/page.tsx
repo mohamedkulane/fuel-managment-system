@@ -6,7 +6,7 @@ import { useParams } from "next/navigation";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, mutationKey } from "../../../lib/api";
-import { MetricCard, Badge, Card, CardHead, ErrorState, PageHeader } from "../../../components/ui";
+import { CascadeSpinner, MetricCard, Badge, Card, CardHead, ErrorState, PageHeader } from "../../../components/ui";
 
 type DispatchLine = {
   id: string;
@@ -74,7 +74,7 @@ export default function DispatchDetailPage() {
             <>
               {row.status === "PREPARED" && (
                 <ActionButton className="btn primary" disabled={post.isPending} onClick={() => post.mutate()}>
-                  {post.isPending ? "Diiwaangelinaya…" : "Diiwaangeli Dirista Rasmiga Ah"}
+                  {post.isPending ? <><CascadeSpinner size={16} /> Diiwaangelinaya…</> : "Diiwaangeli Dirista Rasmiga Ah"}
                 </ActionButton>
               )}
               {["POSTED", "PARTIALLY_RECONCILED"].includes(row.status) && (

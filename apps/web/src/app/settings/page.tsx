@@ -3,7 +3,6 @@ import { ActionButton, FormLabel, ActionLink } from "../../components/controls";
 import { FormEvent, useState } from "react";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useRouter } from "next/navigation";
 import { CircleCheck, ShieldCheck, Users } from "lucide-react";
 import { api, type Actor } from "../../lib/api";
 import { dateTime, formatRole } from "../../lib/format";
@@ -14,7 +13,6 @@ type User = { id: string; displayName: string; email: string; role: "OWNER" | "O
 type DocumentBranding = { companyName: string; logoUrl: string; footerText: string };
 
 export default function SettingsPage() {
-  const router = useRouter();
   const client = useQueryClient();
   const [showCreate, setShowCreate] = useState(false);
   const me = useQuery({ queryKey: ["me"], queryFn: () => api<Actor>("/auth/me") });
@@ -26,8 +24,6 @@ export default function SettingsPage() {
     onSuccess: async () => { await client.invalidateQueries({ queryKey: ["settings", "document-branding"] }); notifySuccess("Document branding saved"); },
     onError: error => notifyError(error, "Could not save document branding")
   });
-  const logout = useMutation({ mutationFn: () => api("/auth/logout", { method: "POST" }), onSuccess: () => { client.clear(); router.replace("/login"); } });
-
   function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const d = new FormData(e.currentTarget);
@@ -52,20 +48,12 @@ export default function SettingsPage() {
         eyebrow="Maamulka Nidaamka"
         title="Dejinta Nidaamka"
         description=""
-        actions={
-          <>
-            <ActionButton className="btn" disabled={logout.isPending} onClick={() => logout.mutate()}>
-              Kabax Nidaamka
-            </ActionButton>
-            {owner && (
-              <ActionButton className="btn primary" onClick={() => setShowCreate(true)}>
-                Kudar Isticmaale Cusub
-              </ActionButton>
-            )}
-          </>
-        }
+        actions={owner && (
+          <ActionButton className="btn primary" onClick={() => setShowCreate(true)}>
+            Kudar Isticmaale Cusub
+          </ActionButton>
+        )}
       />
-      {logout.isError && <ErrorState message={logout.error.message} />}
       <Card><CardHead title="Account"/><div className="card-body"><div className="info-pair"><span>Name</span><b>{me.data?.displayName}</b></div><div className="info-pair"><span>Email</span><b>{me.data?.email}</b></div><div className="info-pair"><span>Role</span><Badge>{formatRole(me.data?.role)}</Badge></div></div></Card>
       {owner && <details className="simple-disclosure"><summary>Audit history</summary><ActionLink className="btn" href="/audits">View Audit Log</ActionLink></details>}
       {owner && <Card>

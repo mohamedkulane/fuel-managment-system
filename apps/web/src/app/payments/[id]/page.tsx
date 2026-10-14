@@ -6,7 +6,7 @@ import { useParams } from "next/navigation";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, apiBase, type Actor } from "../../../lib/api";
-import { Modal, PageHeader, Badge } from "../../../components/ui";
+import { CascadeSpinner, LoadingState, Modal, PageHeader, Badge } from "../../../components/ui";
 
 type PaymentDetail = {
   id: string;
@@ -62,7 +62,7 @@ export default function PaymentDetailPage() {
   if (paymentQuery.isLoading) {
     return (
       <main className="page detail-page">
-        <div className="skeleton tall" />
+        <LoadingState label="Rasiidhka waa la soo rarayaa…" />
       </main>
     );
   }
@@ -242,7 +242,7 @@ export default function PaymentDetailPage() {
               Ka Noqo
             </ActionButton>
             <ActionButton type="submit" className="btn danger" disabled={reverseMutation.isPending || !reasonInput.trim()}>
-              {reverseMutation.isPending ? "Waa la kansalayay..." : "Xaqiiji Kansalaadda"}
+              {reverseMutation.isPending ? <><CascadeSpinner size={16} /> Waa la kansalayay...</> : "Xaqiiji Kansalaadda"}
             </ActionButton>
           </div>
         </form>

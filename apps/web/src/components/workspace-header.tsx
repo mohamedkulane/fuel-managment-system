@@ -2,10 +2,11 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Bell, ChevronDown, CircleUserRound, LogOut, Search, Settings, ShoppingBag, Users, X } from "lucide-react";
 import { api, type Actor, type PaginatedResponse } from "../lib/api";
 import { formatRole } from "../lib/format";
+import { CascadeSpinner } from "./ui";
 
 type CustomerHit = { id: string; name: string; primaryPhone: string | null };
 type OrderHit = { id: string; orderNo: string; customer: { name: string } };
@@ -13,6 +14,7 @@ type Overview = { operations: { pendingOrders: number; dispatched: number; unbil
 
 export function WorkspaceHeader({ actor }: { actor?: Actor }) {
   const router = useRouter();
+  const client = useQueryClient();
   const [search, setSearch] = useState("");
   const [term, setTerm] = useState("");
   const [panel, setPanel] = useState<"search" | "notifications" | "profile" | null>(null);
@@ -27,6 +29,10 @@ export function WorkspaceHeader({ actor }: { actor?: Actor }) {
   const customers = useQuery({ queryKey: ["header-search", "customers", term], queryFn: () => api<PaginatedResponse<CustomerHit>>(`/customers?search=${encodeURIComponent(term)}&limit=5`), enabled: !!actor && term.length >= 2 });
   const orders = useQuery({ queryKey: ["header-search", "orders", term], queryFn: () => api<PaginatedResponse<OrderHit>>(`/orders?search=${encodeURIComponent(term)}&limit=5`), enabled: !!actor && term.length >= 2 });
   const overview = useQuery({ queryKey: ["dashboard", "overview"], queryFn: () => api<Overview>("/dashboard/overview"), enabled: !!actor, refetchInterval: 60000 });
+  const logout = useMutation({
+    mutationFn: () => api("/auth/logout", { method: "POST" }),
+    onSuccess: () => { client.clear(); router.replace("/login"); }
+  });
   const ops = overview.data?.operations;
   const attention = (ops?.pendingOrders ?? 0) + (ops?.unbilledDeliveries ?? 0);
   const initials = actor?.displayName.split(" ").map(name => name[0]).slice(0, 2).join("") ?? "";
@@ -51,7 +57,7 @@ export function WorkspaceHeader({ actor }: { actor?: Actor }) {
     </div>
     <span className="header-divider" aria-hidden="true" />
     <div className="header-control"><button className="profile-trigger" type="button" aria-label="Profile" aria-expanded={panel === "profile"} aria-controls="profile-panel" onClick={() => setPanel(panel === "profile" ? null : "profile")}><span className="avatar">{initials || <CircleUserRound size={20} />}</span><span className="profile-label"><b>{actor?.displayName ?? "Raraya…"}</b><small>{actor?.email ?? formatRole(actor?.role)}</small></span><ChevronDown size={15} /></button>
-      {panel === "profile" && <section className="header-panel profile-panel" id="profile-panel"><h3>{actor?.displayName}</h3><p>{actor?.email}</p><Link href="/settings" onClick={() => setPanel(null)}><Settings size={19} />Profile & Settings</Link></section>}
+      {panel === "profile" && <section className="header-panel profile-panel" id="profile-panel"><h3>{actor?.displayName}</h3><p>{actor?.email}</p><Link href="/settings" onClick={() => setPanel(null)}><Settings size={19} />Profile & Settings</Link>{logout.isError && <p role="alert">{logout.error.message}</p>}<button type="button" disabled={logout.isPending} onClick={() => logout.mutate()}><LogOut size={19} />{logout.isPending ? <><CascadeSpinner size={15} /> Ka baxaya…</> : "Ka bax nidaamka"}</button></section>}
     </div>
   </div>;
 }

@@ -1,7 +1,7 @@
 "use client";
 import { ActionButton } from "./controls";
 import { useEffect, useId, useRef, type CSSProperties, type ReactNode } from "react";
-import { AlertCircle, ArrowLeft, ArrowRight, Inbox, LoaderCircle, X, type LucideIcon } from "lucide-react";
+import { AlertCircle, ArrowLeft, ArrowRight, Inbox, X, type LucideIcon } from "lucide-react";
 
 import { formatStatus } from "../lib/i18n";
 
@@ -23,11 +23,20 @@ export function Badge({ children, tone = "neutral" }: { children: ReactNode; ton
   return <span className={`badge ${tone}`}>{display}</span>;
 }
 export function Empty({ children }: { children: ReactNode }) { return <div className="empty"><Inbox size={25} aria-hidden="true" /><span>{children}</span></div>; }
-export function LoadingState({ label = "Raraya xogta…" }: { label?: string }) { return <div className="loading-state" role="status"><LoaderCircle className="spin" size={20} /><span>{label}</span></div>; }
+export function CascadeSpinner({ size = 48 }: { size?: number }) {
+  return (
+    <svg className="cascade-spinner" width={size} height={size} viewBox="0 0 48 48" aria-hidden="true">
+      <path className="cascade-arc cascade-arc-one" d="M8 29c8 8 24 8 32 0" />
+      <path className="cascade-arc cascade-arc-two" d="M13 21c6 6 16 6 22 0" />
+      <path className="cascade-arc cascade-arc-three" d="M18 13c3 3 9 3 12 0" />
+    </svg>
+  );
+}
+export function LoadingState({ label = "Raraya xogta…" }: { label?: string }) { return <div className="loading-state" role="status" aria-live="polite"><CascadeSpinner /><span>{label}</span></div>; }
 export function ErrorState({ title, message, retry }: { title?: string; message: string; retry?: () => void }) {
   return <div className="error-state" role="alert"><AlertCircle size={24} /><strong>{title ?? "Fadlan u kuurgal"}</strong><span>{message}</span>{retry && <ActionButton className="btn secondary" onClick={retry}>Mar kale isku day</ActionButton>}</div>;
 }
-export function SubmitButton({ busy, disabled, children }: { busy?: boolean; disabled?: boolean; children: ReactNode }) { return <ActionButton className="btn primary" type="submit" disabled={busy || disabled}>{busy ? <><LoaderCircle size={15} className="spin" /> Kaydinaya…</> : children}</ActionButton>; }
+export function SubmitButton({ busy, disabled, children }: { busy?: boolean; disabled?: boolean; children: ReactNode }) { return <ActionButton className="btn primary" type="submit" disabled={busy || disabled} aria-busy={busy || undefined}>{busy ? <><CascadeSpinner size={17} /> Kaydinaya…</> : children}</ActionButton>; }
 
 // Native dialogs contain focus, make background content inert, and support Escape.
 export function Modal({ isOpen, onClose, title, children }: { isOpen: boolean; onClose: () => void; title: string; children: ReactNode }) {

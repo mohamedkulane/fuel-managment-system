@@ -19,7 +19,14 @@ export async function exportToPdf(options: {
   totals?: Record<string, any>;
   branding?: ResolvedDocumentBranding;
 }): Promise<Buffer> {
-  const doc = new PDFDocument({ margin: 30, size: "A4", autoFirstPage: true, bufferPages: true });
+  const margin = 30;
+  const doc = new PDFDocument({
+    margin,
+    size: "A4",
+    layout: options.columns.length >= 6 ? "landscape" : "portrait",
+    autoFirstPage: true,
+    bufferPages: true
+  });
   const chunks: Buffer[] = [];
   doc.on("data", (chunk: Buffer) => chunks.push(chunk));
 
@@ -28,82 +35,117 @@ export async function exportToPdf(options: {
     doc.on("error", reject);
 
     if (options.branding) drawDocumentLogo(doc, options.branding);
-    doc.fontSize(16).text(options.title.toUpperCase(), { align: "right" });
-    if (options.subtitle) doc.fontSize(9).fillColor("#666666").text(options.subtitle, { align: "right" });
-    doc.fontSize(8).fillColor("#999999").text(`Generated: ${new Date().toISOString().slice(0, 19).replace("T", " ")} UTC`, { align: "right" });
-    doc.fillColor("#000000").moveDown(1);
-
-    if (options.filters && Object.keys(options.filters).length > 0) {
-      doc.fontSize(9).text("Applied Filters: " + Object.entries(options.filters).map(([k, v]) => `${k}: ${v}`).join(" | "));
-      doc.moveDown(0.5);
+    const pageWidth = doc.page.width - margin * 2;
+    const tableX = margin;
+    const tableWidth = pageWidth;
+    const tableBottom = doc.page.height - (options.branding ? 54 : margin);
+    doc.font("Helvetica-Bold").fontSize(15).fillColor("#0f172a")
+      .text(options.title.toUpperCase(), margin, 84, { width: pageWidth, align: "right" });
+    if (options.subtitle) {
+      doc.font("Helvetica").fontSize(9).fillColor("#666666")
+        .text(options.subtitle, margin, doc.y + 3, { width: pageWidth, align: "right" });
     }
-
-    // Table Setup
-    const startX = 30;
-    let currentY = doc.y;
-    const pageWidth = 535; // A4 width minus margins
-    const numCols = options.columns.length;
-    const colWidth = Math.floor(pageWidth / numCols);
-
-    // Draw Table Header
-    doc.rect(startX, currentY, pageWidth, 20).fill("#1e293b");
-    doc.fillColor("#ffffff").fontSize(9).font("Helvetica-Bold");
-
-    options.columns.forEach((col, idx) => {
-      const x = startX + idx * colWidth + 4;
-      doc.text(col.header, x, currentY + 5, { width: colWidth - 8, align: col.align || "left" });
-    });
-
-    currentY += 20;
-    doc.fillColor("#000000").font("Helvetica").fontSize(8);
-
-    // Draw Rows
-    options.rows.forEach((row, rowIdx) => {
-      // Page break check
-      if (currentY > 750) {
-        doc.addPage();
-        currentY = 40;
-        // Re-draw Table Header on new page
-        doc.rect(startX, currentY, pageWidth, 20).fill("#1e293b");
-        doc.fillColor("#ffffff").fontSize(9).font("Helvetica-Bold");
-        options.columns.forEach((col, idx) => {
-          const x = startX + idx * colWidth + 4;
-          doc.text(col.header, x, currentY + 5, { width: colWidth - 8, align: col.align || "left" });
-        });
-        currentY += 20;
-        doc.fillColor("#000000").font("Helvetica").fontSize(8);
-      }
-
-      const bg = rowIdx % 2 === 0 ? "#f8fafc" : "#ffffff";
-      doc.rect(startX, currentY, pageWidth, 18).fill(bg);
-      doc.fillColor("#0f172a");
-
-      options.columns.forEach((col, idx) => {
-        const x = startX + idx * colWidth + 4;
-        let val = row[col.key] ?? "—";
-        if (col.format === "currency" && val !== "—") val = `$${parseFloat(val).toFixed(2)}`;
-        else if (col.format === "decimal" && val !== "—") val = parseFloat(val).toFixed(3);
-        doc.text(String(val), x, currentY + 4, { width: colWidth - 8, align: col.align || "left" });
+    doc.font("Helvetica").fontSize(8).fillColor("#999999")
+      .text(`Generated: ${new Date().toISOString().slice(0, 19).replace("T", " ")} UTC`, margin, doc.y + 3, {
+        width: pageWidth,
+        align: "right"
       });
 
-      currentY += 18;
+    let currentY = doc.y + 12;
+    if (options.filters && Object.keys(options.filters).length > 0) {
+      const filters = "Applied Filters: " + Object.entries(options.filters).map(([key, value]) => `${key}: ${value}`).join(" | ");
+      doc.font("Helvetica").fontSize(8).fillColor("#475569")
+        .text(filters, tableX, currentY, { width: tableWidth });
+      currentY = doc.y + 8;
+    }
+
+    const widthWeight = (column: ColumnDef) => Math.max(1, column.width ?? column.header.length + 4);
+    const totalWeight = options.columns.reduce((total, column) => total + widthWeight(column), 0);
+    const columnWidths = options.columns.map((column) => tableWidth * widthWeight(column) / totalWeight);
+    const columnX = columnWidths.map((_, index) =>
+      tableX + columnWidths.slice(0, index).reduce((sum, width) => sum + width, 0)
+    );
+    const cellWidth = (index: number) => Math.max(1, columnWidths[index]! - 10);
+    const cellText = (column: ColumnDef, value: unknown): string => {
+      if (value === null || value === undefined) return "—";
+      if (column.format === "currency") return `$${parseFloat(String(value)).toFixed(2)}`;
+      if (column.format === "decimal") return parseFloat(String(value)).toFixed(3);
+      return String(value);
+    };
+    const measuredHeight = (
+      values: string[],
+      fontSize: number,
+      minimum: number,
+      padding: number,
+      font: "Helvetica" | "Helvetica-Bold" = "Helvetica"
+    ) => {
+      doc.font(font).fontSize(fontSize);
+      return Math.max(
+        minimum,
+        ...values.map((value, index) =>
+          doc.heightOfString(value, { width: cellWidth(index), lineGap: 1 }) + padding
+        )
+      );
+    };
+    const headerHeight = measuredHeight(options.columns.map((column) => column.header), 8, 24, 10, "Helvetica-Bold");
+    const drawTableHeader = () => {
+      doc.rect(tableX, currentY, tableWidth, headerHeight).fill("#1e293b");
+      doc.font("Helvetica-Bold").fontSize(8).fillColor("#ffffff");
+      options.columns.forEach((column, index) => {
+        doc.text(column.header, columnX[index]! + 5, currentY + 5, {
+          width: cellWidth(index),
+          height: headerHeight - 10,
+          lineGap: 1,
+          align: column.align || "left"
+        });
+      });
+      currentY += headerHeight;
+      doc.moveTo(tableX, currentY).lineTo(tableX + tableWidth, currentY)
+        .lineWidth(0.45).strokeColor("#cbd5e1").stroke();
+      doc.font("Helvetica").fontSize(8).fillColor("#0f172a");
+    };
+    const startNewPage = () => {
+      doc.addPage();
+      currentY = margin;
+      drawTableHeader();
+    };
+
+    drawTableHeader();
+    options.rows.forEach((row, rowIndex) => {
+      const values = options.columns.map((column) => cellText(column, row[column.key]));
+      const height = measuredHeight(values, 8, 20, 10);
+      if (currentY + height > tableBottom) startNewPage();
+
+      doc.rect(tableX, currentY, tableWidth, height).fill(rowIndex % 2 === 0 ? "#f8fafc" : "#ffffff");
+      doc.fillColor("#0f172a").font("Helvetica").fontSize(8);
+      options.columns.forEach((column, index) => {
+        doc.text(values[index]!, columnX[index]! + 5, currentY + 5, {
+          width: cellWidth(index),
+          height: height - 10,
+          lineGap: 1,
+          align: column.align || "left"
+        });
+      });
+      currentY += height;
     });
 
-    // Draw Totals if provided
     if (options.totals) {
-      if (currentY > 750) {
-        doc.addPage();
-        currentY = 40;
-      }
-      doc.rect(startX, currentY, pageWidth, 20).fill("#0f172a");
-      doc.fillColor("#ffffff").font("Helvetica-Bold").fontSize(9);
-
-      options.columns.forEach((col, idx) => {
-        const x = startX + idx * colWidth + 4;
-        let val = idx === 0 ? "TOTALS" : options.totals![col.key] ?? "";
-        if (col.format === "currency" && val !== "" && val !== "TOTALS") val = `$${parseFloat(val).toFixed(2)}`;
-        else if (col.format === "decimal" && val !== "" && val !== "TOTALS") val = parseFloat(val).toFixed(3);
-        doc.text(String(val), x, currentY + 5, { width: colWidth - 8, align: col.align || "left" });
+      const values = options.columns.map((column, index) => {
+        if (index === 0) return "TOTALS";
+        const value = options.totals![column.key];
+        return value === null || value === undefined || value === "" ? "" : cellText(column, value);
+      });
+      const height = measuredHeight(values, 8, 22, 10);
+      if (currentY + height > tableBottom) startNewPage();
+      doc.rect(tableX, currentY, tableWidth, height).fill("#0f172a");
+      doc.fillColor("#ffffff").font("Helvetica-Bold").fontSize(8);
+      options.columns.forEach((column, index) => {
+        doc.text(values[index]!, columnX[index]! + 5, currentY + 5, {
+          width: cellWidth(index),
+          height: height - 10,
+          lineGap: 1,
+          align: column.align || "left"
+        });
       });
     }
 

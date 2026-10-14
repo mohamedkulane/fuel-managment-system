@@ -13,13 +13,13 @@ const groups = [
   { label: "", links: [{ href: "/", label: "Guudmar", icon: LayoutGrid }, { href: "/customers", label: "Macaamiisha", icon: Users }, { href: "/orders", label: "Dalabyada", icon: ShoppingBag }, { href: "/stock", label: "Kaydka Shidaalka", icon: Boxes }, { href: "/reports", label: "Warbixinnada", icon: BarChart3 }, { href: "/settings", label: "Dejinta", icon: Settings }] }
 ];
 type DocumentBranding = { companyName: string; logoUrl: string };
-export function Brand({ logoUrl, companyName = "fueldesk." }: { logoUrl?: string; companyName?: string }) {
+export function Brand({ logoUrl, companyName = "FuelDesk" }: { logoUrl?: string; companyName?: string }) {
   const [logoFailed, setLogoFailed] = useState(false);
   useEffect(() => setLogoFailed(false), [logoUrl]);
   return <div className="brand">{logoUrl && !logoFailed
     ? <img className="brand-logo" src={logoUrl} alt="" onError={() => setLogoFailed(true)} />
-    : <span className="brand-mark">f.</span>}
-    <div className="brand-copy"><strong title={companyName}>{companyName}</strong><small>Hoolka Jumladlaha Shidaalka</small></div>
+    : <span className="brand-mark">F</span>}
+    <div className="brand-copy"><strong title={companyName}>{companyName}</strong><small>Fuel wholesale management</small></div>
   </div>;
 }
 export function AppShell({ children }: { children: React.ReactNode }) {

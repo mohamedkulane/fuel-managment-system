@@ -8,7 +8,7 @@ import { dateTime, decimal, formatStatus, formatFuel, fuustoQuantity } from "../
 import { FormEvent, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, mutationKey, type Actor } from "../../../lib/api";
-import { LoadingState, Badge, Card, CardHead, Empty, ErrorState, Modal, PageHeader, SubmitButton } from "../../../components/ui";
+import { CascadeSpinner, LoadingState, Badge, Card, CardHead, Empty, ErrorState, Modal, PageHeader, SubmitButton } from "../../../components/ui";
 
 type Fuel = { id: string; code: string; displayName: string };
 
@@ -228,7 +228,7 @@ export default function ReceivePage() {
                       disabled={post.isPending}
                       onClick={() => post.mutate(receiptDetail.data!.id)}
                     >
-                      {post.isPending ? "Diiwaangelinaya…" : "Ku Diiwaangeli Kaydka Bakhaarka"}
+                      {post.isPending ? <><CascadeSpinner size={16} /> Diiwaangelinaya…</> : "Ku Diiwaangeli Kaydka Bakhaarka"}
                     </ActionButton>
                   </div>
                 )}

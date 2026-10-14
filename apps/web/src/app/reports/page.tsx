@@ -6,7 +6,7 @@ import { ReportPreview, type ReportData } from "../../components/report-preview"
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api, apiBase } from "../../lib/api";
-import { Badge, Card, CardHead, PageHeader } from "../../components/ui";
+import { Badge, Card, CardHead, LoadingState, PageHeader } from "../../components/ui";
 import { PdfButton } from "../../components/pdf-button";
 import { notifyError } from "../../lib/toast";
 
@@ -148,7 +148,7 @@ export default function ReportsHubPage() {
 
         {previewQuery.isLoading ? (
           <div className="card-body">
-            <div className="skeleton tall" />
+            <LoadingState label="Warbixinta waa la soo rarayaa…" />
           </div>
         ) : previewQuery.isError ? (
           <div className="card-body">

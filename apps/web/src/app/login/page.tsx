@@ -7,13 +7,22 @@ import { ArrowRight, Circle, Eye, EyeOff, LockKeyhole, Mail, ShieldCheck } from 
 import { api, type Actor } from "../../lib/api";
 import { SubmitButton } from "../../components/ui";
 import { Brand } from "../../components/app-shell";
+import { useQuery } from "@tanstack/react-query";
+
+type DocumentBranding = { companyName: string; logoUrl: string };
+
 export default function LoginPage() {
   const router = useRouter(); const client = useQueryClient(); const [error, setError] = useState(""); const [visible, setVisible] = useState(false);
+  const branding = useQuery({
+    queryKey: ["settings", "document-branding"],
+    queryFn: () => api<DocumentBranding>("/settings/document-branding"),
+    retry: false,
+  });
   const login = useMutation({ mutationFn: (values: { email: string; password: string }) => api<Actor>("/auth/login", { method: "POST", body: JSON.stringify(values) }), onSuccess: async (actor) => { client.setQueryData(["me"], actor); await client.invalidateQueries(); router.replace("/"); }, onError: (e: Error) => setError(e.message) });
   function submit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); setError(""); const data = new FormData(event.currentTarget); login.mutate({ email: String(data.get("email")), password: String(data.get("password")) }); }
   return <main className="login login-reference"><div className="login-shell">
     <section className="login-showcase" aria-label="FuelDesk welcome">
-      <div className="login-brand"><Brand /></div>
+      <div className="login-brand"><Brand logoUrl={branding.data?.logoUrl || undefined} companyName={branding.data?.companyName || "FuelDesk"} /></div>
       <img className="login-illustration" src="/login-fuel-operations.png" alt="Fuel distribution operations illustration" />
       <div className="login-welcome"><h2>Kusoo dhawoow!</h2><p>Maamul stock, dalabyo iyo macaamiil hal meel oo cad.</p><div className="login-slides" aria-label="Welcome slides"><Circle size={12} /><Circle size={12} /><Circle size={12} fill="currentColor" /></div></div>
     </section>

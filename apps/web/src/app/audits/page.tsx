@@ -51,7 +51,7 @@ export default function AuditsPage() {
     window.open(url, "_blank");
   };
 
-  if (me.isLoading) return <main className="page audits-page"><div className="skeleton tall" /></main>;
+  if (me.isLoading) return <main className="page audits-page"><LoadingState /></main>;
 
   if (!isOwner) {
     return (

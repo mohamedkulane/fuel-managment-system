@@ -167,9 +167,12 @@ export function addDocumentFooter(doc: InstanceType<typeof PDFDocument>, brandin
   const footer = branding.footerText ?? "Fuel Wholesale Management System";
   for (let page = start; page < start + count; page += 1) {
     doc.switchToPage(page);
+    const pageWidth = doc.page.width;
+    const footerY = doc.page.height - 46;
     doc.save();
-    doc.moveTo(34, 795).lineTo(561, 795).strokeColor("#b8c2bd").lineWidth(0.5).stroke();
-    doc.font("Helvetica").fontSize(7.5).fillColor("#5d6b64").text(footer, 34, 802, { width: 527, align: "center", lineBreak: false, ellipsis: true });
+    doc.moveTo(34, footerY).lineTo(pageWidth - 34, footerY).strokeColor("#b8c2bd").lineWidth(0.5).stroke();
+    doc.font("Helvetica").fontSize(7.5).fillColor("#5d6b64")
+      .text(footer, 34, footerY + 7, { width: pageWidth - 68, align: "center", lineBreak: false, ellipsis: true });
     doc.restore();
   }
 }
