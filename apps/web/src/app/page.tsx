@@ -162,7 +162,7 @@ export default function HomePage() {
                   {showCollections && <circle cx={point.x} cy={point.collectionsY} r="5" className={`cashflow-point cashflow-collections ${activeMonth === index ? "active" : ""}`} onMouseEnter={() => setActiveMonth(index)} onMouseLeave={() => setActiveMonth(null)} onFocus={() => setActiveMonth(index)} onBlur={() => setActiveMonth(null)} tabIndex={0} aria-label={`${monthNames[index]} collections ${decimal(months[index]!.collections.toFixed(2))}`}/>}
                 </g>)}
               </svg>
-              {activeMonth !== null && <div className="cashflow-tooltip" style={{left:`${2 + (activeMonth / 11) * 96}%`}}>
+              {activeMonth !== null && <div className={`cashflow-tooltip ${activeMonth < 2 ? "edge-start" : activeMonth > 9 ? "edge-end" : ""}`} style={{left:`${2 + (activeMonth / 11) * 96}%`}}>
                 <strong>{monthNames[activeMonth]} {selectedYear}</strong>
                 {showSales && <span><i className="cashflow-sales"/>Iibka biilka ah <b>${decimal(months[activeMonth]!.sales.toFixed(2))}</b></span>}
                 {showCollections && <span><i className="cashflow-collections"/>Lacagaha la qabtay <b>${decimal(months[activeMonth]!.collections.toFixed(2))}</b></span>}
