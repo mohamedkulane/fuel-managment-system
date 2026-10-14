@@ -13,6 +13,7 @@ type PaymentDetail = {
   paymentNo: string;
   paymentDate: string;
   paymentMethod: string;
+  orderId: string | null;
   amount: string;
   allocatedAmount: string;
   unappliedAmount: string;
@@ -104,11 +105,11 @@ export default function PaymentDetailPage() {
           <div className="text-2xl font-mono font-bold text-emerald-400">${decimal(pay.amount, 2)}</div>
         </div>
         <div className="card">
-          <span className="text-muted text-xs">Qadarka Biilasha Loo Qaybiyay</span>
+          <span className="text-muted text-xs">Paid toward delivered orders</span>
           <div className="text-2xl font-mono font-bold">${decimal(pay.allocatedAmount, 2)}</div>
         </div>
         <div className="card">
-          <span className="text-muted text-xs">Lacagta Dheeraadka ah</span>
+          <span className="text-muted text-xs">{pay.orderId ? "Paid now — awaiting delivery" : "Needs Owner review"}</span>
           <div className="text-2xl font-mono font-bold text-amber-400">${decimal(pay.unappliedAmount, 2)}</div>
         </div>
         <div className="card">
@@ -169,12 +170,13 @@ export default function PaymentDetailPage() {
         </div>
       </section>
 
-      {/* Allocated Invoices Breakdown */}
       <section className="card space-y-3">
-        <h2 className="section-title">Faahfaahinta Biilasha Loo Qaybiyay</h2>
+        <h2 className="section-title">Delivered order payments</h2>
         {!pay.allocations.length ? (
           <div className="text-muted text-sm italic">
-            Lacag-bixintan ma laha biilal loo qaybiyay. Wadarta guud (${decimal(pay.unappliedAmount, 2)}) waxay u taallaa lacag dheeraad ah (credit).
+            {pay.orderId
+              ? `Paid Now (${decimal(pay.unappliedAmount, 2)}) stays with its order until delivery.`
+              : "This payment has not been matched to a delivered order."}
           </div>
         ) : (
           <div className="table-wrap">
@@ -183,7 +185,7 @@ export default function PaymentDetailPage() {
                 <tr>
                   <th>Lambar Biil</th>
                   <th>Wadarta Biilka</th>
-                  <th>Qadarka Loo Qaybiyay</th>
+                  <th>Paid</th>
                   <th>Deynta Harsan ee Biilka</th>
                 </tr>
               </thead>

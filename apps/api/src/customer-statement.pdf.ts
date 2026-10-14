@@ -84,7 +84,7 @@ export async function createCustomerStatementPdf(input: {
       doc.font("Helvetica-Bold").fontSize(10).fillColor("#111111").text(`$${value}`, x + 7, sy + 20, { width: cellWidth - 14 });
     });
     y += 90;
-    if (Number(input.moneyToReview) > 0) {
+    if (!/^0(?:\.0+)?$/.test(input.moneyToReview)) {
       doc.font("Helvetica-Bold").fontSize(8).fillColor("#111111").text(`OWNER REVIEW NEEDED · $${input.moneyToReview}`, left, y, { width });
       y += 20;
     }

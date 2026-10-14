@@ -208,6 +208,7 @@ describe("Phase 3 Invoicing, Credit, Debt & Payment Integration Suite", () => {
     // Partial Payment: $300
     const payment1 = await request<{ amount: string; allocatedAmount: string; unappliedAmount: string }>("/payments", {
       method: "POST",
+      headers: { "idempotency-key": randomUUID() },
       body: JSON.stringify({ customerId: testCust.id, amount: "300", paymentDate: new Date().toISOString() })
     });
     expect(payment1.amount).toContain("300.0000");
@@ -226,6 +227,7 @@ describe("Phase 3 Invoicing, Credit, Debt & Payment Integration Suite", () => {
       const custId = list.items[0]!.customerId;
       const payment2 = await request<{ amount: string }>("/payments", {
         method: "POST",
+        headers: { "idempotency-key": randomUUID() },
         body: JSON.stringify({ customerId: custId, amount: "200", paymentDate: new Date().toISOString() })
       });
       expect(payment2.amount).toContain("200.0000");
@@ -264,17 +266,18 @@ describe("Phase 3 Invoicing, Credit, Debt & Payment Integration Suite", () => {
 
   it("11. Verifies duplicate payment prevention via Idempotency-Key", async () => {
     const key = randomUUID();
+    const body = JSON.stringify({ customerId, amount: "150", paymentDate: "2026-10-13T12:00:00.000Z" });
     const pay1 = await request<{ status: string; replay?: boolean }>("/payments", {
       method: "POST",
       headers: { "idempotency-key": key },
-      body: JSON.stringify({ customerId, amount: "150", paymentDate: new Date().toISOString() })
+      body
     });
     expect(pay1.status).toBe("POSTED");
 
     const pay2 = await request<{ status: string; replay?: boolean }>("/payments", {
       method: "POST",
       headers: { "idempotency-key": key },
-      body: JSON.stringify({ customerId, amount: "150", paymentDate: new Date().toISOString() })
+      body
     });
     expect(pay2.replay).toBe(true);
   });
@@ -290,6 +293,7 @@ describe("Phase 3 Invoicing, Credit, Debt & Payment Integration Suite", () => {
       const payId = payments.items[0]!.id;
       const reversed = await request<{ status: string }>(`/payments/${payId}/reverse`, {
         method: "POST",
+        headers: { "idempotency-key": randomUUID() },
         body: JSON.stringify({ reason: "Testing payment reversal workflow" })
       });
       expect(reversed.status).toBe("REVERSED");
@@ -327,7 +331,7 @@ describe("Phase 3 Invoicing, Credit, Debt & Payment Integration Suite", () => {
   });
 
   it("19 & 20. Verifies end-to-end order-to-invoice-to-payment workflow", async () => {
-    const summary = await request<{ totals: { totalInvoiced: string; totalPaid: string; outstandingDebt: string } }>("/financial/debts");
-    expect(summary.totals.outstandingDebt).toBeDefined();
+    const summary = await request<{ totals: { totalSales: string; totalPaid: string; remainingDebt: string } }>("/financial/debts");
+    expect(summary.totals.remainingDebt).toBeDefined();
   });
 });

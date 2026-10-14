@@ -32,7 +32,7 @@ export class SimpleWorkflowsService {
           const prior = await tx.workflowRequest.findUnique({ where: { key } });
           if (prior) {
             if (prior.actorId !== actor.id || prior.kind !== kind || prior.payloadHash !== hash) throw new ConflictException("This request key was used for a different operation");
-            return prior.result;
+            return { ...(prior.result as Prisma.JsonObject), replay: true } as Prisma.InputJsonObject;
           }
           const result = await work(tx);
           await tx.workflowRequest.create({ data: { key, actorId: actor.id, kind, payloadHash: hash, result } });
@@ -91,14 +91,14 @@ export class SimpleWorkflowsService {
       // Order-linked money is reserved for that order. Historical unlinked balances
       // require owner review and are never guessed into a new FIFO collection.
       const payable = Prisma.Decimal.max(d("0"), openDebt);
-      if (value.gt(payable)) throw new BadRequestException(`Debt is $${payable.toFixed(2)}. You cannot pay more.`);
       if (payable.isZero()) throw new BadRequestException("No debt to pay");
+      if (value.gt(payable)) throw new BadRequestException(`Debt is $${payable.toFixed(2)}. You cannot pay more.`);
       const p = await this.collect(tx, actor, { ...input, customerId, amount: value.toFixed(4) });
       return { id: p.id };
     });
   }
 
-  reversePayment(actor: Actor, key: string | undefined, paymentId: string, reasonInput: string | undefined) {
+  async reversePayment(actor: Actor, key: string | undefined, paymentId: string, reasonInput: string | undefined) {
     if (actor.role !== "OWNER") throw new ForbiddenException("Only the owner can reverse a payment");
     const reason = required(reasonInput, "Reason");
     return this.execute(actor, key, "payment-reversal", { paymentId, reason }, async tx => {

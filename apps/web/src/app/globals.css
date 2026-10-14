@@ -22,7 +22,7 @@
 .account-order-grid .debt b { color: #9b2c2c; }
 .account-order-grid .pending b { color: #705800; }
 .order-payment-disclosure { margin: 0 18px 16px; border-top: 1px solid var(--line); padding-top: 12px; }
-.order-payment-disclosure summary { color: var(--primary); cursor: pointer; font-size: 13px; font-weight: 800; }
+.order-payment-disclosure summary { color: var(--petrol); cursor: pointer; font-size: 13px; font-weight: 800; }
 .payment-mini-list { display: grid; gap: 0; margin-top: 10px; }
 .payment-mini-list > div { display: grid; grid-template-columns: minmax(150px, 1fr) auto auto; gap: 10px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); }
 .payment-mini-list small { grid-column: 1 / -1; color: var(--muted); }

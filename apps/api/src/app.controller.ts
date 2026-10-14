@@ -1664,9 +1664,9 @@ export class AppController {
       method: body.paymentMethod,
       reference: body.reference,
       notes: body.notes
-    });
+    }) as { id: string; replay?: boolean };
     const saved = await this.prisma.payment.findUniqueOrThrow({
-      where: { id: String(result.id) },
+      where: { id: result.id },
       include: { customer: true, recordedBy: true }
     });
     return {
@@ -1678,6 +1678,10 @@ export class AppController {
         paymentMethod: saved.paymentMethod,
         reference: saved.reference,
         amount: saved.amount.toFixed(4),
+        // Kept for API compatibility only. Customer screens use the order-based
+        // account response and never present allocation terminology.
+        allocatedAmount: saved.allocatedAmount.toFixed(4),
+        unappliedAmount: saved.unappliedAmount.toFixed(4),
         status: saved.status,
         recordedBy: saved.recordedBy,
         replay: Boolean(result.replay)

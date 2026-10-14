@@ -153,24 +153,18 @@ describe("Fixed Order-Level Discount Integration Suite", () => {
     }, officeCookie);
 
     // Owner approves discount
-    const approved = await request<{ discountApprovedByName: string }>(`/orders/${order.id}/approve-discount`, {
+    const approved = await request<{ status: string; subtotal: string; fixedDiscountAmount: string; totalAmount: string; discountApprovedByName: string }>(`/orders/${order.id}/approve-discount`, {
       method: "POST",
       body: JSON.stringify({ reason: "Owner authorized discount" })
     }, ownerCookie);
 
     expect(approved.discountApprovedByName).toBe("Owner Discount Approver");
 
-    // Office confirms order
-    const confirmed = await request<{ status: string; subtotal: string; fixedDiscountAmount: string; totalAmount: string }>(
-      `/orders/${order.id}/confirm`,
-      { method: "POST", headers: { "idempotency-key": randomUUID() } },
-      officeCookie
-    );
-
-    expect(confirmed.status).toBe("CONFIRMED");
-    expect(Number(confirmed.subtotal)).toBe(500);
-    expect(Number(confirmed.fixedDiscountAmount)).toBe(10);
-    expect(Number(confirmed.totalAmount)).toBe(490);
+    // Approval confirms and snapshots the discounted order in one owner action.
+    expect(approved.status).toBe("CONFIRMED");
+    expect(Number(approved.subtotal)).toBe(500);
+    expect(Number(approved.fixedDiscountAmount)).toBe(10);
+    expect(Number(approved.totalAmount)).toBe(490);
   });
 
   it("4. Full delivery of 5 Fuusto -> Invoiced at $490 net ($500 - $10) and Customer Ledger debited $490", async () => {
