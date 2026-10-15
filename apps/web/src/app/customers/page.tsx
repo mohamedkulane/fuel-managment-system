@@ -1,7 +1,7 @@
 "use client";
 import { ActionButton, FormLabel, ActionLink } from "../../components/controls";
-import { Users, ClipboardList, CircleCheck, Clock3 } from "lucide-react";
-import { FormEvent, useEffect, useState } from "react";
+import { ChevronDown, Users, ClipboardList, CircleCheck, Clock3 } from "lucide-react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, type PaginatedResponse } from "../../lib/api";
@@ -26,7 +26,24 @@ export default function CustomersPage() {
   const [status, setStatus] = useState<string>("");
   const [page, setPage] = useState(1);
   const [showModal, setShowModal] = useState(false);
+  const [statusOpen, setStatusOpen] = useState(false);
+  const statusFilterRef = useRef<HTMLDivElement>(null);
   useEffect(() => { if (new URLSearchParams(window.location.search).get("new") === "1") setShowModal(true); }, []);
+  useEffect(() => {
+    if (!statusOpen) return;
+    const closeOutside = (event: PointerEvent) => {
+      if (!statusFilterRef.current?.contains(event.target as Node)) setStatusOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setStatusOpen(false);
+    };
+    document.addEventListener("pointerdown", closeOutside);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOutside);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [statusOpen]);
 
   const queryParams = new URLSearchParams({ page: String(page), limit: "15" });
   if (search.trim()) queryParams.set("search", search.trim());
@@ -63,6 +80,13 @@ export default function CustomersPage() {
   const rawData = query.data;
   const items: Customer[] = Array.isArray(rawData) ? rawData : (rawData?.items ?? []);
   const totalPages = Array.isArray(rawData) ? 1 : (rawData?.totalPages ?? 1);
+  const statusOptions = [
+    { value: "", label: "Xaaladaha" },
+    { value: "ACTIVE", label: "Firfircoon" },
+    { value: "HOLD", label: "La Hakiyay" },
+    { value: "INACTIVE", label: "Aan Firfircoonayn" }
+  ];
+  const selectedStatus = statusOptions.find((option) => option.value === status)?.label ?? "Xaaladaha";
 
   return (
     <main className="page customers-page">
@@ -88,7 +112,7 @@ export default function CustomersPage() {
               <FormLabel htmlFor="address">Ciwaanka gaarsiinta</FormLabel>
               <input id="address" className="input" name="address" placeholder="Bakhaarka Weyn, Degmada Hodan" />
             </div>
-            <details className="simple-disclosure field full"><summary>Faahfaahin dheeraad ah (More details)</summary><div className="field">
+            <details className="simple-disclosure field full"><summary>Faahfaahin dheeraad ah</summary><div className="field">
               <FormLabel htmlFor="notes">Xusuus-qoor hawgalka</FormLabel>
               <input id="notes" className="input" name="notes" placeholder="tusaale: Wuxuu doorbidaa gaarsiinta subaxda" />
             </div></details>
@@ -113,12 +137,39 @@ export default function CustomersPage() {
               aria-label="Raadi macaamiisha"
               style={{ width: "100%" }}
             />
-            <select className="select customer-status" value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }}>
-              <option value="">Xaaladaha</option>
-              <option value="ACTIVE">Firfircoon</option>
-              <option value="HOLD">La Hakiyay</option>
-              <option value="INACTIVE">Aan Firfircoonayn</option>
-            </select>
+            <div className="customer-status-filter" ref={statusFilterRef}>
+              <button
+                type="button"
+                className="select customer-status-trigger"
+                aria-haspopup="listbox"
+                aria-expanded={statusOpen}
+                aria-controls="customer-status-options"
+                onClick={() => setStatusOpen((open) => !open)}
+              >
+                <span>{selectedStatus}</span>
+                <ChevronDown size={16} aria-hidden="true" />
+              </button>
+              {statusOpen && (
+                <div id="customer-status-options" className="customer-status-options" role="listbox" aria-label="Xaaladda macmiilka">
+                  {statusOptions.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      role="option"
+                      aria-selected={status === option.value}
+                      className="customer-status-option"
+                      onClick={() => {
+                        setStatus(option.value);
+                        setPage(1);
+                        setStatusOpen(false);
+                      }}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
 

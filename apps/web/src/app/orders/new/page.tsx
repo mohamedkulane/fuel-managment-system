@@ -3,6 +3,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Decimal from "decimal.js";
+import { useRouter } from "next/navigation";
 import { api, type Actor, type PaginatedResponse } from "../../../lib/api";
 import { decimal, formatFuel } from "../../../lib/format";
 import { ActionLink, FormLabel } from "../../../components/controls";
@@ -18,6 +19,7 @@ type Customer = {
 };
 
 export default function NewOrderPage() {
+  const router = useRouter();
   const [search, setSearch] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [customer, setCustomer] = useState<Customer | null>(null);
@@ -26,6 +28,7 @@ export default function NewOrderPage() {
   const [qty, setQty] = useState("");
   const [discount, setDiscount] = useState("");
   const [paid, setPaid] = useState("");
+  const [financialAccountId, setFinancialAccountId] = useState("");
   const [address, setAddress] = useState("");
   const [notes, setNotes] = useState("");
 
@@ -42,6 +45,7 @@ export default function NewOrderPage() {
   const fuels = useQuery({ queryKey: ["fuels"], queryFn: () => api<{ id: string; displayName: string }[]>("/fuels") });
   const units = useQuery({ queryKey: ["sales-units"], queryFn: () => api<{ id: string; code: string }[]>("/sales-units") });
   const me = useQuery({ queryKey: ["me"], queryFn: () => api<Actor>("/auth/me") });
+  const accounts = useQuery({ queryKey: ["financial-accounts", "selectable"], queryFn: () => api<Array<{id:string;name:string;identifierMasked:string|null}>>("/financial-accounts/selectable") });
   const unit = units.data?.find((item) => item.code.toUpperCase() === "FUUSTO");
   const price = useQuery({
     queryKey: ["prices", "current", fuelId, unit?.id],
@@ -58,21 +62,15 @@ export default function NewOrderPage() {
     address: string;
     discount: string;
     paidNow: string;
+    financialAccountId?: string;
+    paymentMethod?: "CASH" | "BANK_TRANSFER" | "EVC_PLUS" | "EDAHAB" | "OTHER";
+    paymentReference?: string;
     notes: string;
   }>(
     "/simple/orders",
     (result) => {
       notifySuccess(result.status === "DRAFT" ? "Order saved" : "Order confirmed");
-      setSearch("");
-      setSearchTerm("");
-      setCustomer(null);
-      setCustomerListOpen(false);
-      setFuelId("");
-      setQty("");
-      setDiscount("");
-      setPaid("");
-      setAddress("");
-      setNotes("");
+      router.push(`/orders/${result.id}?invoice=1`);
     },
     { error: "Order not saved" }
   );
@@ -105,6 +103,9 @@ export default function NewOrderPage() {
       address,
       discount: discount || "0",
       paidNow: paid || "0",
+      financialAccountId: safe(paid).gt(0) ? financialAccountId : undefined,
+      paymentMethod: safe(paid).gt(0) ? (String(new FormData(event.currentTarget).get("paymentMethod")||"CASH") as "CASH") : undefined,
+      paymentReference: safe(paid).gt(0) ? String(new FormData(event.currentTarget).get("paymentReference")||"") : undefined,
       notes
     });
   }
@@ -225,6 +226,7 @@ export default function NewOrderPage() {
                     <FormLabel htmlFor="paid-now">Hadda la bixiyey (Paid now $)</FormLabel>
                     <input id="paid-now" type="number" min="0" step="0.01" max={Decimal.max(0, total).toFixed(2)} className="input" value={paid} onChange={(event) => setPaid(event.target.value)} inputMode="decimal" pattern="[0-9]+(\.[0-9]{1,4})?" />
                   </div>
+                  {safe(paid).gt(0) && <><div className="field"><FormLabel htmlFor="paid-account">Koontada lacagta (Receiving account)</FormLabel><select id="paid-account" className="select" value={financialAccountId} onChange={event=>setFinancialAccountId(event.target.value)} required><option value="">Select account</option>{accounts.data?.map(row=><option key={row.id} value={row.id}>{row.name}{row.identifierMasked?` · ${row.identifierMasked}`:""}</option>)}</select></div><div className="field"><FormLabel htmlFor="paymentMethod">Payment method</FormLabel><select id="paymentMethod" name="paymentMethod" className="select" defaultValue="CASH"><option value="CASH">Cash</option><option value="BANK_TRANSFER">Bank transfer</option><option value="EVC_PLUS">EVC Plus</option><option value="EDAHAB">eDahab</option><option value="OTHER">Other</option></select></div><div className="field"><FormLabel htmlFor="paymentReference">Payment reference</FormLabel><input id="paymentReference" name="paymentReference" className="input"/></div></>}
                   <div className="field full">
                     <FormLabel htmlFor="notes">Faahfaahin (Notes)</FormLabel>
                     <textarea id="notes" name="notes" className="textarea" value={notes} onChange={(event) => setNotes(event.target.value)} />
@@ -249,7 +251,7 @@ export default function NewOrderPage() {
               {(price.isError || fuels.isError) && (
                 <ErrorState message="Xogta lama soo rari karin." retry={() => { void price.refetch(); void fuels.refetch(); }} />
               )}
-              <SubmitButton busy={save.isPending} disabled={remaining.lt(0) || !price.data || !customer || !address || total.lt(0) || safe(qty).lte(0)}>
+              <SubmitButton busy={save.isPending} disabled={remaining.lt(0) || !price.data || !customer || !address || total.lt(0) || safe(qty).lte(0) || (safe(paid).gt(0) && !financialAccountId)}>
                 Save Order
               </SubmitButton>
             </div>

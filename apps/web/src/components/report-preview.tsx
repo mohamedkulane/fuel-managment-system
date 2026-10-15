@@ -1,15 +1,16 @@
 "use client";
 import { Empty } from "./ui";
+import { so } from "../lib/so";
 
 type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
 export type ReportData = { [key: string]: JsonValue };
-function title(key: string): string { return key.replace(/([a-z])([A-Z])/g, "$1 $2").replaceAll("_", " ").replace(/^./, c => c.toUpperCase()); }
+function title(key: string): string { const label = key.replace(/([a-z])([A-Z])/g, "$1 $2").replaceAll("_", " ").replace(/^./, c => c.toUpperCase()); return so(label); }
 function cell(value: JsonValue | undefined): string {
   if (value == null) return "—";
   if (typeof value === "boolean") return value ? "Haa" : "Maya";
   if (Array.isArray(value)) return value.map(cell).join(" · ");
   if (typeof value === "object") return Object.entries(value).map(([k,v]) => `${title(k)}: ${cell(v)}`).join(" · ");
-  return String(value);
+  return so(String(value));
 }
 export function ReportPreview({ data }: { data: ReportData | undefined }) {
   if (!data) return <Empty>Dooro warbixinta iyo shaandheynteeda si aad u aragto diiwaanka.</Empty>;

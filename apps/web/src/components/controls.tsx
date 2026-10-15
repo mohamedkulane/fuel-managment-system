@@ -1,22 +1,79 @@
 "use client";
 import Link from "next/link";
 import { Children, cloneElement, isValidElement, type ComponentProps, type ReactNode } from "react";
-import { ArrowLeft, ArrowRight, Check, ClipboardCheck, Download, Eye, FilePlus2, FileSpreadsheet, LogIn, LogOut, Pencil, Plus, Printer, RefreshCw, RotateCcw, Save, Search, Settings, Truck, Wallet, X, type LucideIcon } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, ClipboardCheck, Download, Eye, FilePlus2, FileSpreadsheet, LogIn, LogOut, Pencil, Plus, Printer, RefreshCw, RotateCcw, Save, Search, Settings, Truck, UserCheck, UserX, Wallet, X, type LucideIcon } from "lucide-react";
+import { so } from "../lib/so";
 
-const actions: Record<string, string> = {
-  "Kudhi Macmiil Cusub":"New Customer", "Kudar Macmiil Cusub":"New Customer", "Kaydi Macmiilka":"Save Customer", "Ka Noqo":"Cancel", "Ka noqo":"Cancel", "Jooji":"Cancel", "Eeg Warbixinta":"View Account", "Wax ka beddel macmiilka":"Edit Customer", "Wax Ka Beddel":"Edit", "Wax ka beddel":"Edit", "Kaydi Beddelka":"Save Changes", "Dalab cusub":"New Order", "Dalab Cusub":"New Order", "Eeg Faahfaahinta":"View Details", "Faahfaahin":"View Details", "Faahfaahinta Dalabka":"View Order", "Eeg Biilka":"View Invoice", "Faahfaahinta Rasiidhka":"View Receipt", "Diiwaangeli Lacag-bixin":"Record Payment", "Eeg":"View", "Soo Dejiso PDF":"Download PDF", "Soo dejiso PDF":"Download PDF", "Daabac":"Print", "Daabac Xisaabta":"Print Statement", "Daabac Warbixinta":"Print Report", "Dib u laab dalabyada":"Back to Orders", "Dib u laab dirista":"Back to Delivery", "Dib u laab":"Back", "Xaqiiji":"Confirm", "Kaydi dalabka qabyada ah":"Save Order", "Soo Saar Biil Cusub":"Create Invoice", "Kabax Nidaamka":"Sign Out", "Kudar Isticmaale Cusub":"Add User", "Samee Isticmaale":"Create User", "Maamul qiimaha & cabbirka shidaalka":"Manage Fuel Prices", "Kaydi Qiimaha Cusub":"Save Price", "Beddel Qiimaha":"Edit Price", "Wax Ka Beddelka Kaydka":"Adjust Stock", "+ Shidaal Soo Gelin":"Receive Stock", "Shidaal Soo Gelin":"Receive Stock", "Diiwaangeli Beddelka":"Save Adjustment", "Kaydi Qabyada Iibka":"Save Receipt", "Kusoo gal goobta shaqada":"Sign In", "Mar kale isku day":"Try Again", "Kuwii Hore":"Previous", "Kuwii Danbe":"Next", "Amuur Waraaqda Gaarsiinta":"Create Delivery List", "Waraaq Gaarsiinta oo Cusub":"New Delivery List", "Xir diyaarinada":"Cancel", "Diyaari dirista":"Prepare Delivery", "Diiwaangeli dirista rasmiga ah":"Confirm Dispatch", "Heshiisii gaarsiinta":"Confirm Delivery", "Diiwaangeli Heshiisiinta":"Confirm Delivery", "Kaydinaya…":"Saving…", "Soo Dejiso Excel":"Export Excel", "Soo dejiso Excel":"Export Excel", "Nadiifi Shaandhaynta":"Clear Filters", "Soo Saar Biilka":"Create Invoice", "Kansal garee":"Reverse", "Xaqiiji Kansalaadda":"Confirm Reversal", "Diiwaangeli Lacagta":"Record Payment", "Daabac xisaabta":"Print Statement", "Diiwaangeli dirista":"Confirm Dispatch"
+const legacyActions: Record<string, string> = {
+  "Kudhi Macmiil Cusub": "Ku dar Macmiil",
+  "Kudar Macmiil Cusub": "Ku dar Macmiil",
+  "Kaydi Macmiilka": "Kaydi",
+  "Ka Noqo": "Jooji",
+  "Ka noqo": "Jooji",
+  "Eeg Warbixinta": "Eeg Xisaabta",
+  "Wax ka beddel macmiilka": "Wax ka beddel Macmiilka",
+  "Wax Ka Beddel": "Wax ka beddel",
+  "Kaydi Beddelka": "Kaydi Isbeddellada",
+  "Dalab cusub": "Dalab Cusub",
+  "Eeg Faahfaahinta": "Eeg Faahfaahinta",
+  "Faahfaahin": "Eeg Faahfaahinta",
+  "Faahfaahinta Dalabka": "Eeg Dalabka",
+  "Eeg Biilka": "Fur Biilka",
+  "Faahfaahinta Rasiidhka": "Fur Rasiidhka",
+  "Diiwaangeli Lacag-bixin": "Diiwaangeli Lacag",
+  "Soo Dejiso PDF": "Soo dejiso PDF",
+  "Daabac Xisaabta": "Daabac Warbixinta Xisaabta",
+  "Dib u laab dalabyada": "Ku noqo Dalabyada",
+  "Dib u laab dirista": "Ku noqo Gaarsiinta",
+  "Dib u laab": "Dib u noqo",
+  "Kaydi dalabka qabyada ah": "Kaydi",
+  "Soo Saar Biil Cusub": "Fur Biilka",
+  "Kabax Nidaamka": "Ka bax",
+  "Kudar Isticmaale Cusub": "Ku dar Isticmaale",
+  "Samee Isticmaale": "Ku dar Isticmaale",
+  "Maamul qiimaha & cabbirka shidaalka": "Maamul Qiimaha Shidaalka",
+  "Kaydi Qiimaha Cusub": "Kaydi",
+  "Beddel Qiimaha": "Wax ka beddel Qiimaha",
+  "Wax Ka Beddelka Kaydka": "Sax Kaydka",
+  "+ Shidaal Soo Gelin": "Soo Geli Shidaal",
+  "Shidaal Soo Gelin": "Soo Geli Shidaal",
+  "Diiwaangeli Beddelka": "Kaydi Sixidda",
+  "Kaydi Qabyada Iibka": "Kaydi",
+  "Kusoo gal goobta shaqada": "Gal nidaamka",
+  "Kuwii Hore": "Hore",
+  "Kuwii Danbe": "Xiga",
+  "Amuur Waraaqda Gaarsiinta": "Diyaari Liiska Gaarsiinta",
+  "Waraaq Gaarsiinta oo Cusub": "Liiska Gaarsiinta Cusub",
+  "Xir diyaarinada": "Jooji",
+  "Diyaari dirista": "Diyaari Gaarsiinta",
+  "Diiwaangeli dirista rasmiga ah": "Xaqiiji Dirista",
+  "Heshiisii gaarsiinta": "Xaqiiji Gaarsiinta",
+  "Diiwaangeli Heshiisiinta": "Xaqiiji Gaarsiinta",
+  "Kaydinaya…": "Waa la kaydinayaa…",
+  "Soo Dejiso Excel": "Soo dejiso Excel",
+  "Nadiifi Shaandhaynta": "Ka saar kala shaandhaynta",
+  "Soo Saar Biilka": "Fur Biilka",
+  "Kansal garee": "Ka noqo",
+  "Xaqiiji Kansalaadda": "Xaqiiji Ka Noqoshada",
+  "Diiwaangeli Lacagta": "Diiwaangeli Lacag",
+  "Diiwaangeli dirista": "Xaqiiji Dirista",
+  "Soo Dejiso Rasiidhka (PDF)": "Fur Rasiidhka",
+  "Kansal Lacag-bixinta": "Ka Noqo Lacag-qabashada",
+  "Kansal Biilka": "Ka Noqo Biilka",
+  "Waa la diiwaangelinayaa...": "Waa la diiwaangelinayaa…",
+  "Waa la kansal garaynayaa...": "Waa laga noqonayaa…",
+  "Diiwaangeli Rasiidhka": "Xaqiiji Soo Gelinta",
+  "Soo Saar Biilasha": "Diyaari Biillasha",
+  "Eeg xisaabta": "Eeg Xisaabta",
+  "Xaqiiji Dirista": "Xaqiiji Dirista"
 };
-const labels: Record<string, string> = {
-  "Magaca macmiilka":"Customer name", "Telefoonka koowaad":"Phone", "Ciwaanka gaarsiinta":"Address", "Ciwaanka gaarsiinta koowaad":"Primary address", "Degmada":"District", "Magaalada":"City", "Xusuus-qoor hawgalka":"Notes", "Xaaladda koontada":"Account status", "Macmiilka":"Customer", "Nooca shidaalka":"Fuel type", "Nooca Shidaalka":"Fuel type", "Tirada la codsaday":"Quantity in fuusto", "Halbeegka iibka":"Sales unit", "Lacag-dhimista Tooska ah ee Order-ka ($)":"Fixed order discount", "Sababta Ogolaanshaha Lacag-dhimista":"Discount reason", "Taariikhda la rabo in lagu gaarsiiyo":"Delivery date", "Fariimo dheeraad ah":"Notes", "Qaybta Iibka":"Sales unit", "Qiimaha Fuustadii ($ USD)":"Price per fuusto", "Taariikhda & Waqtiga Dhaqangalinta":"Effective date and time", "Sababta Wax ka Beddelka":"Reason for change", "Magaca Muuqda":"Display name", "Cinwaanka Emaylka":"Email", "Ciwaanka Email-ka":"Email", "Xilka":"Role", "Furaha Ku-meel-gaarka ah":"Temporary password", "Erayga sirta ah":"Password", "Kala duwanaanshaha Litarada * (+ / -)":"Stock adjustment in liters", "Sababta Rasmiga ah ee Audit-ka":"Reason", "Lacagta La Bixiyay ($)":"Amount paid", "Taariikhda Bixinta":"Payment date", "Qaabka Bixinta":"Payment method", "Tixraaca / Lambar Transaksi (Waa Ikhtiyaari)":"Reference (optional)", "Xusuusin (Waa Ikhtiyaari)":"Notes (optional)", "Sababta Kansalaadda":"Reversal reason", "Ila-heleyda / Xogta Tixraaca":"Supplier / reference", "Taariikhda & Waqtiga Iibka":"Purchase date and time", "Tirada Fuustooyinka":"Quantity in fuusto", "Xusuus-qoor / Fariimaha Audit-ka":"Notes", "Taariikhda shaqada":"Delivery date", "Fuustooyinka la aqbalay kowtan":"Accepted fuusto", "Litarada rasmiga ah ee lagu soo celiyay":"Returned liters", "Qaybta deynta/soo celinta oo harsan":"Remaining quantity decision", "Sababta farqiga":"Reason for difference", "Nooca Qaybta":"Record type", "Hawsha":"Action", "Taariikhda Billaabashada":"Start date", "Taariikhda Dhammaadka":"End date", "Taariikhda Billaabashada (Mogadishu UTC+3)":"Start date", "Dooro Macmiilka Warbixinta":"Customer", "Ka soo bilaabato (Muqdisho UTC+3)":"Start date", "Ku dhamaato":"End date", "Shaandhaynta Nooca Diiwaanka":"Entry type", "Dooro Shidaal La Gaarsiiyay oo aan Biil Loo Jarayn":"Select uninvoiced delivery", "Taariikhda Bixinta Dambaysa (Waa Ikhtiyaari)":"Due date (optional)", "Xusuusin Biilka (Waa Ikhtiyaari)":"Invoice notes (optional)"
-};
-Object.assign(actions, {
- "Soo Dejiso Rasiidhka (PDF)":"Download Receipt", "Soo Dejiso PDF Warbixinta":"Download Statement", "Kansal Lacag-bixinta":"Reverse Payment", "Kansal Biilka":"Reverse Invoice", "Diiwaangeli Lacag-bixinta":"Record Payment", "Waa la diiwaangelinayaa...":"Saving…", "Waa la kansal garaynayaa...":"Reversing…", "Xaqiiji Kansalaadda":"Confirm Reversal", "← Dib u laab Diiwaanka":"Back to Customers", "Wax Ka Beddel Macmiilka":"Edit Customer", "Cusboonaysii Qiimaha Iibka":"Edit Price", "Wax Ka Beddel Qiimaha":"Edit Price", "Diiwaangeli Rasiidhka":"Post Receipt", "Dib u laab Liiska Dirista":"Back to Deliveries", "Soo Saar Biilasha":"Create Invoices", "Soo saaraya...":"Creating…", "Nadiifi":"Clear Filters", "Nadiifi Shaandhooyinka":"Clear Filters", "Eeg warbixinta":"View Report", "Eegaya warbixinta":"Selected Report", "Eeg xisaabta":"View Account", "Xaqiiji Dirista":"Confirm Dispatch", "Diiwaangeli Dirista Rasmiga ah":"Confirm Dispatch", "Heshiisii Gaarsiinta":"Confirm Delivery"
-});
 function textOf(children: ReactNode): string { return Children.toArray(children).map(child => typeof child === "string" || typeof child === "number" ? String(child) : isValidElement<{ children?: ReactNode }>(child) ? textOf(child.props.children) : "").join(" ").trim(); }
-function translate(children: ReactNode, removeExistingIcons = true): ReactNode { return Children.map(children, child => { if (typeof child === "string") { const key = child.trim(); return actions[key] ?? child; } if (isValidElement<{ children?: ReactNode; size?: number }>(child)) { if (removeExistingIcons && child.props.size !== undefined && !child.props.children) return null; return child.props.children ? cloneElement(child, {}, translate(child.props.children, removeExistingIcons)) : child; } return child; }); }
+function translate(children: ReactNode, removeExistingIcons = true): ReactNode { return Children.map(children, child => { if (typeof child === "string") { const key = child.trim(); return legacyActions[key] ?? so(key); } if (isValidElement<{ children?: ReactNode; size?: number }>(child)) { if (removeExistingIcons && child.props.size !== undefined && !child.props.children) return null; return child.props.children ? cloneElement(child, {}, translate(child.props.children, removeExistingIcons)) : child; } return child; }); }
 function iconFor(text: string): LucideIcon {
-  if (/sign in/i.test(text)) return LogIn;
-  if (/sign out/i.test(text)) return LogOut;
+  if (/sign in|gal nidaamka/i.test(text)) return LogIn;
+  if (/sign out|ka bax/i.test(text)) return LogOut;
+  if (/deactivate|disable/i.test(text)) return UserX;
+  if (/activate|enable/i.test(text)) return UserCheck;
   if (/cancel|close/i.test(text)) return X;
   if (/revers/i.test(text)) return RotateCcw;
   if (/edit|adjust|change|beddel/i.test(text)) return Pencil;
@@ -26,7 +83,7 @@ function iconFor(text: string): LucideIcon {
   if (/statement|report|list|pdf|download|export/i.test(text)) return Download;
   if (/back|previous|dib u/i.test(text)) return ArrowLeft;
   if (/next/i.test(text)) return ArrowRight;
-  if (/view|eeg|faahfaahin/i.test(text)) return Eye;
+  if (/view|preview|hide invoice|eeg|faahfaahin/i.test(text)) return Eye;
   if (/payment|^pay$|lacag/i.test(text)) return Wallet;
   if (/confirm delivery|reconcile/i.test(text)) return ClipboardCheck;
   if (/confirm|approve|xaqiiji/i.test(text)) return Check;
@@ -34,14 +91,20 @@ function iconFor(text: string): LucideIcon {
   if (/invoice|biil/i.test(text)) return FilePlus2;
   if (/new|add|create|cusub/i.test(text)) return Plus;
   if (/retry|try again|refresh|clear/i.test(text)) return RefreshCw;
-  if (/search/i.test(text)) return Search;
+  if (/search|raadi/i.test(text)) return Search;
   return Settings;
 }
-function ActionContents({ children, decorate = true }: { children: ReactNode; decorate?: boolean }) { const originalText = textOf(children); if (!originalText) return children; const translated = translate(children, decorate); const text = textOf(translated); if (!decorate || !text) return translated; const Icon = iconFor(text); return <><Icon size={18} aria-hidden="true" />{translated}</>; }
+function ActionContents({ children, decorate = true }: { children: ReactNode; decorate?: boolean }) { const originalText = textOf(children); if (!originalText) return children; const translated = translate(children, decorate); if (!decorate) return translated; const Icon = iconFor(originalText); return <><Icon size={18} aria-hidden="true" />{translated}</>; }
 export function ActionButton({ children, ...props }: ComponentProps<"button">) { const decorate = typeof props.className === "string" && props.className.split(/\s+/).some(name => name.startsWith("btn")); return <button {...props}><ActionContents decorate={decorate}>{children}</ActionContents></button>; }
 export function ActionLink({ children, ...props }: ComponentProps<typeof Link>) { return <Link {...props}>{props.className?.includes("btn") ? <ActionContents>{children}</ActionContents> : children}</Link>; }
 export function ActionAnchor({ children, ...props }: ComponentProps<"a">) { return <a {...props}>{props.className?.includes("btn") ? <ActionContents>{children}</ActionContents> : children}</a>; }
 export function FormLabel({ children, ...props }: ComponentProps<"label">) {
-  const content = Children.map(children, child => { if (typeof child !== "string") return child; const original = child.trim(); const required = original.endsWith("*"); const key = original.replace(/\s*[:*]\s*$/, ""); const english = labels[key]; return english ? `${key} (${english})${required ? " *" : ""}` : child; });
-  return <label {...props} style={{ ...props.style, fontSize: 15 }}>{content}</label>;
+  const content = Children.map(children, child => {
+    if (typeof child !== "string") return child;
+    const original = child.trim();
+    const required = original.endsWith("*");
+    const label = original.replace(/\s*\([^)]*\)\s*$/, "").replace(/\s*[:*]\s*$/, "");
+    return `${legacyActions[label] ?? so(label)}${required ? " *" : ""}`;
+  });
+  return <label {...props} style={{ wordBreak: "keep-all", ...props.style }}>{content}</label>;
 }

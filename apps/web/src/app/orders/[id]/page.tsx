@@ -1,6 +1,8 @@
 "use client";
-import { ActionAnchor, ActionLink, ActionButton } from "../../../components/controls";
+import { useEffect, useState } from "react";
+import { ActionLink, ActionButton } from "../../../components/controls";
 import { OrderDelivery } from "../../../components/order-delivery";
+import { OrderInvoicePreview } from "../../../components/order-invoice-preview";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import Decimal from "decimal.js";
 import { ShoppingBag, Boxes, Truck, AlertCircle } from "lucide-react";
@@ -8,7 +10,7 @@ import { dateTime, sum, decimal, formatStatus, formatFuel, fuustoQuantity } from
 import { useParams } from "next/navigation";
 
 import { useQuery } from "@tanstack/react-query";
-import { api, apiBase, type Actor } from "../../../lib/api";
+import { api, type Actor } from "../../../lib/api";
 import { MetricCard, Badge, Card, CardHead, ErrorState, PageHeader } from "../../../components/ui";
 import { notifyError, notifySuccess } from "../../../lib/toast";
 
@@ -47,6 +49,10 @@ type Order = {
 
 export default function OrderPage() {
   const { id } = useParams<{ id: string }>();
+  const [invoiceOpen, setInvoiceOpen] = useState(false);
+  useEffect(() => {
+    setInvoiceOpen(new URLSearchParams(window.location.search).get("invoice") === "1");
+  }, []);
   const query = useQuery({ queryKey: ["order", id], queryFn: () => api<Order>(`/orders/${id}`) });
   const client = useQueryClient();
   const me = useQuery({ queryKey: ["me"], queryFn: () => api<Actor>("/auth/me") });
@@ -72,10 +78,11 @@ export default function OrderPage() {
         eyebrow="Faahfaahinta dalabka"
         title={row?.orderNo ?? "Raraya dalabka…"}
         description={row ? `${row.customer.name} · ${row.addressSnapshot}` : ""}
-        actions={<><ActionLink className="btn" href="/orders">Back to Orders</ActionLink>{row && row.status !== "DRAFT" && <ActionAnchor className="btn secondary" href={`${apiBase}/orders/${row.id}/invoice-pdf`} target="_blank" rel="noreferrer">Invoice</ActionAnchor>}{row && ["CONFIRMED","SCHEDULED","IN_PROGRESS","PARTIALLY_FULFILLED"].includes(row.status) && <OrderDelivery orderId={row.id} lines={row.lines}/>}</>}
+        actions={<><ActionLink className="btn" href="/orders">Back to Orders</ActionLink>{row && <ActionButton className="btn secondary" type="button" onClick={() => setInvoiceOpen((open) => !open)}>{invoiceOpen ? "Hide Invoice" : "Preview Invoice"}</ActionButton>}{row && ["CONFIRMED","SCHEDULED","IN_PROGRESS","PARTIALLY_FULFILLED"].includes(row.status) && <OrderDelivery orderId={row.id} lines={row.lines}/>}</>}
       />
       {row && (
         <>
+          <OrderInvoicePreview orderId={row.id} orderNo={row.orderNo} open={invoiceOpen} />
           {isDraft && hasDiscount && <div className="notice"><p>Dhimistan waxay sugaysaa oggolaanshaha milkiilaha (Owner approval).</p>{me.data?.role === "OWNER" && <ActionButton className="btn primary" disabled={approveDiscount.isPending} onClick={() => approveDiscount.mutate()}>Approve Discount</ActionButton>}{approveDiscount.isError && <ErrorState message={approveDiscount.error.message}/>}</div>}
           {isDraft && !hasDiscount && <div className="notice warn"><p>This historic draft needs Owner review. New regular orders are saved immediately.</p></div>}
           {hasPriceChangeNotice && (

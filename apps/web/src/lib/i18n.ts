@@ -1,3 +1,5 @@
+import { so } from "./so";
+
 /**
  * Centralized Somali Business Terminology & Translation Dictionary
  * Fuel Wholesale Management System (FuelDesk)
@@ -5,26 +7,52 @@
 
 export const statusTranslations: Record<string, string> = {
   DRAFT: "Qabyo",
-  CONFIRMED: "La Xaqiijiyay",
-  SCHEDULED: "La Jadwaleeyay",
+  CONFIRMED: "La Xaqiijiyey",
+  SCHEDULED: "La Qorsheeyey",
   IN_PROGRESS: "Wuu Socdaa",
-  PARTIALLY_FULFILLED: "Qayb Ayaa La Fushiyay",
-  FULFILLED: "La Dhammeeyay",
-  COMPLETED: "La Dhammeeyay",
-  CANCELLED: "La Baajiyay",
+  PARTIALLY_FULFILLED: "Qayb Ayaa La Geeyey",
+  FULFILLED: "Waa La Geeyey",
+  COMPLETED: "Waa La Dhammeeyey",
+  CANCELLED: "Waa La Joojiyey",
   UNPAID: "Lama Bixin",
-  PARTIALLY_PAID: "Qayb Ayaa Laga Bixiyay",
-  PAID: "La Bixiyay",
-  REVERSED: "Laga Noqday",
-  PREPARED: "La Diyaariyay",
+  PARTIALLY_PAID: "Qayb Ayaa La Bixiyey",
+  PAID: "La Bixiyey",
+  REVERSED: "Waa Laga Noqday",
+  PREPARED: "La Diyaariyey",
   PRINTED: "La Daabacay",
-  DISPATCHED: "Loo Diray",
-  PARTIALLY_RECONCILED: "Qayb Ayaa La Heshiisiyay",
-  RECONCILED: "La Heshiisiyay",
-  ACTIVE: "Firfircoon",
-  INACTIVE: "Aan Firfircoonayn",
-  HOLD: "La Hakiyay",
-  POSTED: "La Diiwaangeliyay"
+  DISPATCHED: "La Diray",
+  PARTIALLY_RECONCILED: "Qayb Ayaa La Heshiisiyey",
+  RECONCILED: "La Heshiisiyey",
+  ACTIVE: "Shaqaynaya",
+  INACTIVE: "Aan shaqaynayn",
+  HOLD: "La Hakiyey",
+  POSTED: "La Diiwaangeliyey",
+  PENDING: "Sugaya",
+  PARTIAL: "Qayb Ayaa La Bixiyey",
+  OUTSIDE: "Ka Baxsan Akoonnada",
+  OUTSIDE_NOT_TRACKED: "Ka Baxsan Akoonnada",
+  NOT_TRACKED: "Lama Diiwaangelin",
+  NEEDS_REVIEW: "Hubin Ayuu U Baahan Yahay",
+  MONEY_IN: "Lacag Soo Gashay",
+  MONEY_OUT: "Lacag Baxday",
+  TRANSFER: "Wareejin",
+  CORRECTION: "Sixid",
+  CASH: "Lacag Caddaan ah",
+  MOBILE_MONEY: "Lacagta Moobaylka",
+  BANK: "Bangi",
+  OTHER: "Kale",
+  BLOCK_NEGATIVE: "Ha oggolaan haraag taban",
+  ALLOW_NEGATIVE: "Oggolow haraag taban",
+  OPENING_BALANCE: "Haraaga Bilowga",
+  CUSTOMER_PAYMENT: "Lacag Macmiil",
+  CUSTOMER_PAYMENT_REVERSAL: "Ka Noqosho Lacag Macmiil",
+  SUPPLIER_PAYMENT: "Lacag-bixin Keene",
+  SUPPLIER_PAYMENT_REVERSAL: "Ka Noqosho Lacag Keene",
+  EXPENSE: "Kharash",
+  EXPENSE_REVERSAL: "Ka Noqosho Kharash",
+  TRANSFER_IN: "Wareejin Soo Gashay",
+  TRANSFER_OUT: "Wareejin Baxday",
+  ADJUSTMENT: "Sixid"
 };
 
 export const roleTranslations: Record<string, string> = {
@@ -39,12 +67,13 @@ export const fuelTranslations: Record<string, string> = {
 
 export function formatStatus(status: string | null | undefined): string {
   if (!status) return "—";
-  return statusTranslations[status] ?? status.replaceAll("_", " ");
+  const translated = statusTranslations[status] ?? so(status);
+  return translated === status ? "Xaalad kale" : translated;
 }
 
 export function formatRole(role: string | null | undefined): string {
   if (!role) return "—";
-  return roleTranslations[role] ?? role;
+  return roleTranslations[role] ?? "Door aan la aqoon";
 }
 
 export function formatFuel(fuel: string | null | undefined): string {
@@ -52,7 +81,7 @@ export function formatFuel(fuel: string | null | undefined): string {
   const upper = fuel.toUpperCase();
   if (upper.includes("DIESEL")) return "Naafto";
   if (upper.includes("PETROL")) return "Basiin";
-  return fuelTranslations[fuel] ?? fuel;
+  return fuelTranslations[fuel] ?? "Shidaal kale";
 }
 
 export const t = {

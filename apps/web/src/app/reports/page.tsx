@@ -86,11 +86,11 @@ export default function ReportsHubPage() {
         <div className="report-filters">
         <div className="report-date-range">
         <div>
-          <FormLabel style={{ display: "block", fontSize: 12, fontWeight: "bold", marginBottom: 4 }}>From</FormLabel>
+          <FormLabel style={{ display: "block", fontSize: 12, fontWeight: "bold", marginBottom: 4 }}>Laga bilaabo</FormLabel>
           <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="input" />
           </div>
           <div>
-            <FormLabel style={{ display: "block", fontSize: 12, fontWeight: "bold", marginBottom: 4 }}>To</FormLabel>
+            <FormLabel style={{ display: "block", fontSize: 12, fontWeight: "bold", marginBottom: 4 }}>Ilaa</FormLabel>
             <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="input" />
           </div>
           </div>
@@ -114,7 +114,7 @@ export default function ReportsHubPage() {
           )}
 
           <div className="report-filter-actions">
-            <PdfButton className="btn primary" path={activeReport.endpoint+"/pdf?fromDate="+fromDate+"&toDate="+toDate} failure="Report unavailable">Open Report</PdfButton>
+            <PdfButton className="btn primary" path={activeReport.endpoint+"/pdf?fromDate="+fromDate+"&toDate="+toDate} failure="Report unavailable"            >Fur Warbixinta</PdfButton>
           </div>
         </div>
       </Card>

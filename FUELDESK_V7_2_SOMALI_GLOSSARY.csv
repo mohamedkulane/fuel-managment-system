@@ -1,0 +1,533 @@
+﻿context,english_source,somali_ui
+01 — Menu & navigation,Dashboard,Guudmar
+01 — Menu & navigation,Customers,Macaamiisha
+01 — Menu & navigation,Orders,Dalabyada
+01 — Menu & navigation,Stock,Kaydka Shidaalka
+01 — Menu & navigation,Expenses,Kharashaadka
+01 — Menu & navigation,Accounts,Akoonnada Lacagta
+01 — Menu & navigation,Reports,Warbixinnada
+01 — Menu & navigation,Settings,Dejinta
+01 — Menu & navigation,Suppliers,Keenayaasha Shidaalka
+01 — Menu & navigation,Supplier Debt,Deynta Keenayaasha
+01 — Menu & navigation,Pricing,Qiimaha Shidaalka
+01 — Menu & navigation,Stock Receiving,Shidaal Soo Gelin
+01 — Menu & navigation,Delivery List,Liiska Gaarsiinta
+01 — Menu & navigation,Customer Account,Xisaabta Macmiilka
+01 — Menu & navigation,Customer Payments,Lacagaha Macmiilka
+01 — Menu & navigation,Profile,Xogtayda
+01 — Menu & navigation,Notifications,Ogeysiisyada
+01 — Menu & navigation,Search,Raadi
+01 — Menu & navigation,Search customers or orders,Raadi macmiil ama dalab
+01 — Menu & navigation,Open menu,Fur liiska
+01 — Menu & navigation,Close menu,Xir liiska
+01 — Menu & navigation,Home,Bogga Hore
+01 — Menu & navigation,Back,Dib u noqo
+01 — Menu & navigation,Back to Orders,Ku noqo Dalabyada
+01 — Menu & navigation,Back to Stock,Ku noqo Kaydka
+01 — Menu & navigation,View All,Eeg Dhammaan
+01 — Menu & navigation,Recent Activity,Dhaqdhaqaaqii Ugu Dambeeyay
+01 — Menu & navigation,Sign Out,Ka bax
+01 — Menu & navigation,Log In,Gal
+01 — Menu & navigation,Welcome back,Soo dhawoow
+02 — Universal buttons & actions,Add,Ku dar
+02 — Universal buttons & actions,Add New,Ku dar Cusub
+02 — Universal buttons & actions,New,Cusub
+02 — Universal buttons & actions,Create,Samee
+02 — Universal buttons & actions,Save,Kaydi
+02 — Universal buttons & actions,Save Changes,Kaydi Isbeddellada
+02 — Universal buttons & actions,Update,Cusboonaysii
+02 — Universal buttons & actions,Edit,Wax ka beddel
+02 — Universal buttons & actions,Delete,Tirtir
+02 — Universal buttons & actions,Remove,Ka saar
+02 — Universal buttons & actions,View,Eeg
+02 — Universal buttons & actions,View Details,Eeg Faahfaahinta
+02 — Universal buttons & actions,Open,Fur
+02 — Universal buttons & actions,Close,Xir
+02 — Universal buttons & actions,Cancel,Jooji
+02 — Universal buttons & actions,Confirm,Xaqiiji
+02 — Universal buttons & actions,Approve,Oggolow
+02 — Universal buttons & actions,Reject,Diid
+02 — Universal buttons & actions,Continue,Sii wad
+02 — Universal buttons & actions,Next,Xiga
+02 — Universal buttons & actions,Previous,Hore
+02 — Universal buttons & actions,Go Back,Dib u noqo
+02 — Universal buttons & actions,Submit,Gudbi
+02 — Universal buttons & actions,Search,Raadi
+02 — Universal buttons & actions,Filter,Kala shaandhee
+02 — Universal buttons & actions,Clear Filters,Ka saar Kala-soocidda
+02 — Universal buttons & actions,Reset,Dib u deji
+02 — Universal buttons & actions,Refresh,Cusboonaysii
+02 — Universal buttons & actions,Retry,Mar kale isku day
+02 — Universal buttons & actions,Load More,Soo rar kuwo kale
+02 — Universal buttons & actions,Select,Dooro
+02 — Universal buttons & actions,Select All,Dooro dhammaan
+02 — Universal buttons & actions,Clear,Nadiifi
+02 — Universal buttons & actions,Copy,Koobiyee
+02 — Universal buttons & actions,Copied,Waa la koobiyeeyay
+02 — Universal buttons & actions,Download,Soo dejiso
+02 — Universal buttons & actions,Print,Daabac
+02 — Universal buttons & actions,Export,Dhoofso
+02 — Universal buttons & actions,Import,Soo geli
+02 — Universal buttons & actions,Export PDF,Soo dejiso PDF
+02 — Universal buttons & actions,Export Excel,Soo dejiso Excel
+02 — Universal buttons & actions,Open PDF,Fur PDF
+02 — Universal buttons & actions,View Receipt,Fur Rasiidhka
+02 — Universal buttons & actions,Receipt,Rasiidh
+02 — Universal buttons & actions,Invoice,Biil
+02 — Universal buttons & actions,Statement,Warbixinta Xisaabta
+02 — Universal buttons & actions,View Statement,Fur Xisaab-celinta
+02 — Universal buttons & actions,Actions,Hawlaha
+02 — Universal buttons & actions,More,Wax kale
+02 — Universal buttons & actions,More Details,Faahfaahin kale
+02 — Universal buttons & actions,Less Details,Qari faahfaahinta
+02 — Universal buttons & actions,Show,Muuji
+02 — Universal buttons & actions,Hide,Qari
+02 — Universal buttons & actions,Show More,Muuji wax dheeraad ah
+02 — Universal buttons & actions,Show Less,Qari faahfaahinta
+02 — Universal buttons & actions,Apply,Dhaqan geli
+02 — Universal buttons & actions,Done,Waa dhammaatay
+02 — Universal buttons & actions,Reopen,Dib u fur
+"03 — Authentication, users & permissions",Email,Iimayl
+"03 — Authentication, users & permissions",Password,Furaha sirta ah
+"03 — Authentication, users & permissions",Confirm Password,Xaqiiji furaha sirta ah
+"03 — Authentication, users & permissions",Show Password,Muuji furaha sirta ah
+"03 — Authentication, users & permissions",Hide Password,Qari furaha sirta ah
+"03 — Authentication, users & permissions",Forgot Password,Ma illowday furaha sirta ah?
+"03 — Authentication, users & permissions",Log In,Gal nidaamka
+"03 — Authentication, users & permissions",Log Out,Ka bax nidaamka
+"03 — Authentication, users & permissions",Account,Koontadayda
+"03 — Authentication, users & permissions",My Profile,Xogtayda
+"03 — Authentication, users & permissions",Name,Magac
+"03 — Authentication, users & permissions",Full Name,Magaca oo dhan
+"03 — Authentication, users & permissions",Display Name,Magaca muuqda
+"03 — Authentication, users & permissions",User,Isticmaale
+"03 — Authentication, users & permissions",Users,Isticmaaleyaasha
+"03 — Authentication, users & permissions",Add User,Ku dar Isticmaale
+"03 — Authentication, users & permissions",Employee,Shaqaale
+"03 — Authentication, users & permissions",Office Employee,Shaqaale Xafiis
+"03 — Authentication, users & permissions",Owner,Milkiile
+"03 — Authentication, users & permissions",Role,Doorka
+"03 — Authentication, users & permissions",Permissions,Ogolaanshaha
+"03 — Authentication, users & permissions",Status,Xaaladda
+"03 — Authentication, users & permissions",Active,Shaqaynaya
+"03 — Authentication, users & permissions",Inactive,Aan shaqaynayn
+"03 — Authentication, users & permissions",Locked,La xiray
+"03 — Authentication, users & permissions",Enable,Daar
+"03 — Authentication, users & permissions",Disable,Demi
+"03 — Authentication, users & permissions",Change Password,Beddel Furaha Sirta ah
+"03 — Authentication, users & permissions",Current Password,Furaha hadda
+"03 — Authentication, users & permissions",New Password,Fure cusub
+04 — Dashboard & charts,Overview,Guudmar
+04 — Dashboard & charts,Today's Summary,Soo Koobidda Maanta
+04 — Dashboard & charts,Today's Sales,Iibka Maanta
+04 — Dashboard & charts,Total Sales,Wadarta Iibka
+04 — Dashboard & charts,Total Collected,Lacagta La Qabtay
+04 — Dashboard & charts,Collected Today,Lacagta Maanta La Qabtay
+04 — Dashboard & charts,Customers Owe Us,Lacagta Macaamiisha Laga Sugayo
+04 — Dashboard & charts,We Owe Suppliers,Deynta Aan Ku Leenahay Keenayaasha
+04 — Dashboard & charts,Total Expenses,Wadarta Kharashaadka
+04 — Dashboard & charts,This Month's Expenses,Kharashaadka Bishan
+04 — Dashboard & charts,Current Account Balances,Haraaga Akoonnada
+04 — Dashboard & charts,Warehouse Stock,Kaydka Bakhaarka
+04 — Dashboard & charts,Diesel Stock,Kaydka Naaftada
+04 — Dashboard & charts,Petrol Stock,Kaydka Basiinka
+04 — Dashboard & charts,Pending Orders,Dalabyada Sugaya
+04 — Dashboard & charts,Orders Today,Dalabyada Maanta
+04 — Dashboard & charts,Today's Deliveries,Gaarsiinta Maanta
+04 — Dashboard & charts,Sales & Collections,Iibka iyo Lacagaha La Qabtay
+04 — Dashboard & charts,Fuel Sales,Iibka Shidaalka
+04 — Dashboard & charts,Monthly,Bil kasta
+04 — Dashboard & charts,Yearly,Sannad kasta
+04 — Dashboard & charts,This Week,Toddobaadkan
+04 — Dashboard & charts,This Month,Bishan
+04 — Dashboard & charts,This Year,Sannadkan
+04 — Dashboard & charts,No Data,Xog lama hayo
+04 — Dashboard & charts,Profit Unavailable,Faa'iidada lama xisaabin karo
+04 — Dashboard & charts,Cost Not Recorded,Qiimaha soo-iibsiga lama diiwaangelin
+05 — Customers & account,Customer,Macmiil
+05 — Customers & account,New Customer,Macmiil Cusub
+05 — Customers & account,Add Customer,Ku dar Macmiil
+05 — Customers & account,Edit Customer,Wax ka beddel Macmiilka
+05 — Customers & account,Customer Name,Magaca Macmiilka
+05 — Customers & account,Customer Phone,Telefoonka Macmiilka
+05 — Customers & account,Phone Number,Lambarka Telefoonka
+05 — Customers & account,Location,Goobta
+05 — Customers & account,Address,Cinwaanka
+05 — Customers & account,Notes,Faahfaahin Kooban
+05 — Customers & account,Customer List,Liiska Macaamiisha
+05 — Customers & account,All Customers,Dhammaan Macaamiisha
+05 — Customers & account,Customer Code,Koodhka Macmiilka
+05 — Customers & account,Customer Status,Xaaladda Macmiilka
+05 — Customers & account,Customer on Hold,Macmiilka Waa La Hakiyey
+05 — Customers & account,Hold Customer,Haki Macmiilka
+05 — Customers & account,Unhold Customer,Ka qaad Hakinta
+05 — Customers & account,Customer Account,Xisaabta Macmiilka
+05 — Customers & account,Order Account,Xisaabta Dalabyada
+05 — Customers & account,Account Summary,Soo Koobidda Xisaabta
+05 — Customers & account,Total Sales,Wadarta Iibka
+05 — Customers & account,Total Paid,Wadarta La Bixiyey
+05 — Customers & account,Remaining Debt,Deynta Harsan
+05 — Customers & account,Customer Debt,Deynta Macmiilka
+05 — Customers & account,Outstanding Debt,Deynta Harsan
+05 — Customers & account,Total Due,Lacagta La Sugayo
+05 — Customers & account,Orders,Dalabyada
+05 — Customers & account,Payments,Lacagaha La Bixiyey
+05 — Customers & account,Payment History,Taariikhda Lacag-bixinta
+05 — Customers & account,Order Payment History,Lacagihii Dalabkan
+05 — Customers & account,Debt Payment,Bixinta Deynta
+05 — Customers & account,Old Debt,Deyntii Hore
+05 — Customers & account,No Debt,Deyn Ma Jirto
+05 — Customers & account,Paid in Full,Si Buuxda Loo Bixiyey
+05 — Customers & account,Statement PDF,Warbixinta Xisaabta PDF
+"06 — Orders, fuel & delivery",Order,Dalab
+"06 — Orders, fuel & delivery",New Order,Dalab Cusub
+"06 — Orders, fuel & delivery",Add Order,Samee Dalab
+"06 — Orders, fuel & delivery",Order Details,Faahfaahinta Dalabka
+"06 — Orders, fuel & delivery",Order Number,Lambarka Dalabka
+"06 — Orders, fuel & delivery",Order Date,Taariikhda Dalabka
+"06 — Orders, fuel & delivery",Delivery Date,Taariikhda Gaarsiinta
+"06 — Orders, fuel & delivery",Requested Delivery Date,Taariikhda Gaarsiinta La Codsaday
+"06 — Orders, fuel & delivery",Delivery Location,Goobta Gaarsiinta
+"06 — Orders, fuel & delivery",Fuel Type,Nooca Shidaalka
+"06 — Orders, fuel & delivery",Diesel,Naafto
+"06 — Orders, fuel & delivery",Petrol,Basiin
+"06 — Orders, fuel & delivery",Naafto,Naafto
+"06 — Orders, fuel & delivery",Basiin,Basiin
+"06 — Orders, fuel & delivery",Quantity,Tirada
+"06 — Orders, fuel & delivery",Quantity (Fuusto),Tirada (Fuusto)
+"06 — Orders, fuel & delivery",Fuusto,Fuusto
+"06 — Orders, fuel & delivery",1 Fuusto = 240 liters,1 Fuusto = 240 Litir
+"06 — Orders, fuel & delivery",Unit Price,Qiimaha Fuustadii
+"06 — Orders, fuel & delivery",Price per Fuusto,Qiimaha Fuustadii
+"06 — Orders, fuel & delivery",Current Price,Qiimaha Hadda
+"06 — Orders, fuel & delivery",Agreed Price,Qiimihii Lagu Heshiiyey
+"06 — Orders, fuel & delivery",Subtotal,Wadarta Hore
+"06 — Orders, fuel & delivery",Discount,Lacag-dhimis
+"06 — Orders, fuel & delivery",Fixed Discount,Lacag-dhimis Go'an
+"06 — Orders, fuel & delivery",Order Total,Wadarta Dalabka
+"06 — Orders, fuel & delivery",Total,Wadarta
+"06 — Orders, fuel & delivery",Paid Now,Hadda La Bixiyey
+"06 — Orders, fuel & delivery",Paid Amount,Lacagta La Bixiyey
+"06 — Orders, fuel & delivery",Amount Paid,Lacagta La Bixiyey
+"06 — Orders, fuel & delivery",Remaining,Haraaga
+"06 — Orders, fuel & delivery",Order Remaining,Haraaga Dalabka
+"06 — Orders, fuel & delivery",Estimated Remaining,Haraaga La Filayo
+"06 — Orders, fuel & delivery",Outstanding on Delivered Fuel,Deynta Shidaalka La Geeyey
+"06 — Orders, fuel & delivery",Confirm Order,Xaqiiji Dalabka
+"06 — Orders, fuel & delivery",Approve Discount,Oggolow Lacag-dhimista
+"06 — Orders, fuel & delivery",Cancel Order,Jooji Dalabka
+"06 — Orders, fuel & delivery",Order Invoice,Biilka Dalabka
+"06 — Orders, fuel & delivery",Open Invoice,Fur Biilka
+"06 — Orders, fuel & delivery",Draft,Qabyo
+"06 — Orders, fuel & delivery",Confirmed,La Xaqiijiyey
+"06 — Orders, fuel & delivery",Scheduled,La Qorsheeyey
+"06 — Orders, fuel & delivery",In Progress,Wuu Socdaa
+"06 — Orders, fuel & delivery",Partially Fulfilled,Qayb Ayaa La Geeyey
+"06 — Orders, fuel & delivery",Fulfilled,Waa La Geeyey
+"06 — Orders, fuel & delivery",Cancelled,Waa La Joojiyey
+"06 — Orders, fuel & delivery",Pending Delivery,Gaarsiin Sugaya
+"06 — Orders, fuel & delivery",Requested Quantity,Tiradii La Dalbaday
+"06 — Orders, fuel & delivery",Accepted Quantity,Tiradii La Aqbalay
+"06 — Orders, fuel & delivery",Delivered Quantity,Tiradii La Geeyey
+"06 — Orders, fuel & delivery",Returned Quantity,Tiradii Soo Noqotay
+"06 — Orders, fuel & delivery",Confirm Delivery,Xaqiiji Gaarsiinta
+"06 — Orders, fuel & delivery",Delivery Confirmed,Gaarsiinta Waa La Xaqiijiyey
+"06 — Orders, fuel & delivery",Delivery List,Liiska Gaarsiinta
+"06 — Orders, fuel & delivery",Open Delivery PDF,Fur Liiska Gaarsiinta
+"06 — Orders, fuel & delivery",No Orders Found,Dalab lama helin
+"07 — Stock, receiving & suppliers",Stock,Kaydka Shidaalka
+"07 — Stock, receiving & suppliers",Available Stock,Kaydka La Heli Karo
+"07 — Stock, receiving & suppliers",Stock Balance,Haraaga Kaydka
+"07 — Stock, receiving & suppliers",Stock Movement,Dhaqdhaqaaqa Kaydka
+"07 — Stock, receiving & suppliers",Stock History,Taariikhda Kaydka
+"07 — Stock, receiving & suppliers",Received Stock,Shidaalkii Soo Galay
+"07 — Stock, receiving & suppliers",Receive Stock,Soo Geli Shidaal
+"07 — Stock, receiving & suppliers",New Stock Receipt,Shidaal Soo Gelin Cusub
+"07 — Stock, receiving & suppliers",Stock Receipt,Diiwaanka Soo Gelinta
+"07 — Stock, receiving & suppliers",Receipt Number,Lambarka Diiwaanka
+"07 — Stock, receiving & suppliers",Receiving Date,Taariikhda Soo Gelinta
+"07 — Stock, receiving & suppliers",Warehouse,Bakhaar
+"07 — Stock, receiving & suppliers",In Transit,Waddada Ku Jira
+"07 — Stock, receiving & suppliers",Returned,Soo Noqday
+"07 — Stock, receiving & suppliers",Stock Adjustment,Sixidda Kaydka
+"07 — Stock, receiving & suppliers",Adjust Stock,Sax Kaydka
+"07 — Stock, receiving & suppliers",Adjustment Reason,Sababta Sixidda
+"07 — Stock, receiving & suppliers",Save Adjustment,Kaydi Sixidda
+"07 — Stock, receiving & suppliers",Purchase Cost,Qiimaha Soo-iibsiga
+"07 — Stock, receiving & suppliers",Unit Purchase Cost,Qiimaha Soo-iibsiga Fuustadii
+"07 — Stock, receiving & suppliers",Total Purchase Cost,Wadarta Soo-iibsiga
+"07 — Stock, receiving & suppliers",Supplier,Keenaha Shidaalka
+"07 — Stock, receiving & suppliers",Suppliers,Keenayaasha Shidaalka
+"07 — Stock, receiving & suppliers",Add Supplier,Ku dar Keene Shidaal
+"07 — Stock, receiving & suppliers",Supplier Name,Magaca Keenaha
+"07 — Stock, receiving & suppliers",Supplier Phone,Telefoonka Keenaha
+"07 — Stock, receiving & suppliers",Supplier Purchases,Shidaalkii Laga Soo Iibsaday
+"07 — Stock, receiving & suppliers",Supplier Payments,Lacagihii Keenaha La Siiyey
+"07 — Stock, receiving & suppliers",Supplier Debt,Deynta Keenaha
+"07 — Stock, receiving & suppliers",Supplier Outstanding,Deynta U Harsan Keenaha
+"07 — Stock, receiving & suppliers",Purchase Total,Wadarta Soo-iibsiga
+"07 — Stock, receiving & suppliers",Paid to Supplier,Keenaha La Siiyey
+"07 — Stock, receiving & suppliers",Supplier Paid Now,Hadda Keenaha La Siiyey
+"07 — Stock, receiving & suppliers",Supplier Remaining,Deynta U Harsan Keenaha
+"07 — Stock, receiving & suppliers",Pay Supplier,Bixi Deynta Keenaha
+"07 — Stock, receiving & suppliers",Record Supplier Payment,Diiwaangeli Lacag-siinta Keenaha
+"07 — Stock, receiving & suppliers",Purchase History,Taariikhda Soo-iibsiga
+"07 — Stock, receiving & suppliers",Payment History,Taariikhda Lacag-bixinta
+"07 — Stock, receiving & suppliers",Post Receipt,Xaqiiji Soo Gelinta
+"07 — Stock, receiving & suppliers",Posted,La Diiwaangeliyey
+"07 — Stock, receiving & suppliers",Not Tracked,Lama Diiwaangelin
+"07 — Stock, receiving & suppliers",Unknown Cost,Qiimaha Lama Oga
+"08 — Customer payments, FIFO & reversals",Record Payment,Diiwaangeli Lacag
+"08 — Customer payments, FIFO & reversals",Receive Payment,Qabso Lacag
+"08 — Customer payments, FIFO & reversals",Pay Debt,Bixi Deyn
+"08 — Customer payments, FIFO & reversals",Payment,Lacag-bixin
+"08 — Customer payments, FIFO & reversals",Payment Amount,Lacagta La Bixiyey
+"08 — Customer payments, FIFO & reversals",Payment Date,Taariikhda Lacag-bixinta
+"08 — Customer payments, FIFO & reversals",Received Amount,Lacagta La Qabtay
+"08 — Customer payments, FIFO & reversals",Money Received,Lacag Soo Gashay
+"08 — Customer payments, FIFO & reversals",Payment Method,Habka Lacag-bixinta
+"08 — Customer payments, FIFO & reversals",Receiving Account,Akoonka Lacagtu Soo Gashay
+"08 — Customer payments, FIFO & reversals",Paid From,Akoonka Laga Bixiyey
+"08 — Customer payments, FIFO & reversals",Reference,Tixraac
+"08 — Customer payments, FIFO & reversals",Transaction Reference,Tixraaca Wareejinta
+"08 — Customer payments, FIFO & reversals",Amount Due,Lacagta Lagu Leeyahay
+"08 — Customer payments, FIFO & reversals",Remaining After Payment,Deynta Ka Harsan
+"08 — Customer payments, FIFO & reversals",Pay Oldest Debt First,Deynta Ugu Horraysa Ka Jar
+"08 — Customer payments, FIFO & reversals",No Unpaid Delivered Orders,Deyn Shidaal La Geeyey Ma Jirto
+"08 — Customer payments, FIFO & reversals",Payment Receipt,Rasiidhka Lacagta
+"08 — Customer payments, FIFO & reversals",Open Receipt,Fur Rasiidhka
+"08 — Customer payments, FIFO & reversals",Receipt Number,Lambarka Rasiidhka
+"08 — Customer payments, FIFO & reversals",Payment Recorded,Lacagta Waa La Diiwaangeliyey
+"08 — Customer payments, FIFO & reversals",Reverse Payment,Ka Noqo Lacag-qabashada
+"08 — Customer payments, FIFO & reversals",Reverse,Ka Noqo
+"08 — Customer payments, FIFO & reversals",Reversal Reason,Sababta Ka Noqoshada
+"08 — Customer payments, FIFO & reversals",Confirm Reversal,Xaqiiji Ka Noqoshada
+"08 — Customer payments, FIFO & reversals",Reversed,Waa Laga Noqday
+"08 — Customer payments, FIFO & reversals",Reversal Record,Diiwaanka Ka Noqoshada
+"08 — Customer payments, FIFO & reversals",Original Payment,Lacag-qabashadii Hore
+"08 — Customer payments, FIFO & reversals",Correction,Sixid
+"08 — Customer payments, FIFO & reversals",Payment Already Reversed,Lacagtan Hore Ayaa Looga Noqday
+"08 — Customer payments, FIFO & reversals",No Overpayment Allowed,Lacagtani Way Ka Badan Tahay Deynta
+"08 — Customer payments, FIFO & reversals",No Payment Recorded,Weli Lacag Lama Bixin
+"08 — Customer payments, FIFO & reversals",Payment Is Linked To New Order,Lacagtan Waxay U Gaar Tahay Dalabkan
+"08 — Customer payments, FIFO & reversals",Payment Failed,Lacagta Lama Diiwaangelin
+"08 — Customer payments, FIFO & reversals",Payment Successful,Lacagta Waa La Diiwaangeliyey
+09 — Expenses,Expenses,Kharashaadka
+09 — Expenses,New Expense,Kharash Cusub
+09 — Expenses,Add Expense,Diiwaangeli Kharash
+09 — Expenses,Expense Details,Faahfaahinta Kharashka
+09 — Expenses,Expense Category,Nooca Kharashka
+09 — Expenses,Description,Sharaxaad
+09 — Expenses,Amount,Lacagta
+09 — Expenses,Expense Amount,Lacagta Kharashka
+09 — Expenses,Expense Date,Taariikhda Kharashka
+09 — Expenses,Paid From,Akoonka Laga Bixiyey
+09 — Expenses,Save Expense,Kaydi Kharashka
+09 — Expenses,Expense History,Diiwaanka Kharashaadka
+09 — Expenses,Total Expenses,Wadarta Kharashaadka
+09 — Expenses,Delivery Expense,Kharashka Gaarsiinta
+09 — Expenses,Delivery,Gaarsiin
+09 — Expenses,Fuel Transportation,Gaadiidka Shidaalka
+09 — Expenses,Transport,Gaadiid
+09 — Expenses,Rent,Kirada
+09 — Expenses,Utilities,Adeegyada (Biyo/Koronto)
+09 — Expenses,Salary / Wages,Mushahar iyo Gunno
+09 — Expenses,Maintenance,Dayactir
+09 — Expenses,Other,Kale
+09 — Expenses,Outside Account,Lacag Ka Baxsan Akoonnada
+09 — Expenses,Untracked Payment,Lacag Aan Akoon Lagu Xirin
+09 — Expenses,Reverse Expense,Ka Noqo Kharashka
+09 — Expenses,Reversal Reason,Sababta Ka Noqoshada
+09 — Expenses,No Expenses Found,Kharash lama helin
+09 — Expenses,Expense Saved,Kharashka Waa La Diiwaangeliyey
+09 — Expenses,Expense Reversed,Kharashka Waa Laga Noqday
+10 — Financial accounts & money movements,Financial Accounts,Akoonnada Lacagta
+10 — Financial accounts & money movements,Accounts,Akoonnada
+10 — Financial accounts & money movements,New Account,Akoon Cusub
+10 — Financial accounts & money movements,Add Account,Ku dar Akoon
+10 — Financial accounts & money movements,Edit Account,Wax ka beddel Akoonka
+10 — Financial accounts & money movements,Account Name,Magaca Akoonka
+10 — Financial accounts & money movements,Account Number,Lambarka Akoonka
+10 — Financial accounts & money movements,Account Type,Nooca Akoonka
+10 — Financial accounts & money movements,Payment Provider,Adeegga Lacagta
+10 — Financial accounts & money movements,EVC Plus,EVC Plus
+10 — Financial accounts & money movements,Somnet,Somnet
+10 — Financial accounts & money movements,Cash,Lacag Caddaan ah
+10 — Financial accounts & money movements,Bank,Bangi
+10 — Financial accounts & money movements,Bank Transfer,Wareejin Bangi
+10 — Financial accounts & money movements,Opening Balance,Haraagii Bilowga
+10 — Financial accounts & money movements,Opening Balance Date,Taariikhda Haraagii Bilowga
+10 — Financial accounts & money movements,Current Balance,Haraaga Hadda
+10 — Financial accounts & money movements,Recorded Balance,Haraaga Diiwaangashan
+10 — Financial accounts & money movements,Money In,Lacag Soo Gashay
+10 — Financial accounts & money movements,Money Out,Lacag Baxday
+10 — Financial accounts & money movements,Incoming,Soo gashay
+10 — Financial accounts & money movements,Outgoing,Baxday
+10 — Financial accounts & money movements,Transaction,Dhaqdhaqaaq Lacageed
+10 — Financial accounts & money movements,Transaction History,Taariikhda Dhaqdhaqaaqa
+10 — Financial accounts & money movements,Money In History,Lacagihii Soo Galay
+10 — Financial accounts & money movements,Money Out History,Lacagihii Baxay
+10 — Financial accounts & money movements,Transfer Money,Wareeji Lacag
+10 — Financial accounts & money movements,Transfer From,Akoonka Laga Wareejinayo
+10 — Financial accounts & money movements,Transfer To,Akoonka Loo Wareejinayo
+10 — Financial accounts & money movements,Transfer Amount,Lacagta La Wareejinayo
+10 — Financial accounts & money movements,Transfer Date,Taariikhda Wareejinta
+10 — Financial accounts & money movements,Account Adjustment,Sixidda Haraaga
+10 — Financial accounts & money movements,Balance Correction,Sixidda Haraaga
+10 — Financial accounts & money movements,Reconcile Account,Hubi Haraaga
+10 — Financial accounts & money movements,Outside/Not Tracked,Ka Baxsan Akoonnada
+10 — Financial accounts & money movements,Unassigned Account,Akoon Lama Cayimin
+10 — Financial accounts & money movements,Needs Review,Hubin Ayuu U Baahan Yahay
+10 — Financial accounts & money movements,Account Statement,Warbixinta Akoonka
+10 — Financial accounts & money movements,Accounts Summary,Soo Koobidda Akoonnada
+10 — Financial accounts & money movements,Insufficient Balance,Haraaggu Kuma Filna
+10 — Financial accounts & money movements,Balance Not Verified,Haraaga Lama Xaqiijin
+10 — Financial accounts & money movements,"This is a recorded balance, not live provider balance","Kani waa haraaga FuelDesk, ma aha kan tooska ah ee adeegga lacagta."
+"11 — Reports, dates & filters",Reports,Warbixinnada
+"11 — Reports, dates & filters",Sales Report,Warbixinta Iibka
+"11 — Reports, dates & filters",Customer Debt Report,Warbixinta Deymaha Macaamiisha
+"11 — Reports, dates & filters",Supplier Debt Report,Warbixinta Deymaha Keenayaasha
+"11 — Reports, dates & filters",Collections Report,Warbixinta Lacagaha La Qabtay
+"11 — Reports, dates & filters",Stock Report,Warbixinta Kaydka
+"11 — Reports, dates & filters",Expenses Report,Warbixinta Kharashaadka
+"11 — Reports, dates & filters",Accounts Report,Warbixinta Akoonnada
+"11 — Reports, dates & filters",Financial Summary,Soo Koobidda Lacagaha
+"11 — Reports, dates & filters",From Date,Laga Bilaabo
+"11 — Reports, dates & filters",To Date,Ilaa
+"11 — Reports, dates & filters",Date,Taariikh
+"11 — Reports, dates & filters",Today,Maanta
+"11 — Reports, dates & filters",Yesterday,Shalay
+"11 — Reports, dates & filters",Tomorrow,Berri
+"11 — Reports, dates & filters",All Dates,Dhammaan Taariikhaha
+"11 — Reports, dates & filters",Select Date,Dooro Taariikh
+"11 — Reports, dates & filters",Select Customer,Dooro Macmiil
+"11 — Reports, dates & filters",Select Status,Dooro Xaalad
+"11 — Reports, dates & filters",All,Dhammaan
+"11 — Reports, dates & filters",All Statuses,Dhammaan Xaaladaha
+"11 — Reports, dates & filters",This Week,Toddobaadkan
+"11 — Reports, dates & filters",This Month,Bishan
+"11 — Reports, dates & filters",Last Month,Bishii Hore
+"11 — Reports, dates & filters",This Year,Sannadkan
+"11 — Reports, dates & filters",Custom Range,Xilli Aad Dooratay
+"11 — Reports, dates & filters",Preview Report,Eeg Warbixinta
+"11 — Reports, dates & filters",View Report,Fur Warbixinta
+"11 — Reports, dates & filters",Generate Report,Diyaari Warbixinta
+"11 — Reports, dates & filters",Export Report,Soo Dejiso Warbixinta
+"11 — Reports, dates & filters",Print Report,Daabac Warbixinta
+"11 — Reports, dates & filters",No Results,Wax natiijo ah lama helin
+"12 — Settings, branding & documents",Settings,Dejinta
+"12 — Settings, branding & documents",General Settings,Dejinta Guud
+"12 — Settings, branding & documents",Business Information,Xogta Ganacsiga
+"12 — Settings, branding & documents",Company Name,Magaca Shirkadda
+"12 — Settings, branding & documents",Company Address,Cinwaanka Shirkadda
+"12 — Settings, branding & documents",Company Phone,Telefoonka Shirkadda
+"12 — Settings, branding & documents",Company Email,Iimaylka Shirkadda
+"12 — Settings, branding & documents",Logo,Astaanta Shirkadda
+"12 — Settings, branding & documents",Upload Logo,Soo geli Astaanta
+"12 — Settings, branding & documents",Footer,Qoraalka Hoose
+"12 — Settings, branding & documents",Document Settings,Dejinta Dukumentiyada
+"12 — Settings, branding & documents",Invoice Settings,Dejinta Biillada
+"12 — Settings, branding & documents",Receipt Settings,Dejinta Rasiidhada
+"12 — Settings, branding & documents",Currency,Nooca Lacagta
+"12 — Settings, branding & documents",Time Zone,Aagga Waqtiga
+"12 — Settings, branding & documents",Language,Luqadda
+"12 — Settings, branding & documents",Somali,Af-Soomaali
+"12 — Settings, branding & documents",English,Ingiriisi
+"12 — Settings, branding & documents",Change Language,Beddel Luqadda
+"12 — Settings, branding & documents",Users & Permissions,Isticmaaleyaasha iyo Ogolaanshaha
+"12 — Settings, branding & documents",Audit Log,Diiwaanka Hawlaha
+"12 — Settings, branding & documents",System History,Taariikhda Nidaamka
+"12 — Settings, branding & documents",Business Name,Magaca Ganacsiga
+"12 — Settings, branding & documents",Save Settings,Kaydi Dejinta
+13 — Printable PDF & invoice headings,ORDER INVOICE,BIILKA DALABKA
+13 — Printable PDF & invoice headings,PAYMENT RECEIPT,RASIIDHKA LACAG-BIXINTA
+13 — Printable PDF & invoice headings,CUSTOMER STATEMENT,WARBIXINTA XISAABTA MACMIILKA
+13 — Printable PDF & invoice headings,DELIVERY LIST,LIISKA GAARSIINTA
+13 — Printable PDF & invoice headings,SUPPLIER PAYMENT RECEIPT,RASIIDHKA LACAG-SIINTA KEENAHA
+13 — Printable PDF & invoice headings,CUSTOMER INFORMATION,XOGTA MACMIILKA
+13 — Printable PDF & invoice headings,ORDER INFORMATION,XOGTA DALABKA
+13 — Printable PDF & invoice headings,INVOICE NUMBER,LAMBARKA BIILKA
+13 — Printable PDF & invoice headings,RECEIPT NUMBER,LAMBARKA RASIIDHKA
+13 — Printable PDF & invoice headings,ITEM,SHAYGA
+13 — Printable PDF & invoice headings,FUEL TYPE,NOOCA SHIDAALKA
+13 — Printable PDF & invoice headings,QUANTITY,TIRADA
+13 — Printable PDF & invoice headings,UNIT PRICE,QIIMAHA FUUSTADII
+13 — Printable PDF & invoice headings,AMOUNT,LACAGTA
+13 — Printable PDF & invoice headings,SUBTOTAL,WADARTA HORE
+13 — Printable PDF & invoice headings,DISCOUNT,LACAG-DHIMIS
+13 — Printable PDF & invoice headings,TOTAL,WADARTA
+13 — Printable PDF & invoice headings,PAID AMOUNT,LACAGTA LA BIXIYEY
+13 — Printable PDF & invoice headings,REMAINING,HARAAGA
+13 — Printable PDF & invoice headings,ORDER PENDING DELIVERY,DALABKA WELI LAMA GEYN
+13 — Printable PDF & invoice headings,NOTES,FIIRO GAAR AH
+13 — Printable PDF & invoice headings,PREPARED BY,DIYAARIYE
+13 — Printable PDF & invoice headings,RECEIVED BY,QAATAHA
+13 — Printable PDF & invoice headings,CUSTOMER SIGNATURE,SAXIIXA MACMIILKA
+13 — Printable PDF & invoice headings,DATE,TAARIIKH
+13 — Printable PDF & invoice headings,THANK YOU FOR YOUR BUSINESS,WAAD KU MAHADSAN TAHAY GANACSIGAAGA
+13 — Printable PDF & invoice headings,REVERSED,WAA LAGA NOQDAY
+"14 — Notifications, validation & empty states",Loading...,Waa la soo rarayaa…
+"14 — Notifications, validation & empty states",Saving...,Waa la kaydinayaa…
+"14 — Notifications, validation & empty states",Submitting...,Waa la gudbinayaa…
+"14 — Notifications, validation & empty states",Processing...,Waa la fulinayaa…
+"14 — Notifications, validation & empty states",Please wait,Fadlan sug
+"14 — Notifications, validation & empty states",Saved successfully,Si guul leh ayaa loo kaydiyey
+"14 — Notifications, validation & empty states",Updated successfully,Isbeddellada waa la kaydiyey
+"14 — Notifications, validation & empty states",Deleted successfully,Waa la tirtiray
+"14 — Notifications, validation & empty states",Failed to load data,Xogta lama soo rari karin
+"14 — Notifications, validation & empty states",Failed to save,Lama kaydin; mar kale isku day
+"14 — Notifications, validation & empty states",Something went wrong,Cilad ayaa dhacday; mar kale isku day
+"14 — Notifications, validation & empty states",Please fill required fields,Buuxi meelaha khasabka ah
+"14 — Notifications, validation & empty states",Required field,Meeshan waa khasab
+"14 — Notifications, validation & empty states",Invalid amount,Geli lacag sax ah
+"14 — Notifications, validation & empty states",Amount must be greater than zero,Lacagtu waa inay ka badan tahay eber
+"14 — Notifications, validation & empty states",Invalid date,Geli taariikh sax ah
+"14 — Notifications, validation & empty states",Please select a customer,Dooro macmiil
+"14 — Notifications, validation & empty states",Please select an account,Dooro akoon
+"14 — Notifications, validation & empty states",Please select fuel type,Dooro nooca shidaalka
+"14 — Notifications, validation & empty states",Please enter whole Fuusto,Geli tiro fuusto oo dhan
+"14 — Notifications, validation & empty states",Not enough stock,Shidaalka kaydka kuma filna
+"14 — Notifications, validation & empty states",Discount approval required,Lacag-dhimistu waxay sugaysaa oggolaansho
+"14 — Notifications, validation & empty states",Owner approval required,Oggolaanshaha milkiilaha ayaa loo baahan yahay
+"14 — Notifications, validation & empty states",Are you sure?,Ma hubtaa?
+"14 — Notifications, validation & empty states",Confirm Action,Xaqiiji Hawsha
+"14 — Notifications, validation & empty states",Cannot undo this action,Hawshan si toos ah loogama noqon karo
+"14 — Notifications, validation & empty states",Permission denied,Uma lihid ogolaansho
+"14 — Notifications, validation & empty states",Session expired,Waqtigii gelitaanka ayaa dhammaaday; mar kale gal
+"14 — Notifications, validation & empty states",No records found,Wax diiwaan ah lama helin
+"14 — Notifications, validation & empty states",No customers found,Macmiil lama helin
+"14 — Notifications, validation & empty states",No orders found,Dalab lama helin
+"14 — Notifications, validation & empty states",No transactions found,Dhaqdhaqaaq lacageed lama helin
+"14 — Notifications, validation & empty states",No payments recorded,Lacag weli lama diiwaangelin
+"14 — Notifications, validation & empty states",Showing results,Natiijooyinka la helay
+"14 — Notifications, validation & empty states",Already processed,Hawshan hore ayaa loo fuliyey
+"14 — Notifications, validation & empty states",Duplicate request,Codsigan hore ayaa loo fuliyey
+"14 — Notifications, validation & empty states",Network error,Xiriirka internetka ayaa go'ay; mar kale isku day
+15 — Table columns & pagination,Number,Lambar
+15 — Table columns & pagination,Reference,Tixraac
+15 — Table columns & pagination,Date,Taariikh
+15 — Table columns & pagination,Name,Magac
+15 — Table columns & pagination,Phone,Telefoon
+15 — Table columns & pagination,Fuel,Shidaal
+15 — Table columns & pagination,Fuusto,Fuusto
+15 — Table columns & pagination,Customer,Macmiil
+15 — Table columns & pagination,Supplier,Keene Shidaal
+15 — Table columns & pagination,Status,Xaalad
+15 — Table columns & pagination,Amount,Lacag
+15 — Table columns & pagination,Total,Wadarta
+15 — Table columns & pagination,Paid,La Bixiyey
+15 — Table columns & pagination,Remaining,Haraaga
+15 — Table columns & pagination,Balance,Haraaga
+15 — Table columns & pagination,Method,Habka
+15 — Table columns & pagination,Account,Akoon
+15 — Table columns & pagination,Category,Nooca
+15 — Table columns & pagination,Description,Sharaxaad
+15 — Table columns & pagination,Created By,Diiwaangeliyey
+15 — Table columns & pagination,Last Updated,Markii Ugu Dambaysay La Beddelay
+15 — Table columns & pagination,First,Ugu Horreeya
+15 — Table columns & pagination,Last,Ugu Dambeeya
+15 — Table columns & pagination,Page,Bogga
+15 — Table columns & pagination,Rows per page,Safaf boggiiba
+15 — Table columns & pagination,Next Page,Bogga Xiga
+15 — Table columns & pagination,Previous Page,Bogga Hore
+15 — Table columns & pagination,Results,Natiijooyin

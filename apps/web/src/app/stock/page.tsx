@@ -11,6 +11,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, type Actor, type PaginatedResponse } from "../../lib/api";
 import { MetricCard, LoadingState, Badge, Card, CardHead, Empty, ErrorState, Modal, PageHeader, Pagination, SubmitButton } from "../../components/ui";
 import { notifyError, notifySuccess } from "../../lib/toast";
+import { SupplierDebt } from "../../components/supplier-debt";
 
 type Balance = { fuel: string; fuelName: string; location: string; balanceFuusto?: string; balanceLiters: string };
 type Fuel = { id: string; code: string; displayName: string };
@@ -152,8 +153,9 @@ export default function StockPage() {
 
       <Modal isOpen={showReceive} onClose={() => setShowReceive(false)} title="Shidaal Soo Geli / Receive Stock"><ReceiveStockForm onSaved={() => setShowReceive(false)} /></Modal>
       <FuelPrices />
+      {isOwner && <SupplierDebt />}
       <Card><CardHead title="Shidaalkii soo galay" action={<ActionLink className="btn" href="/stock/receive">View Receipts</ActionLink>} /><div className="card-body"><p>Eeg shidaalka la soo iibsaday iyo rasiidhadiisa.</p></div></Card>
-      <Card><details className="simple-disclosure"><summary>Taariikhda kaydka (Stock history)</summary>
+      <Card><details className="simple-disclosure"><summary>Taariikhda kaydka</summary>
         <div className="toolbar">
           <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", width: "100%" }}>
             <select

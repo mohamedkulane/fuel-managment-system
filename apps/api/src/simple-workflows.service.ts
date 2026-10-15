@@ -3,11 +3,12 @@ import { createHash, randomUUID } from "node:crypto";
 import { Prisma } from "@fuel/database";
 import { PrismaService } from "./prisma.service.js";
 import type { Actor } from "./auth.js";
+import { FinancialWorkflowsService } from "./financial-workflows.service.js";
 
 type Tx = Prisma.TransactionClient;
-export type SimpleOrderInput = { customerId: string; fuelId: string; salesUnitId: string; quantity: string; expectedPriceId: string; address: string; discount?: string; paidNow?: string; notes?: string };
-export type SimpleReceiptInput = { fuelId: string; quantity: string; date: string; supplier?: string; notes?: string; unitCost?: string; totalCost?: string };
-export type SimplePaymentInput = { customerId: string; amount: string; method?: "CASH" | "BANK_TRANSFER" | "EVC_PLUS" | "EDAHAB" | "OTHER"; reference?: string; notes?: string; paymentDate?: string };
+export type SimpleOrderInput = { customerId: string; fuelId: string; salesUnitId: string; quantity: string; expectedPriceId: string; address: string; discount?: string; paidNow?: string; financialAccountId?: string; paymentMethod?: "CASH" | "BANK_TRANSFER" | "EVC_PLUS" | "EDAHAB" | "OTHER"; paymentReference?: string; notes?: string };
+export type SimpleReceiptInput = { fuelId: string; quantity: string; date: string; supplier?: string; supplierId?: string; notes?: string; unitCost?: string; totalCost?: string; paidNow?: string; financialAccountId?: string };
+export type SimplePaymentInput = { customerId: string; amount: string; financialAccountId?: string; method?: "CASH" | "BANK_TRANSFER" | "EVC_PLUS" | "EDAHAB" | "OTHER"; reference?: string; notes?: string; paymentDate?: string };
 export type SimpleDeliveryInput = { orderId: string; lines: { orderLineId: string; acceptedUnits: string; remaining?: "RETURNED" | "IN_TRANSIT"; reason?: string }[] };
 const d = (v: string) => new Prisma.Decimal(v);
 const no = (prefix: string) => `${prefix}-${Date.now()}-${randomUUID().slice(0,8)}`;
@@ -20,7 +21,7 @@ function required(value: unknown, field: string) { if (typeof value !== "string"
 
 @Injectable()
 export class SimpleWorkflowsService {
-  constructor(@Inject(PrismaService) private readonly db: PrismaService) {}
+  constructor(@Inject(PrismaService) private readonly db: PrismaService, @Inject(FinancialWorkflowsService) private readonly financial: FinancialWorkflowsService) {}
 
   // The request result is committed with its effects. A lost response can be replayed safely.
   async execute(actor: Actor, key: string | undefined, kind: string, input: object, work: (tx: Tx) => Promise<Prisma.InputJsonObject>) {
@@ -59,7 +60,9 @@ export class SimpleWorkflowsService {
     if (!await tx.customer.findUnique({ where: { id: required(input.customerId,"Customer") } })) throw new NotFoundException("Customer not found");
     const paymentDate = input.paymentDate ? new Date(input.paymentDate) : new Date();
     if (!Number.isFinite(paymentDate.getTime())) throw new BadRequestException("Enter a valid payment date");
-    const payment = await tx.payment.create({ data: { paymentNo: no("PAY"), customerId: input.customerId, orderId, amount: value, unappliedAmount: value, allocatedAmount: d("0"), paymentDate, paymentMethod: method, reference: input.reference?.trim() || null, notes: input.notes?.trim() || null, recordedById: actor.id } });
+    const financialAccountId = required(input.financialAccountId, "Financial account");
+    const payment = await tx.payment.create({ data: { paymentNo: no("PAY"), customerId: input.customerId, orderId, amount: value, unappliedAmount: value, allocatedAmount: d("0"), paymentDate, paymentMethod: method, reference: input.reference?.trim() || null, notes: input.notes?.trim() || null, recordedById: actor.id, financialAccountId } });
+    await this.financial.postMovement(tx, actor, { accountId: financialAccountId, direction: "MONEY_IN", kind: "CUSTOMER_PAYMENT", amount: value, occurredAt: paymentDate, sourceType: "Payment", sourceId: payment.id, referenceNo: payment.paymentNo, description: orderId ? "Paid Now for order" : "Customer debt payment" });
     await this.ledger(tx, input.customerId, "PAYMENT", payment.paymentNo, payment.id, value);
     if (!orderId) {
       const invoices = await tx.invoice.findMany({ where: { customerId: input.customerId, status: { in: ["UNPAID","PARTIALLY_PAID"] } }, orderBy: [{ issueDate:"asc" },{ id:"asc" }] });
@@ -133,6 +136,10 @@ export class SimpleWorkflowsService {
       const reversal = await tx.paymentReversal.create({
         data: { reversalNo: no("PREV"), paymentId: payment.id, idempotencyKey: key!, reason, reversedById: actor.id }
       });
+      if (payment.financialAccountId) {
+        const originalMovement = await tx.financialAccountMovement.findFirst({ where: { sourceType: "Payment", sourceId: payment.id, kind: "CUSTOMER_PAYMENT" } });
+        await this.financial.postMovement(tx, actor, { accountId: payment.financialAccountId, direction: "MONEY_OUT", kind: "CUSTOMER_PAYMENT_REVERSAL", amount: payment.amount, occurredAt: new Date(), sourceType: "PaymentReversal", sourceId: reversal.id, referenceNo: reversal.reversalNo, description: reason, reversalOfId: originalMovement?.id });
+      }
       const totals = await tx.customerLedgerEntry.aggregate({ where: { customerId: payment.customerId }, _sum: { debitAmount: true, creditAmount: true } });
       const prior = (totals._sum.debitAmount ?? d("0")).sub(totals._sum.creditAmount ?? d("0"));
       await tx.customerLedgerEntry.create({
@@ -159,11 +166,19 @@ export class SimpleWorkflowsService {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date)) throw new BadRequestException("Purchase date is required");
       const date = new Date(`${input.date}T12:00:00+03:00`); if (!Number.isFinite(date.getTime())) throw new BadRequestException("Invalid date");
       if (!await tx.fuelType.findFirst({ where: { id:input.fuelId, active:true } })) throw new BadRequestException("Select an active fuel");
-      if ((input.unitCost || input.totalCost) && actor.role !== "OWNER") throw new ForbiddenException("Purchase costs are owner-only");
+      if ((input.unitCost || input.totalCost || input.supplierId || input.paidNow || input.financialAccountId) && actor.role !== "OWNER") throw new ForbiddenException("Supplier costs and payments are owner-only");
       const unit = input.unitCost ? amount(input.unitCost,"Unit cost") : input.totalCost ? amount(input.totalCost,"Total cost").div(units).toDecimalPlaces(4) : null;
       const total = input.totalCost ? amount(input.totalCost,"Total cost") : unit?.mul(units).toDecimalPlaces(4) ?? null;
       if (input.unitCost && input.totalCost && unit && total && unit.mul(units).sub(total).abs().gt("0.01")) throw new BadRequestException("Purchase costs do not match");
-      const receipt = await tx.tankerReceipt.create({ data: { receiptNo:no("REC"), tankerReference:input.supplier, arrivedAt:date, notes:input.notes, status:"POSTED", createdById:actor.id, postedById:actor.id, postedAt:new Date(), postIdempotencyKey:key, lines:{create:{fuelId:input.fuelId, quantityFuusto:units, litersPerFuustoSnapshot:d("240"), actualLiters:liters, expectedLiters:liters, unitPurchaseCost:unit, totalPurchaseCost:total}} }, include:{lines:true} });
+      if (total && !input.supplierId) throw new BadRequestException("Supplier is required when purchase cost is recorded");
+      const paidNow = amount(input.paidNow || "0", "Paid now", true);
+      if (paidNow.gt(0) && (!total || !input.financialAccountId)) throw new BadRequestException("Paid Now requires purchase cost and a financial account");
+      if (total && paidNow.gt(total)) throw new BadRequestException("Paid Now cannot exceed the purchase total");
+      const receipt = await tx.tankerReceipt.create({ data: { receiptNo:no("REC"), tankerReference:input.supplier, supplierId:input.supplierId || null, arrivedAt:date, notes:input.notes, status:"POSTED", createdById:actor.id, postedById:actor.id, postedAt:new Date(), postIdempotencyKey:key, lines:{create:{fuelId:input.fuelId, quantityFuusto:units, litersPerFuustoSnapshot:d("240"), actualLiters:liters, expectedLiters:liters, unitPurchaseCost:unit, totalPurchaseCost:total}} }, include:{lines:true} });
+      if (total && unit && input.supplierId) {
+        const purchase = await this.financial.createSupplierPurchase(tx, actor, { supplierId: input.supplierId, receiptId: receipt.id, fuelId: input.fuelId, quantityFuusto: units, unitCost: unit, totalCost: total, purchaseDate: date });
+        if (paidNow.gt(0)) await this.financial.createSupplierPaymentInTransaction(tx, actor, `${key}:supplier`, { supplierId: input.supplierId, financialAccountId: required(input.financialAccountId, "Financial account"), amount: paidNow, paymentDate: date, reference: receipt.receiptNo, notes: "Paid with stock receipt", purchaseId: purchase.id });
+      }
       await tx.stockBalance.upsert({where:{fuelId_location:{fuelId:input.fuelId,location:"WAREHOUSE"}},create:{fuelId:input.fuelId,location:"WAREHOUSE",balanceLiters:liters},update:{balanceLiters:{increment:liters},version:{increment:1}}});
       await tx.inventoryMovement.create({data:{fuelId:input.fuelId,location:"WAREHOUSE",signedDeltaLiters:liters,eventType:"RECEIPT",sourceType:"TankerReceiptLine",sourceId:receipt.id,sourceLineId:receipt.lines[0]!.id,createdById:actor.id}});
       await this.audit(tx,actor,"TankerReceipt",receipt.id,"POSTED");
@@ -262,7 +277,7 @@ export class SimpleWorkflowsService {
       if(customer.creditLimit !== null) { const debt = await tx.invoice.aggregate({where:{customerId:customer.id,status:{in:["UNPAID","PARTIALLY_PAID"]}},_sum:{balanceDue:true}}); if((debt._sum.balanceDue ?? d("0")).add(subtotal.sub(discount)).gt(customer.creditLimit)) throw new BadRequestException("Customer credit limit exceeded"); }
       const pending = discount.gt(0) && actor.role !== "OWNER";
       const order = await tx.salesOrder.create({data:{orderNo:no("SO"),customerId:customer.id,orderDate:now,addressSnapshot:required(input.address,"Address"),notes:input.notes,createdById:actor.id,status:pending?"DRAFT":"CONFIRMED",confirmedAt:pending?null:now,confirmedById:pending?null:actor.id,confirmationIdempotencyKey:pending?null:key,subtotal:pending?null:subtotal,totalAmount:pending?null:netTotal,fixedDiscountAmount:discount,discountApprovedById:discount.gt(0)&&!pending?actor.id:null,discountApprovedAt:discount.gt(0)&&!pending?now:null,lines:{create:{fuelId:input.fuelId,salesUnitId:input.salesUnitId,requestedUnits:units,conversionVersionId:pending?null:conversion.id,litersPerUnitSnapshot:pending?null:d("240"),requestedLitersSnapshot:pending?null:units.mul(240),priceVersionId:pending?null:price.id,unitPriceSnapshot:pending?null:price.unitPrice,confirmedAt:pending?null:now}}}});
-      if(paid.gt(0)) await this.collect(tx,actor,{customerId:customer.id,amount:paid.toFixed(4)},order.id);
+      if(paid.gt(0)) await this.collect(tx,actor,{customerId:customer.id,amount:paid.toFixed(4),financialAccountId:input.financialAccountId,method:input.paymentMethod,reference:input.paymentReference},order.id);
       await tx.orderEvent.create({data:{orderId:order.id,kind:pending?"DISCOUNT_REQUESTED":"CONFIRMED",newValues:{status:order.status,reviewedPriceId:price.id,fixedDiscountAmount:discount.toFixed(4)},actorId:actor.id}});
       await this.audit(tx,actor,"SalesOrder",order.id,pending?"DISCOUNT_REQUESTED":"CONFIRMED");
       return {id:order.id,status:order.status};

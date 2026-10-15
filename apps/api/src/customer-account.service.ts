@@ -46,6 +46,7 @@ export class CustomerAccountService {
         include: {
           order: { select: { id: true, orderNo: true } },
           recordedBy: true,
+          financialAccount: true,
           reversals: { orderBy: { reversedAt: "desc" } },
           allocations: { include: { invoice: { include: { lines: { include: { orderLine: { select: { orderId: true, order: { select: { orderNo: true } } } } } } } } } }
         }
@@ -169,6 +170,7 @@ export class CustomerAccountService {
         relatedOrders: [...related.entries()].map(([id, orderNo]) => ({ id, orderNo })),
         relationLabel: related.size === 0 ? "Needs review" : related.size === 1 ? [...related.values()][0]! : "Multiple orders",
         recordedBy: payment.recordedBy.displayName,
+        accountName: payment.financialAccount?.name ?? "Unassigned / Needs mapping",
         reversalReason: payment.reversals[0]?.reason ?? null,
         reversedAt: payment.reversals[0]?.reversedAt ?? null
       };

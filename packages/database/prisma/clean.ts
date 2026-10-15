@@ -7,6 +7,12 @@ async function clean(): Promise<void> {
   console.log("🧹 Starting complete system data cleanup...");
 
   // 1. Transactional Cleanup (in reverse foreign key dependency order)
+  console.log("Removing supplier payments and allocations...");
+  await prisma.supplierPaymentAllocation.deleteMany({});
+  await prisma.supplierPaymentReversal.deleteMany({});
+  await prisma.supplierPayment.deleteMany({});
+  await prisma.supplierPurchase.deleteMany({});
+
   console.log("Removing payment allocations and reversals...");
   await prisma.paymentAllocation.deleteMany({});
   await prisma.paymentReversal.deleteMany({});
@@ -44,8 +50,21 @@ async function clean(): Promise<void> {
   await prisma.tankerReceiptLine.deleteMany({});
   await prisma.tankerReceipt.deleteMany({});
 
-  console.log("Removing inventory movements...");
+  console.log("Removing suppliers...");
+  await prisma.supplier.deleteMany({});
+
+  console.log("Removing expenses and transfers...");
+  await prisma.expenseReversal.deleteMany({});
+  await prisma.businessExpense.deleteMany({});
+  await prisma.accountTransfer.deleteMany({});
+
+  console.log("Removing financial account movements and accounts...");
+  await prisma.financialAccountMovement.deleteMany({});
+  await prisma.financialAccount.deleteMany({});
+
+  console.log("Removing inventory movements and workflow requests...");
   await prisma.inventoryMovement.deleteMany({});
+  await prisma.workflowRequest.deleteMany({});
 
   console.log("Removing sessions and audit logs...");
   await prisma.session.deleteMany({});

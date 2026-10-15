@@ -1,5 +1,6 @@
 import PDFDocument from "pdfkit";
 import { addDocumentFooter, drawDocumentLogo, type ResolvedDocumentBranding } from "./document-branding.js";
+import { somaliLabel } from "./somali-labels.js";
 
 export function compactPaymentReference(reference: string): string {
   const match = /^PAY-\d{13}-([a-f0-9]{8})$/i.exec(reference);
@@ -42,7 +43,7 @@ export async function createCustomerStatementPdf(input: {
     const right = 557;
     const width = right - left;
     const columns = [25, 65, 50, 72, 157, 75, 75];
-    const labels = ["#", "Date", "Type", "Reference", "Description", "Amount", "Balance"];
+    const labels = ["#", "Taariikh", "Nooca", "Tixraac", "Sharaxaad", "Lacagta", "Haraag"];
     let page = 0;
     let y = 0;
 
@@ -50,9 +51,9 @@ export async function createCustomerStatementPdf(input: {
       if (page > 0) doc.addPage();
       page += 1;
       drawDocumentLogo(doc, input.branding, left, 35, 45, 32);
-      doc.font("Helvetica-Bold").fontSize(14).fillColor("#111111").text("CUSTOMER STATEMENT", 297, 41, { width: 260, align: "right" });
-      doc.font("Helvetica").fontSize(7).fillColor("#444444").text(`Period: ${input.period}`, 297, 60, { width: 260, align: "right" });
-      doc.text(`Generated: ${input.generatedAt}`, 297, 71, { width: 260, align: "right" });
+      doc.font("Helvetica-Bold").fontSize(14).fillColor("#111111").text("WARBIXINTA XISAABTA MACMIILKA", 297, 41, { width: 260, align: "right" });
+      doc.font("Helvetica").fontSize(7).fillColor("#444444").text(`Muddada: ${input.period}`, 297, 60, { width: 260, align: "right" });
+      doc.text(`La diyaariyey: ${input.generatedAt}`, 297, 71, { width: 260, align: "right" });
       doc.moveTo(left, 99).lineTo(right, 99).strokeColor("#777777").lineWidth(0.55).stroke();
       y = 117;
     };
@@ -66,14 +67,14 @@ export async function createCustomerStatementPdf(input: {
     const ensure = (height: number) => { if (y + height > 655) { pageHeader(); tableHeader(); } };
 
     pageHeader();
-    doc.font("Helvetica-Bold").fontSize(7.5).fillColor("#333333").text("CUSTOMER", left, y);
+    doc.font("Helvetica-Bold").fontSize(7.5).fillColor("#333333").text("MACMIILKA", left, y);
     doc.font("Helvetica-Bold").fontSize(11).fillColor("#111111").text(input.customer.name, left, y + 17, { width: 235, ellipsis: true });
     const customerMeta = [input.customer.phone, input.customer.location].filter(Boolean).join("  ·  ");
     if (customerMeta) doc.font("Helvetica").fontSize(7.5).fillColor("#333333").text(customerMeta, left, y + 37, { width: 235, ellipsis: true });
     doc.moveTo(279, y - 2).lineTo(279, y + 85).strokeColor("#bbbbbb").lineWidth(0.45).stroke();
-    const summary = [
-      ["Opening Debt", input.openingDebt], ["Total Sales", input.totalSales], ["Total Payments", input.totalPaid],
-      ["Current Balance", input.remainingDebt], ["Pending Orders", input.pendingOrderRemaining]
+    const summary: Array<[string, string]> = [
+      ["Deyntii Bilowga", input.openingDebt], ["Wadarta Iibka", input.totalSales], ["Wadarta Lacag-bixinnada", input.totalPaid],
+      ["Deynta Hadda", input.remainingDebt], ["Dalabyada Sugaya", input.pendingOrderRemaining]
     ];
     let summaryY = y;
     summary.forEach(([label, value], index) => {
@@ -85,13 +86,13 @@ export async function createCustomerStatementPdf(input: {
     });
     y += 104;
     if (!/^0(?:\.0+)?$/.test(input.moneyToReview)) {
-      doc.font("Helvetica").fontSize(7.5).fillColor("#333333").text(`Owner review needed: $${input.moneyToReview}`, left, y - 10, { width });
+      doc.font("Helvetica").fontSize(7.5).fillColor("#333333").text(`Milkiiluhu waa inuu hubiyaa: $${input.moneyToReview}`, left, y - 10, { width });
     }
     tableHeader();
 
     if (!input.orders.length) {
       doc.rect(left, y, width, 34).strokeColor("#d4d4d4").lineWidth(0.4).stroke();
-      doc.font("Helvetica").fontSize(8).fillColor("#555555").text("No order activity in this period.", left + 8, y + 13, { width: width - 16, align: "center" });
+      doc.font("Helvetica").fontSize(8).fillColor("#555555").text("Muddadan wax dhaqdhaqaaq dalab ahi ma jiro.", left + 8, y + 13, { width: width - 16, align: "center" });
       y += 34;
     }
     let record = 0;
@@ -108,21 +109,21 @@ export async function createCustomerStatementPdf(input: {
     for (const order of input.orders) {
       record += 1;
       const hasSale = !/^0(?:\.0+)?$/.test(order.acceptedSale);
-      const description = hasSale ? `${order.fuel} delivered sale` : `${order.fuel} order — delivery pending`;
-      const balance = order.remainingLabel === "Settled" ? "Settled" : `${order.remainingLabel} $${order.remaining}`;
-      drawRow([String(record), order.date, hasSale ? "Sale" : "Order", order.orderNo, description, hasSale ? `$${order.acceptedSale}` : "—", balance], 26);
+      const description = hasSale ? `${somaliLabel(order.fuel)} iib la geeyey` : `Dalabka ${somaliLabel(order.fuel)} — gaarsiin sugaysa`;
+      const balance = order.remainingLabel === "Settled" ? "La Bixiyey" : `${somaliLabel(order.remainingLabel)} $${order.remaining}`;
+      drawRow([String(record), order.date, hasSale ? "Iib" : "Dalab", order.orderNo, description, hasSale ? `$${order.acceptedSale}` : "—", balance], 26);
       for (const payment of order.payments) {
         record += 1;
-        drawRow([String(record), payment.date, "Payment", payment.reference, payment.status === "Reversed" ? "Payment reversed" : "Payment received", payment.status === "Reversed" ? "—" : `$${payment.amount}`, balance], 26);
+        drawRow([String(record), payment.date, "Lacag-bixin", payment.reference, payment.status === "Reversed" ? "Lacag-bixinta waa laga noqday" : "Lacagta waa la qabtay", payment.status === "Reversed" ? "—" : `$${payment.amount}`, balance], 26);
       }
     }
 
     const notesY = Math.max(y + 28, 620);
     doc.moveTo(left, notesY).lineTo(left + 225, notesY).strokeColor("#777777").lineWidth(0.45).stroke();
-    doc.font("Helvetica-Bold").fontSize(8).fillColor("#222222").text("NOTES", left, notesY + 9);
-    doc.font("Helvetica").fontSize(7.2).fillColor("#333333").text("• Delivered sales form the customer debt.\n• Pending orders stay separate until delivery is accepted.", left, notesY + 23, { lineGap: 3 });
+    doc.font("Helvetica-Bold").fontSize(8).fillColor("#222222").text("FAAHFAAHIN", left, notesY + 9);
+    doc.font("Helvetica").fontSize(7.2).fillColor("#333333").text("• Iibka la geeyey ayaa noqda deynta macmiilka.\n• Dalabyada sugaya way ka go'an yihiin deynta ilaa gaarsiinta la aqbalo.", left, notesY + 23, { lineGap: 3 });
     doc.moveTo(386, notesY + 42).lineTo(right, notesY + 42).strokeColor("#777777").lineWidth(0.45).stroke();
-    doc.font("Helvetica").fontSize(8).fillColor("#333333").text("Thank you!", 386, notesY + 50, { width: right - 386, align: "center" });
+    doc.font("Helvetica").fontSize(8).fillColor("#333333").text("Waad ku mahadsan tahay!", 386, notesY + 50, { width: right - 386, align: "center" });
     addDocumentFooter(doc, input.branding);
     doc.end();
   });

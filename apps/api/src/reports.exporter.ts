@@ -1,6 +1,7 @@
 import PDFDocument from "pdfkit";
 import ExcelJS from "exceljs";
 import { addDocumentFooter, drawDocumentLogo, type ResolvedDocumentBranding } from "./document-branding.js";
+import { somaliLabel } from "./somali-labels.js";
 
 export type ColumnDef = {
   header: string;
@@ -40,26 +41,26 @@ export async function exportToPdf(options: {
     const tableWidth = pageWidth;
     const tableBottom = doc.page.height - (options.branding ? 54 : margin);
     doc.font("Helvetica-Bold").fontSize(15).fillColor("#0f172a")
-      .text(options.title.toUpperCase(), margin, 84, { width: pageWidth, align: "right" });
+      .text(somaliLabel(options.title).toUpperCase(), margin, 84, { width: pageWidth, align: "right" });
     if (options.subtitle) {
       doc.font("Helvetica").fontSize(9).fillColor("#666666")
         .text(options.subtitle, margin, doc.y + 3, { width: pageWidth, align: "right" });
     }
     doc.font("Helvetica").fontSize(8).fillColor("#999999")
-      .text(`Generated: ${new Date().toISOString().slice(0, 19).replace("T", " ")} UTC`, margin, doc.y + 3, {
+      .text(`${somaliLabel("Generated")}: ${new Date().toISOString().slice(0, 19).replace("T", " ")} UTC`, margin, doc.y + 3, {
         width: pageWidth,
         align: "right"
       });
 
     let currentY = doc.y + 12;
     if (options.filters && Object.keys(options.filters).length > 0) {
-      const filters = "Applied Filters: " + Object.entries(options.filters).map(([key, value]) => `${key}: ${value}`).join(" | ");
+      const filters = "Kala shaandhaynta la adeegsaday: " + Object.entries(options.filters).map(([key, value]) => `${somaliLabel(key)}: ${somaliLabel(value)}`).join(" | ");
       doc.font("Helvetica").fontSize(8).fillColor("#475569")
         .text(filters, tableX, currentY, { width: tableWidth });
       currentY = doc.y + 8;
     }
 
-    const widthWeight = (column: ColumnDef) => Math.max(1, column.width ?? column.header.length + 4);
+    const widthWeight = (column: ColumnDef) => Math.max(1, column.width ?? somaliLabel(column.header).length + 4);
     const totalWeight = options.columns.reduce((total, column) => total + widthWeight(column), 0);
     const columnWidths = options.columns.map((column) => tableWidth * widthWeight(column) / totalWeight);
     const columnX = columnWidths.map((_, index) =>
@@ -70,6 +71,7 @@ export async function exportToPdf(options: {
       if (value === null || value === undefined) return "—";
       if (column.format === "currency") return `$${parseFloat(String(value)).toFixed(2)}`;
       if (column.format === "decimal") return parseFloat(String(value)).toFixed(3);
+      if (column.format === "badge") return somaliLabel(String(value));
       return String(value);
     };
     const measuredHeight = (
@@ -87,12 +89,12 @@ export async function exportToPdf(options: {
         )
       );
     };
-    const headerHeight = measuredHeight(options.columns.map((column) => column.header), 8, 24, 10, "Helvetica-Bold");
+    const headerHeight = measuredHeight(options.columns.map((column) => somaliLabel(column.header)), 8, 24, 10, "Helvetica-Bold");
     const drawTableHeader = () => {
       doc.rect(tableX, currentY, tableWidth, headerHeight).fill("#1e293b");
       doc.font("Helvetica-Bold").fontSize(8).fillColor("#ffffff");
       options.columns.forEach((column, index) => {
-        doc.text(column.header, columnX[index]! + 5, currentY + 5, {
+        doc.text(somaliLabel(column.header), columnX[index]! + 5, currentY + 5, {
           width: cellWidth(index),
           height: headerHeight - 10,
           lineGap: 1,
@@ -131,7 +133,7 @@ export async function exportToPdf(options: {
 
     if (options.totals) {
       const values = options.columns.map((column, index) => {
-        if (index === 0) return "TOTALS";
+        if (index === 0) return "WADARTA";
         const value = options.totals![column.key];
         return value === null || value === undefined || value === "" ? "" : cellText(column, value);
       });
@@ -163,7 +165,7 @@ export async function exportToExcel(options: {
   branding?: ResolvedDocumentBranding;
 }): Promise<Buffer> {
   const workbook = new ExcelJS.Workbook();
-  workbook.creator = "Fuel Wholesale Management System";
+  workbook.creator = "FuelDesk";
   workbook.created = new Date();
 
   const hasLogo = Boolean(options.branding?.logo);
@@ -173,7 +175,7 @@ export async function exportToExcel(options: {
   // Title block
   worksheet.mergeCells(titleRow, 1, titleRow, options.columns.length);
   const titleCell = worksheet.getCell(titleRow, 1);
-  titleCell.value = `${options.title.toUpperCase()} (Generated: ${new Date().toISOString().slice(0, 10)})`;
+  titleCell.value = `${somaliLabel(options.title).toUpperCase()} (La diyaariyey: ${new Date().toISOString().slice(0, 10)})`;
   titleCell.font = { name: "Arial", size: 14, bold: true, color: { argb: "FFFFFFFF" } };
   titleCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF0F172A" } };
   titleCell.alignment = { vertical: "middle", horizontal: "left" };
@@ -185,11 +187,11 @@ export async function exportToExcel(options: {
 
   let startRow = titleRow + 1;
   if (options.filters && Object.keys(options.filters).length > 0) {
-    const filterText = Object.entries(options.filters).map(([k, v]) => `${k}: ${v}`).join(" | ");
+    const filterText = Object.entries(options.filters).map(([k, v]) => `${somaliLabel(k)}: ${somaliLabel(v)}`).join(" | ");
     const filterRow = titleRow + 1;
     worksheet.mergeCells(filterRow, 1, filterRow, options.columns.length);
     const filterCell = worksheet.getCell(filterRow, 1);
-    filterCell.value = `Filters: ${filterText}`;
+    filterCell.value = `Kala shaandhayn: ${filterText}`;
     filterCell.font = { name: "Arial", size: 10, italic: true };
     startRow = titleRow + 2;
   }
@@ -198,7 +200,7 @@ export async function exportToExcel(options: {
   const headerRow = worksheet.getRow(startRow);
   options.columns.forEach((col, idx) => {
     const cell = headerRow.getCell(idx + 1);
-    cell.value = col.header;
+    cell.value = somaliLabel(col.header);
     cell.font = { name: "Arial", size: 11, bold: true, color: { argb: "FFFFFFFF" } };
     cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1E293B" } };
     cell.alignment = { vertical: "middle", horizontal: col.align || "left" };
@@ -212,6 +214,7 @@ export async function exportToExcel(options: {
         let val = row[col.key] ?? "";
         if (col.format === "currency" && val !== "") return parseFloat(val);
         if (col.format === "decimal" && val !== "") return parseFloat(val);
+        if (col.format === "badge" && val !== "") return somaliLabel(String(val));
         return val;
       })
     );
@@ -227,7 +230,7 @@ export async function exportToExcel(options: {
   // Totals Row
   if (options.totals) {
     const totalsRowValues = options.columns.map((col, idx) => {
-      if (idx === 0) return "TOTALS";
+      if (idx === 0) return "WADARTA";
       let val = options.totals![col.key] ?? "";
       if ((col.format === "currency" || col.format === "decimal") && val !== "") return parseFloat(val);
       return val;
@@ -248,7 +251,7 @@ export async function exportToExcel(options: {
     const footerRow = worksheet.lastRow!.number + 2;
     worksheet.mergeCells(footerRow, 1, footerRow, options.columns.length);
     const footerCell = worksheet.getCell(footerRow, 1);
-    footerCell.value = options.branding.footerText ?? "Fuel Wholesale Management System";
+    footerCell.value = options.branding.footerText ?? "FuelDesk";
     footerCell.font = { name: "Arial", size: 9, italic: true, color: { argb: "FF5D6B64" } };
     footerCell.alignment = { horizontal: "center" };
   }
@@ -256,7 +259,7 @@ export async function exportToExcel(options: {
   // Column Widths
   options.columns.forEach((col, idx) => {
     const column = worksheet.getColumn(idx + 1);
-    column.width = col.width ?? Math.max(15, col.header.length + 5);
+    column.width = col.width ?? Math.max(15, somaliLabel(col.header).length + 5);
   });
 
   const arrayBuffer = await workbook.xlsx.writeBuffer();

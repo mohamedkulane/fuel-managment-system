@@ -3,14 +3,14 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
-import { BarChart3, Boxes, CalendarDays, ChevronRight, ClipboardList, Clock3, Fuel, LayoutGrid, LogOut, Menu, Receipt, Repeat2, Settings, ShoppingBag, TrendingUp, Truck, Users, Wallet, X } from "lucide-react";
+import { BarChart3, Boxes, LayoutGrid, Menu, Receipt, Settings, ShoppingBag, Users, Wallet, X } from "lucide-react";
 import { api, ApiError, type Actor } from "../lib/api";
 import { ErrorState, LoadingState } from "./ui";
 import { formatRole } from "../lib/format";
 import { WorkspaceHeader } from "./workspace-header";
 
 const groups = [
-  { label: "", links: [{ href: "/", label: "Guudmar", icon: LayoutGrid }, { href: "/customers", label: "Macaamiisha", icon: Users }, { href: "/orders", label: "Dalabyada", icon: ShoppingBag }, { href: "/stock", label: "Kaydka Shidaalka", icon: Boxes }, { href: "/reports", label: "Warbixinnada", icon: BarChart3 }, { href: "/settings", label: "Dejinta", icon: Settings }] }
+  { label: "", links: [{ href: "/", label: "Guudmar", icon: LayoutGrid }, { href: "/customers", label: "Macaamiisha", icon: Users }, { href: "/orders", label: "Dalabyada", icon: ShoppingBag }, { href: "/stock", label: "Kaydka Shidaalka", icon: Boxes }, { href: "/expenses", label: "Kharashaadka", icon: Receipt }, { href: "/accounts", label: "Akoonnada", icon: Wallet }, { href: "/reports", label: "Warbixinnada", icon: BarChart3 }, { href: "/settings", label: "Dejinta", icon: Settings }] }
 ];
 type DocumentBranding = { companyName: string; logoUrl: string };
 export function Brand({ logoUrl, companyName = "FuelDesk" }: { logoUrl?: string; companyName?: string }) {
@@ -19,7 +19,7 @@ export function Brand({ logoUrl, companyName = "FuelDesk" }: { logoUrl?: string;
   return <div className="brand">{logoUrl && !logoFailed
     ? <img className="brand-logo" src={logoUrl} alt="" onError={() => setLogoFailed(true)} />
     : <span className="brand-mark">F</span>}
-    <div className="brand-copy"><strong title={companyName}>{companyName}</strong><small>Fuel wholesale management</small></div>
+    <div className="brand-copy"><strong title={companyName}>{companyName}</strong><small>Maamulka shidaalka jumlada</small></div>
   </div>;
 }
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -56,12 +56,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const sectionPath = /^\/(payments|debts|invoices)(\/|$)/.test(path) ? "/customers" : /^\/(deliveries|dispatches)(\/|$)/.test(path) ? "/orders" : path === "/pricing" ? "/stock" : path === "/audits" ? "/settings" : path;
   const activeLink = groups.flatMap(g => g.links).filter(l => l.href === "/" ? sectionPath === "/" : sectionPath === l.href || sectionPath.startsWith(`${l.href}/`)).sort((a,b) => b.href.length-a.href.length)[0];
   const initials = me.data?.displayName.split(" ").map(n => n[0]).slice(0,2).join("") ?? "";
-  return <div className="app-shell"><a href="#workspace-content" className="skip-link">U gudub nuxurka</a><button className={`backdrop ${open ? "open" : ""}`} aria-label="Xir meertada" onClick={() => setOpen(false)} tabIndex={-1} />
-    <aside ref={sidebar} className={`sidebar ${open ? "open" : ""}`} aria-label="Meertada goobta shaqada"><div className="brand-row"><Brand logoUrl={branding.data?.logoUrl || undefined} companyName={branding.data?.companyName || undefined} /><button className="sidebar-close icon-btn" aria-label="Xir meertada" onClick={() => setOpen(false)}><X size={19} /></button></div>
-      <nav className="side-nav" aria-label="Meertada koowaad">{groups.map(group => <div key={group.label}><p>{group.label}</p>{group.links.filter(l => l.href !== "/audits" || me.data?.role === "OWNER").map(({ href, label, icon: Icon }) => <Link key={href} href={href} onClick={() => setOpen(false)} aria-current={activeLink?.href === href ? "page" : undefined} className={activeLink?.href === href ? "active" : ""}><Icon size={17} strokeWidth={1.7} aria-hidden="true" />{label}</Link>)}</div>)}</nav>
+  return <div className="app-shell"><a href="#workspace-content" className="skip-link">U gudub nuxurka</a><button className={`backdrop ${open ? "open" : ""}`} aria-label="Xir liiska" onClick={() => setOpen(false)} tabIndex={-1} />
+    <aside ref={sidebar} className={`sidebar ${open ? "open" : ""}`} aria-label="Liiska goobta shaqada"><div className="brand-row"><Brand logoUrl={branding.data?.logoUrl || undefined} companyName={branding.data?.companyName || undefined} /><button className="sidebar-close icon-btn" aria-label="Xir liiska" onClick={() => setOpen(false)}><X size={19} /></button></div>
+      <nav className="side-nav" aria-label="Liiska qaybaha">{groups.map(group => <div key={group.label}><p>{group.label}</p>{group.links.filter(l => l.href !== "/audits" || me.data?.role === "OWNER").map(({ href, label, icon: Icon }) => <Link key={href} href={href} onClick={() => setOpen(false)} aria-current={activeLink?.href === href ? "page" : undefined} className={activeLink?.href === href ? "active" : ""}><Icon size={17} strokeWidth={1.7} aria-hidden="true" />{label}</Link>)}</div>)}</nav>
       <div className="sidebar-foot"><div className="avatar">{initials}</div><div className="sidebar-user"><b>{me.data?.displayName ?? "Raraya…"}</b><small>{formatRole(me.data?.role)}</small></div></div>
     </aside>
-    <div className="workspace" inert={open ? true : undefined}><header className="topbar"><button ref={menu} className="menu-btn icon-btn" aria-label="Open menu" aria-expanded={open} onClick={() => setOpen(true)}><Menu size={20} /></button><WorkspaceHeader actor={me.data} /></header>
+    <div className="workspace" inert={open ? true : undefined}><header className="topbar"><button ref={menu} className="menu-btn icon-btn" aria-label="Fur liiska" aria-expanded={open} onClick={() => setOpen(true)}><Menu size={20} /></button><WorkspaceHeader actor={me.data} /></header>
       <div id="workspace-content" tabIndex={-1}>{logout.isError && <ErrorState message={logout.error.message} />}{me.isLoading ? <main className="page"><LoadingState label="Soo raraya goobtaada shaqada…" /></main> : me.isError ? <main className="page"><ErrorState message={me.error.message} retry={() => void me.refetch()} /></main> : me.data ? children : null}</div>
     </div></div>;
 }

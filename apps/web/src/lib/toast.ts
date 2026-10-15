@@ -1,15 +1,15 @@
 import toast from "react-hot-toast";
+import { ApiError } from "./api";
+import { so, soError } from "./so";
 
 const feedbackId = "workflow-feedback";
-export function notifySuccess(message: string) { toast.success(message, { id: feedbackId }); }
+export function notifySuccess(message: string) { toast.success(so(message), { id: feedbackId }); }
 
 export function errorMessage(error: unknown, fallback: string): string {
   const message = error instanceof Error ? error.message : "";
-  if (/^Debt is \$\d{1,14}\.\d{2}\. You cannot pay more\.$/.test(message)) return message;
-  if (message === "No debt to pay" || message === "No orders for this date") return message;
-  if (/price changed/i.test(message)) return "Price changed. Review the order.";
-  if (/insufficient|not enough stock/i.test(message)) return "Not enough stock.";
-  if (/network|failed to fetch|fetch failed/i.test(message)) return "Connection problem. Try again.";
-  return fallback;
+  if (error instanceof ApiError) return soError(message, error.status);
+  if (/network|failed to fetch|fetch failed/i.test(message)) return soError(message, 0);
+  if (message && message === fallback) return so(fallback);
+  return so(fallback);
 }
 export function notifyError(error: unknown, fallback: string) { toast.error(errorMessage(error, fallback), { id: feedbackId }); }

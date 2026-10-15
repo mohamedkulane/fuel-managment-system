@@ -95,7 +95,7 @@ export default function OrdersPage() {
         <div className="card-body">
           <div className="delivery-list-toolbar">
             <label className="delivery-list-date">
-              <span>Taariikhda (Date)</span>
+              <span>Taariikhda</span>
               <input
                 type="date"
                 className="input"

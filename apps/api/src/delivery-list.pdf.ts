@@ -33,7 +33,7 @@ export async function createDeliveryListPdf(
         .text("LIISKA GAARSIINTA", 300, 36, { width: PAGE_WIDTH - 334, align: "right", lineBreak: false });
       doc.font("Helvetica").fontSize(9).fillColor("#222222")
         .text(`Taariikh: ${list.date}`, 300, 60, { width: PAGE_WIDTH - 334, align: "right", lineBreak: false });
-      doc.text(`Generated: ${generatedAt.toISOString().replace("T", " ").replace(/\.\d{3}Z$/, " UTC")}`, 300, 74, {
+      doc.text(`La diyaariyey: ${generatedAt.toISOString().replace("T", " ").replace(/\.\d{3}Z$/, " UTC")}`, 300, 74, {
         width: PAGE_WIDTH - 334,
         align: "right",
         lineBreak: false

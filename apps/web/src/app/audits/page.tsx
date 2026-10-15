@@ -86,17 +86,17 @@ export default function AuditsPage() {
             <FormLabel style={{ display: "block", fontSize: 12, fontWeight: "bold", marginBottom: 4 }}>Nooca Qaybta:</FormLabel>
             <select value={entityType} onChange={(e) => { setEntityType(e.target.value); setPage(1); }} className="input">
               <option value="">Dhammaan Qaybaha</option>
-              <option value="Customer">Macmiilka (Customer)</option>
-              <option value="PriceVersion">Qiimaha Shidaalka (PriceVersion)</option>
-              <option value="FuelUnitVersion">Cabbirka Fuustada (FuelUnitVersion)</option>
-              <option value="SalesOrder">Dalabka Iibka (SalesOrder)</option>
-              <option value="TankerReceipt">Shidaal Soo Gelin (StockReceiving)</option>
-              <option value="Dispatch">Shidaal Dirid (Dispatch)</option>
-              <option value="DeliveryConfirmation">Xaqiijinta Gaarsiinta (Delivery)</option>
-              <option value="Invoice">Biilka (Invoice)</option>
-              <option value="Payment">Lacag-bixin (Payment)</option>
-              <option value="InventoryMovement">Dhaqdhaqaaqa Kaydka (Movement)</option>
-              <option value="User">Isticmaalaha (User)</option>
+              <option value="Customer">Macmiilka</option>
+              <option value="PriceVersion">Qiimaha Shidaalka</option>
+              <option value="FuelUnitVersion">Cabbirka Fuustada</option>
+              <option value="SalesOrder">Dalabka Iibka</option>
+              <option value="TankerReceipt">Shidaal Soo Gelin</option>
+              <option value="Dispatch">Dirista Shidaalka</option>
+              <option value="DeliveryConfirmation">Xaqiijinta Gaarsiinta</option>
+              <option value="Invoice">Biilka</option>
+              <option value="Payment">Lacag-bixin</option>
+              <option value="InventoryMovement">Dhaqdhaqaaqa Kaydka</option>
+              <option value="User">Isticmaalaha</option>
             </select>
           </div>
 
@@ -104,13 +104,13 @@ export default function AuditsPage() {
             <FormLabel style={{ display: "block", fontSize: 12, fontWeight: "bold", marginBottom: 4 }}>Hawsha:</FormLabel>
             <select value={action} onChange={(e) => { setAction(e.target.value); setPage(1); }} className="input">
               <option value="">Dhammaan Hawlaha</option>
-              <option value="CREATED">Diiwaangelin (CREATED)</option>
-              <option value="UPDATED">Cusboonaysiin (UPDATED)</option>
-              <option value="CONFIRMED">Xaqiijin (CONFIRMED)</option>
-              <option value="POSTED">Dhimis/Posting (POSTED)</option>
-              <option value="REVERSED">Kansalaad (REVERSED)</option>
-              <option value="ADJUSTED">Saxid (ADJUSTED)</option>
-              <option value="CANCELLED">Ka Noqosho (CANCELLED)</option>
+              <option value="CREATED">La Diiwaangeliyey</option>
+              <option value="UPDATED">La Cusboonaysiiyey</option>
+              <option value="CONFIRMED">La Xaqiijiyey</option>
+              <option value="POSTED">La Gudbiyey</option>
+              <option value="REVERSED">Laga Noqday</option>
+              <option value="ADJUSTED">La Saxay</option>
+              <option value="CANCELLED">La Joojiyey</option>
             </select>
           </div>
 
@@ -143,7 +143,7 @@ export default function AuditsPage() {
                 <th>Lambarka Qaybta</th>
                 <th>Hawsha</th>
                 <th>Sababta</th>
-                <th>Isbeddelka / Xogta Redacted</th>
+                <th>Isbeddelka / Xogta La Qariyey</th>
               </tr>
             </thead>
             <tbody>
@@ -157,7 +157,7 @@ export default function AuditsPage() {
                       <strong>{event.actor?.displayName ?? "Nidaamka"}</strong>
                       <div className="muted" style={{ fontSize: 11 }}>{event.actor?.role ? formatRole(event.actor.role) : ""}</div>
                     </td>
-                    <td className="strong">{event.entityType}</td>
+                    <td className="strong">{formatStatus(event.entityType)}</td>
                     <td className="mono" style={{ fontSize: 12 }}>{event.entityId}</td>
                     <td>
                       <Badge tone={event.action === "REVERSED" ? "warn" : event.action === "POSTED" ? "ok" : "info"}>

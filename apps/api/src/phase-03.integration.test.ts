@@ -32,6 +32,7 @@ describe("Phase 3 Invoicing, Credit, Debt & Payment Integration Suite", () => {
   let dieselId = "";
   let unitId = "";
   let customerId = "";
+  let accountId = "";
 
   beforeAll(async () => {
     prisma = new PrismaClient();
@@ -72,6 +73,20 @@ describe("Phase 3 Invoicing, Credit, Debt & Payment Integration Suite", () => {
       data: { code: `CUS-P3-${suffix}`, name: "P3 Somali Trading Corp", primaryPhone: "+252617778899", createdById: owner.id }
     });
     customerId = customer.id;
+
+    const account = await prisma.financialAccount.create({
+      data: {
+        code: `ACC-P3-${suffix}`,
+        name: "P3 Test Cash",
+        type: "CASH",
+        openingBalance: new Prisma.Decimal("10000"),
+        openingBalanceAsOf: new Date(effective),
+        currentBalance: new Prisma.Decimal("10000"),
+        overdraftPolicy: "BLOCK_NEGATIVE",
+        createdById: owner.id
+      }
+    });
+    accountId = account.id;
 
     app = await NestFactory.create(AppModule, { logger: ["error"] });
     app.use(cookieParser());
@@ -209,7 +224,7 @@ describe("Phase 3 Invoicing, Credit, Debt & Payment Integration Suite", () => {
     const payment1 = await request<{ amount: string; allocatedAmount: string; unappliedAmount: string }>("/payments", {
       method: "POST",
       headers: { "idempotency-key": randomUUID() },
-      body: JSON.stringify({ customerId: testCust.id, amount: "300", paymentDate: new Date().toISOString() })
+      body: JSON.stringify({ customerId: testCust.id, amount: "300", paymentDate: new Date().toISOString(), financialAccountId: accountId })
     });
     expect(payment1.amount).toContain("300.0000");
     expect(payment1.allocatedAmount).toContain("300.0000");
@@ -228,7 +243,7 @@ describe("Phase 3 Invoicing, Credit, Debt & Payment Integration Suite", () => {
       const payment2 = await request<{ amount: string }>("/payments", {
         method: "POST",
         headers: { "idempotency-key": randomUUID() },
-        body: JSON.stringify({ customerId: custId, amount: "200", paymentDate: new Date().toISOString() })
+        body: JSON.stringify({ customerId: custId, amount: "200", paymentDate: new Date().toISOString(), financialAccountId: accountId })
       });
       expect(payment2.amount).toContain("200.0000");
 
@@ -266,7 +281,7 @@ describe("Phase 3 Invoicing, Credit, Debt & Payment Integration Suite", () => {
 
   it("11. Verifies duplicate payment prevention via Idempotency-Key", async () => {
     const key = randomUUID();
-    const body = JSON.stringify({ customerId, amount: "150", paymentDate: "2026-10-13T12:00:00.000Z" });
+    const body = JSON.stringify({ customerId, amount: "150", paymentDate: "2026-10-13T12:00:00.000Z", financialAccountId: accountId });
     const pay1 = await request<{ status: string; replay?: boolean }>("/payments", {
       method: "POST",
       headers: { "idempotency-key": key },

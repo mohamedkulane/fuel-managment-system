@@ -8,11 +8,12 @@ import { SimpleWorkflowsController } from "./simple-workflows.controller.js";
 import { CustomerAccountService } from "./customer-account.service.js";
 import { AppController } from "./app.controller.js";
 import type { Actor } from "./auth.js";
-const db=new PrismaService(); const service=new SimpleWorkflowsService(db); const accounts=new CustomerAccountService(db);
-let owner:Actor,office:Actor,fuelId:string,unitId:string,customerId:string,priceId:string;
+import { FinancialWorkflowsService } from "./financial-workflows.service.js";
+const db=new PrismaService(); const financial=new FinancialWorkflowsService(db); const service=new SimpleWorkflowsService(db,financial); const accounts=new CustomerAccountService(db);
+let owner:Actor,office:Actor,fuelId:string,unitId:string,customerId:string,priceId:string,accountId:string,supplierId:string;
 const key=()=>randomUUID();
 async function createOrder(quantity="5",paidNow="100",discount="10") {
- const result=await service.order(owner,key(),{customerId,fuelId,salesUnitId:unitId,quantity,paidNow,discount,expectedPriceId:priceId,address:"Hodan"});
+ const result=await service.order(owner,key(),{customerId,fuelId,salesUnitId:unitId,quantity,paidNow,discount,expectedPriceId:priceId,address:"Hodan",financialAccountId:paidNow!=="0"?accountId:undefined});
  return db.salesOrder.findUniqueOrThrow({where:{id:(result as {id:string}).id},include:{lines:true,payments:true}});
 }
 describe("Simple workflows preserve stock and finance",()=>{
@@ -24,6 +25,8 @@ describe("Simple workflows preserve stock and finance",()=>{
   const since=new Date(Date.now()-86400000);await db.fuelUnitVersion.create({data:{fuelId,salesUnitId:unitId,litersPerUnit:new Prisma.Decimal(240),effectiveFromUtc:since,createdById:owner.id}});
   const price=await db.priceVersion.create({data:{fuelId,salesUnitId:unitId,unitPrice:new Prisma.Decimal(100),effectiveFromUtc:since,createdById:owner.id}});priceId=price.id;
   const c=await db.customer.create({data:{code:`SIMPLE_${suffix}`,name:"Simple customer",createdById:owner.id}});customerId=c.id;
+  const account=await db.financialAccount.create({data:{code:`ACC_${suffix}`,name:"Test Cash",type:"CASH",openingBalance:new Prisma.Decimal(10000),openingBalanceAsOf:since,currentBalance:new Prisma.Decimal(10000),overdraftPolicy:"BLOCK_NEGATIVE",createdById:owner.id}});accountId=account.id;
+  const supplier=await db.supplier.create({data:{code:`SUP_${suffix}`,name:"Test Supplier",createdById:owner.id}});supplierId=supplier.id;
  });
  afterAll(async()=>{await db.$disconnect();});
  it("receives 50 fuusto exactly once under concurrent retries, with null costs",async()=>{
@@ -39,7 +42,7 @@ describe("Simple workflows preserve stock and finance",()=>{
  });
  it("rejects office purchase costs and calculates optional total reciprocally",async()=>{
   await expect(service.receipt(office,key(),{fuelId,quantity:"2",date:"2026-10-12",unitCost:"80"})).rejects.toThrow("owner-only");
-  const result=await service.receipt(owner,key(),{fuelId,quantity:"2",date:"2026-10-12",totalCost:"160"});
+  const result=await service.receipt(owner,key(),{fuelId,quantity:"2",date:"2026-10-12",totalCost:"160",supplierId});
   const r=await db.tankerReceipt.findUniqueOrThrow({where:{id:(result as {id:string}).id},include:{lines:true}});expect(r.lines[0]?.unitPurchaseCost?.toString()).toBe("80");
  });
  it("holds $100 as credit, then bills $490 and allocates $100 after full delivery",async()=>{
@@ -51,7 +54,7 @@ describe("Simple workflows preserve stock and finance",()=>{
  });
  it("allows debt and new orders; order payment does not pay old debt",async()=>{
   const old=await db.invoice.findFirstOrThrow({where:{customerId,status:"PARTIALLY_PAID"}});const order=await createOrder();const unchanged=await db.invoice.findUniqueOrThrow({where:{id:old.id}});expect(unchanged.balanceDue.toString()).toBe(old.balanceDue.toString());expect(order.payments[0]?.allocatedAmount.toString()).toBe("0");
-  await service.payment(office,key(),{customerId,amount:"50"});const paid=await db.invoice.findUniqueOrThrow({where:{id:old.id}});expect(paid.balanceDue.toString()).toBe("340");
+  await service.payment(office,key(),{customerId,amount:"50",financialAccountId:accountId});const paid=await db.invoice.findUniqueOrThrow({where:{id:old.id}});expect(paid.balanceDue.toString()).toBe("340");
  });
  it("bills only 18 of 20, prorates discount, then safely completes transit remainder",async()=>{
   const order=await createOrder("20","0","100");const requestKey=key();const lineId=order.lines[0]!.id;
@@ -79,7 +82,7 @@ describe("Simple workflows preserve stock and finance",()=>{
  it("keeps paid now on its own order, settles delivered debt FIFO, and reverses once",async()=>{
   const suffix=key();
   const customer=await db.customer.create({data:{code:`V61_${suffix}`,name:"V6.1 account customer",createdById:owner.id}});
-  const create=(quantity:string,paidNow:string)=>service.order(owner,key(),{customerId:customer.id,fuelId,salesUnitId:unitId,quantity,paidNow,discount:"0",expectedPriceId:priceId,address:"Hodan"});
+  const create=(quantity:string,paidNow:string)=>service.order(owner,key(),{customerId:customer.id,fuelId,salesUnitId:unitId,quantity,paidNow,discount:"0",expectedPriceId:priceId,address:"Hodan",financialAccountId:paidNow!=="0"?accountId:undefined});
   const firstResult=await create("2","0");
   const first=await db.salesOrder.findUniqueOrThrow({where:{id:(firstResult as {id:string}).id},include:{lines:true}});
   await service.delivery(owner,key(),{orderId:first.id,lines:[{orderLineId:first.lines[0]!.id,acceptedUnits:"2"}]});
@@ -89,14 +92,14 @@ describe("Simple workflows preserve stock and finance",()=>{
   expect(account.summary.remainingDebt).toBe("200.0000");
   expect(account.summary.pendingOrderRemaining).toBe("400.0000");
   expect(account.orders.find(order=>order.id===second.id)?.paidOnOrder).toBe("100.0000");
-  await service.payment(owner,key(),{customerId:customer.id,amount:"200"});
+  await service.payment(owner,key(),{customerId:customer.id,amount:"200",financialAccountId:accountId});
   account=await accounts.read(customer.id);
   expect(account.summary.remainingDebt).toBe("0.0000");
   expect(account.summary.pendingOrderRemaining).toBe("400.0000");
   expect(account.orders.find(order=>order.id===first.id)?.paidOnOrder).toBe("200.0000");
-  await expect(service.payment(owner,key(),{customerId:customer.id,amount:"1"})).rejects.toThrow("No debt");
+  await expect(service.payment(owner,key(),{customerId:customer.id,amount:"1",financialAccountId:accountId})).rejects.toThrow("No debt");
   await service.delivery(owner,key(),{orderId:second.id,lines:[{orderLineId:second.lines[0]!.id,acceptedUnits:"5"}]});
-  const collected=await service.payment(owner,key(),{customerId:customer.id,amount:"100"}) as {id:string};
+  const collected=await service.payment(owner,key(),{customerId:customer.id,amount:"100",financialAccountId:accountId}) as {id:string};
   await expect(service.reversePayment(office,key(),collected.id,"Wrong amount")).rejects.toThrow("owner");
   const reversed=await Promise.all([service.reversePayment(owner,key(),collected.id,"Wrong amount"),service.reversePayment(owner,key(),collected.id,"Wrong amount")]);
   expect(reversed.map(item=>(item as {status:string}).status)).toEqual(["REVERSED","REVERSED"]);

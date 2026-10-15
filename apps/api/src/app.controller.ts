@@ -1,5 +1,5 @@
 import { statementBounds, statementRows } from "./customer-statement.js";
-import { Body, Controller, Get, Headers, Inject, Param, Patch, Post, Query, Req, Res, UseGuards, BadRequestException, ForbiddenException, NotFoundException } from "@nestjs/common";
+import { Body, ConflictException, Controller, Delete, Get, Headers, Inject, Param, Patch, Post, Query, Req, Res, UseGuards, BadRequestException, ForbiddenException, NotFoundException } from "@nestjs/common";
 import type { Response } from "express";
 import argon2 from "argon2";
 import PDFDocument from "pdfkit";
@@ -10,6 +10,7 @@ import { PrismaService } from "./prisma.service.js";
 import { exportToPdf, exportToExcel, ColumnDef } from "./reports.exporter.js";
 import { compactPaymentReference, createCustomerStatementPdf } from "./customer-statement.pdf.js";
 import { createOrderInvoicePdf } from "./order-invoice.pdf.js";
+import { createPaymentReceiptPdf } from "./payment-receipt.pdf.js";
 import { addDocumentFooter, drawDocumentLogo, resolveDocumentBranding, validateLogoUrl } from "./document-branding.js";
 import { CustomerAccountService } from "./customer-account.service.js";
 import { SimpleWorkflowsService } from "./simple-workflows.service.js";
@@ -24,6 +25,23 @@ const requireIdempotencyKey = (value: string | undefined): string => {
   const key = value?.trim();
   if (!key || key.length < 12 || key.length > 200) throw new BadRequestException("A valid Idempotency-Key header is required");
   return key;
+};
+const managedUserSelect = {
+  id: true,
+  displayName: true,
+  email: true,
+  role: true,
+  isActive: true,
+  createdAt: true,
+  lastLoginAt: true
+} satisfies Prisma.UserSelect;
+type ManagedUserRole = "OWNER" | "OFFICE_EMPLOYEE";
+type UpdateUserBody = { displayName?: string; email?: string; password?: string; role?: ManagedUserRole; isActive?: boolean };
+const isManagedUserRole = (value: unknown): value is ManagedUserRole => value === "OWNER" || value === "OFFICE_EMPLOYEE";
+const normalizeUserEmail = (value: string): string => {
+  const email = value.trim().toLowerCase();
+  if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new BadRequestException("Enter a valid email address");
+  return email;
 };
 
 @Controller("api/v1")
@@ -317,6 +335,7 @@ export class AppController {
       arrivedAt?: string;
       purchaseDate?: string;
       notes?: string;
+      financialAccountId?: string;
       lines?: Array<{
         fuelId?: string;
         quantityFuusto?: string;
@@ -695,7 +714,7 @@ export class AppController {
 
   @UseGuards(SessionGuard)
   @Get("orders/:id/invoice-pdf")
-  async orderInvoicePdf(@Param("id") id: string, @Res() response: Response) {
+  async orderInvoicePdf(@Param("id") id: string, @Query("download") download: string | undefined, @Res() response: Response) {
     const order = await this.prisma.salesOrder.findUnique({
       where: { id },
       include: {
@@ -713,9 +732,25 @@ export class AppController {
       }
     });
     if (!order) throw new NotFoundException("Order not found");
-    if (order.status === "DRAFT" || order.lines.some((line) => !line.unitPriceSnapshot)) {
+    const draftPreview = order.status === "DRAFT";
+    if (!draftPreview && order.lines.some((line) => !line.unitPriceSnapshot)) {
       throw new BadRequestException("Confirm the order before opening its invoice");
     }
+
+    const pricedLines = await Promise.all(order.lines.map(async (line) => {
+      if (line.unitPriceSnapshot) return { line, unitPrice: line.unitPriceSnapshot };
+      const activePrice = await this.prisma.priceVersion.findFirst({
+        where: {
+          fuelId: line.fuelId,
+          salesUnitId: line.salesUnitId,
+          effectiveFromUtc: { lte: new Date() },
+          OR: [{ effectiveToUtc: null }, { effectiveToUtc: { gt: new Date() } }]
+        },
+        orderBy: { effectiveFromUtc: "desc" }
+      });
+      if (!activePrice) throw new BadRequestException("A current price is required before opening this invoice preview");
+      return { line, unitPrice: activePrice.unitPrice };
+    }));
 
     const activeInvoices = order.lines.flatMap((line) => line.invoiceLines.map((invoiceLine) => invoiceLine.invoice))
       .filter((invoice) => !["REVERSED", "CANCELLED"].includes(invoice.status));
@@ -723,7 +758,7 @@ export class AppController {
     const fifoPaid = activeInvoices.flatMap((invoice) => invoice.allocations)
       .filter((allocation) => allocation.payment.status === "POSTED" && allocation.payment.orderId !== order.id)
       .reduce((sum, allocation) => sum.add(allocation.amount), dec("0"));
-    const subtotal = order.subtotal ?? order.lines.reduce((sum, line) => sum.add(line.requestedUnits.mul(line.unitPriceSnapshot!)), dec("0"));
+    const subtotal = order.subtotal ?? pricedLines.reduce((sum, item) => sum.add(item.line.requestedUnits.mul(item.unitPrice)), dec("0"));
     const total = order.totalAmount ?? subtotal.sub(order.fixedDiscountAmount);
     const paid = Prisma.Decimal.min(total, directPaid.add(fifoPaid));
     const formatter = new Intl.DateTimeFormat("en-GB", { timeZone: "Africa/Mogadishu", day: "2-digit", month: "short", year: "numeric" });
@@ -736,11 +771,11 @@ export class AppController {
       status: order.status.replaceAll("_", " "),
       customer: { name: order.customer.name, phone: order.customer.primaryPhone, location: customerAddress?.addressText ?? null },
       deliveryLocation: order.addressSnapshot,
-      lines: order.lines.map((line) => ({
+      lines: pricedLines.map(({ line, unitPrice }) => ({
         fuel: line.fuel.code === "PETROL" ? "Basiin" : "Naafto",
         quantity: line.requestedUnits.toFixed(0),
-        unitPrice: line.unitPriceSnapshot!.toFixed(2),
-        amount: line.requestedUnits.mul(line.unitPriceSnapshot!).toFixed(2)
+        unitPrice: unitPrice.toFixed(2),
+        amount: line.requestedUnits.mul(unitPrice).toFixed(2)
       })),
       subtotal: subtotal.toFixed(2),
       discount: order.fixedDiscountAmount.toFixed(2),
@@ -748,9 +783,10 @@ export class AppController {
       paid: paid.toFixed(2),
       remaining: Prisma.Decimal.max(dec("0"), total.sub(paid)).toFixed(2),
       deliveryPending: activeInvoices.length === 0,
+      draftPreview,
       branding: await this.documentBranding()
     });
-    response.setHeader("Content-Disposition", `inline; filename=${order.orderNo}-invoice.pdf`);
+    response.setHeader("Content-Disposition", `${download === "1" ? "attachment" : "inline"}; filename=${order.orderNo}-invoice.pdf`);
     response.type("application/pdf").send(pdf);
   }
 
@@ -1106,11 +1142,103 @@ export class AppController {
 
   @UseGuards(SessionGuard)
   @Get("users")
-  async users(@Req() request: AuthenticatedRequest) { requireOwner(request); const rows = await this.prisma.user.findMany({ select: { id: true, displayName: true, email: true, role: true, isActive: true, createdAt: true, lastLoginAt: true }, orderBy: { displayName: "asc" } }); return { data: rows }; }
+  async users(@Req() request: AuthenticatedRequest) {
+    requireOwner(request);
+    const rows = await this.prisma.user.findMany({ select: managedUserSelect, orderBy: [{ isActive: "desc" }, { displayName: "asc" }] });
+    return { data: rows };
+  }
 
   @UseGuards(SessionGuard)
   @Post("users")
-  async createUser(@Req() request: AuthenticatedRequest, @Body() body: { displayName?: string; email?: string; password?: string; role?: "OWNER" | "OFFICE_EMPLOYEE" }) { const actor = requireOwner(request); const email = body.email?.trim().toLowerCase(); if (!body.displayName?.trim() || !email || !body.password || body.password.length < 12 || !body.role) throw new BadRequestException("displayName, email, role and a 12+ character password are required"); const row = await this.prisma.$transaction(async (tx) => { const created = await tx.user.create({ data: { displayName: body.displayName!.trim(), email, passwordHash: await argon2.hash(body.password!), role: body.role! }, select: { id: true, displayName: true, email: true, role: true, isActive: true } }); await tx.auditEvent.create({ data: { actorId: actor.id, entityType: "User", entityId: created.id, action: "CREATED", afterRedacted: { email: created.email, role: created.role } } }); return created; }); return { data: row }; }
+  async createUser(@Req() request: AuthenticatedRequest, @Body() body: { displayName?: string; email?: string; password?: string; role?: ManagedUserRole }) {
+    const actor = requireOwner(request);
+    if (typeof body.displayName !== "string") throw new BadRequestException("Display name is required");
+    const displayName = body.displayName.trim();
+    if (!displayName || displayName.length > 120) throw new BadRequestException("Display name is required and must be 120 characters or fewer");
+    if (typeof body.email !== "string") throw new BadRequestException("Email is required");
+    const email = normalizeUserEmail(body.email);
+    if (typeof body.password !== "string" || body.password.length < 12) throw new BadRequestException("Password must be at least 12 characters");
+    const role = body.role;
+    if (!isManagedUserRole(role)) throw new BadRequestException("Role must be Owner or Office Employee");
+    const passwordHash = await argon2.hash(body.password);
+    try {
+      const row = await this.prisma.$transaction(async (tx) => {
+        const created = await tx.user.create({ data: { displayName, email, passwordHash, role }, select: managedUserSelect });
+        await tx.auditEvent.create({ data: { actorId: actor.id, entityType: "User", entityId: created.id, action: "CREATED", afterRedacted: { displayName: created.displayName, email: created.email, role: created.role, isActive: created.isActive } } });
+        return created;
+      });
+      return { data: row };
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") throw new ConflictException("A user with this email already exists");
+      throw error;
+    }
+  }
+
+  @UseGuards(SessionGuard)
+  @Patch("users/:id")
+  async updateUser(@Req() request: AuthenticatedRequest, @Param("id") id: string, @Body() body: UpdateUserBody) {
+    const actor = requireOwner(request);
+    const suppliedFields = [body.displayName, body.email, body.password, body.role, body.isActive];
+    if (suppliedFields.every((value) => value === undefined)) throw new BadRequestException("Provide at least one user field to update");
+    if (body.displayName !== undefined && typeof body.displayName !== "string") throw new BadRequestException("Display name must be text");
+    if (body.email !== undefined && typeof body.email !== "string") throw new BadRequestException("Email must be text");
+    if (body.password !== undefined && typeof body.password !== "string") throw new BadRequestException("Password must be text");
+    const displayName = body.displayName === undefined ? undefined : body.displayName.trim();
+    if (displayName !== undefined && (!displayName || displayName.length > 120)) throw new BadRequestException("Display name is required and must be 120 characters or fewer");
+    const email = body.email === undefined ? undefined : normalizeUserEmail(body.email);
+    if (body.password !== undefined && body.password.length < 12) throw new BadRequestException("Password must be at least 12 characters");
+    if (body.role !== undefined && !isManagedUserRole(body.role)) throw new BadRequestException("Role must be Owner or Office Employee");
+    if (body.isActive !== undefined && typeof body.isActive !== "boolean") throw new BadRequestException("Account status must be true or false");
+    if (id === actor.id && body.isActive === false) throw new BadRequestException("You cannot deactivate your own account");
+    const passwordHash = body.password === undefined ? undefined : await argon2.hash(body.password);
+    const now = new Date();
+
+    try {
+      const row = await this.prisma.$transaction(async (tx) => {
+        const existing = await tx.user.findUnique({ where: { id }, select: managedUserSelect });
+        if (!existing) throw new NotFoundException("User not found");
+        const removesActiveOwner = existing.role === "OWNER" && existing.isActive && (body.role === "OFFICE_EMPLOYEE" || body.isActive === false);
+        if (removesActiveOwner) {
+          const activeOwnerCount = await tx.user.count({ where: { role: "OWNER", isActive: true } });
+          if (activeOwnerCount <= 1) throw new BadRequestException("The last active owner cannot be deactivated or changed to Office Employee");
+        }
+        const updated = await tx.user.update({
+          where: { id },
+          data: {
+            ...(displayName === undefined ? {} : { displayName }),
+            ...(email === undefined ? {} : { email }),
+            ...(body.role === undefined ? {} : { role: body.role }),
+            ...(body.isActive === undefined ? {} : { isActive: body.isActive }),
+            ...(passwordHash === undefined ? {} : { passwordHash })
+          },
+          select: managedUserSelect
+        });
+        if (existing.isActive && !updated.isActive) await tx.session.updateMany({ where: { userId: id, revokedAt: null }, data: { revokedAt: now } });
+        const action = existing.isActive !== updated.isActive ? (updated.isActive ? "ACTIVATED" : "DEACTIVATED") : "UPDATED";
+        await tx.auditEvent.create({
+          data: {
+            actorId: actor.id,
+            entityType: "User",
+            entityId: id,
+            action,
+            beforeRedacted: { displayName: existing.displayName, email: existing.email, role: existing.role, isActive: existing.isActive },
+            afterRedacted: { displayName: updated.displayName, email: updated.email, role: updated.role, isActive: updated.isActive, passwordChanged: passwordHash !== undefined }
+          }
+        });
+        return updated;
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+      return { data: row };
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") throw new ConflictException("A user with this email already exists");
+      throw error;
+    }
+  }
+
+  @UseGuards(SessionGuard)
+  @Delete("users/:id")
+  async deactivateUser(@Req() request: AuthenticatedRequest, @Param("id") id: string) {
+    return this.updateUser(request, id, { isActive: false });
+  }
 
   @UseGuards(SessionGuard)
   @Get("settings/document-branding")
@@ -1713,6 +1841,7 @@ export class AppController {
       paymentMethod?: "CASH" | "BANK_TRANSFER" | "EVC_PLUS" | "EDAHAB" | "OTHER";
       reference?: string;
       notes?: string;
+      financialAccountId?: string;
       allocations?: Array<{ invoiceId?: string; amount?: string }>;
     }
   ) {
@@ -1725,7 +1854,8 @@ export class AppController {
       paymentDate: body.paymentDate,
       method: body.paymentMethod,
       reference: body.reference,
-      notes: body.notes
+      notes: body.notes,
+      financialAccountId: body.financialAccountId
     }) as { id: string; replay?: boolean };
     const saved = await this.prisma.payment.findUniqueOrThrow({
       where: { id: result.id },
@@ -1780,7 +1910,7 @@ export class AppController {
     const [rows, total] = await Promise.all([
       this.prisma.payment.findMany({
         where,
-        include: { customer: true, recordedBy: true, allocations: { include: { invoice: true } } },
+        include: { customer: true, recordedBy: true, financialAccount: true, allocations: { include: { invoice: true } } },
         orderBy: { paymentDate: "desc" },
         skip,
         take: limit
@@ -1795,6 +1925,8 @@ export class AppController {
           amount: p.amount.toFixed(4),
           allocatedAmount: p.allocatedAmount.toFixed(4),
           unappliedAmount: p.unappliedAmount.toFixed(4),
+          account: p.financialAccount ? { id: p.financialAccount.id, name: p.financialAccount.name, identifierMasked: p.financialAccount.identifierMasked } : null,
+          accountStatus: p.financialAccount ? "ASSIGNED" : "NEEDS_MAPPING",
           allocations: p.allocations.map((a) => ({
             ...a,
             amount: a.amount.toFixed(4)
@@ -1816,6 +1948,7 @@ export class AppController {
       include: {
         customer: true,
         recordedBy: true,
+        financialAccount: true,
         allocations: { include: { invoice: true } },
         reversals: { include: { reversedBy: true } }
       }
@@ -1828,6 +1961,7 @@ export class AppController {
         amount: p.amount.toFixed(4),
         allocatedAmount: p.allocatedAmount.toFixed(4),
         unappliedAmount: p.unappliedAmount.toFixed(4),
+        accountStatus: p.financialAccount ? "ASSIGNED" : "NEEDS_MAPPING",
         allocations: p.allocations.map((a) => ({
           ...a,
           amount: a.amount.toFixed(4),
@@ -1847,49 +1981,15 @@ export class AppController {
   async paymentReceiptPdf(@Param("id") id: string, @Res() response: Response) {
     const p = await this.prisma.payment.findUnique({
       where: { id },
-      include: { customer: true, recordedBy: true, allocations: { include: { invoice: true } } }
+      include: { customer: true, recordedBy: true, financialAccount: true, order: { include: { payments: { where: { status: "POSTED" } } } }, allocations: { include: { invoice: true } } }
     });
     if (!p) throw new NotFoundException("Payment not found");
-
-    const branding = await this.documentBranding();
-    const chunks: Buffer[] = [];
-    const doc = new PDFDocument({ autoFirstPage: true, bufferPages: true, info: { Title: `Payment Receipt ${p.paymentNo}`, Author: "Fuel Wholesale System" } });
-    doc.on("data", (chunk: Buffer) => chunks.push(chunk));
-    doc.on("end", () => {
-      response.type("application/pdf").send(Buffer.concat(chunks));
-    });
-
-    drawDocumentLogo(doc, branding);
-    doc.fontSize(18).text("OFFICIAL PAYMENT RECEIPT", { align: "right" });
-    doc.fontSize(10).text(`Receipt No: ${p.paymentNo}`, { align: "right" });
-    doc.text(`Date: ${p.paymentDate.toISOString().slice(0, 10)}`, { align: "right" });
-    doc.moveDown();
-
-    doc.fontSize(12).text("Received From:", { underline: true });
-    doc.fontSize(10).text(p.customer.name);
-    doc.text(`Payment Method: ${p.paymentMethod}`);
-    if (p.reference) doc.text(`Reference: ${p.reference}`);
-    doc.text(`Collected By: ${p.recordedBy.displayName}`);
-    doc.moveDown();
-
-    doc.fontSize(14).text(`Amount Received: $${p.amount.toFixed(2)}`);
-    doc.moveDown();
-
-    if (p.allocations.length) {
-      doc.fontSize(11).text("Paid Toward Delivered Orders:");
-      doc.text("------------------------------------------------------------------");
-      for (const [idx, alloc] of p.allocations.entries()) {
-        doc.text(`${idx + 1}. ${alloc.invoice.invoiceNo} | Paid: $${alloc.amount.toFixed(2)} | Remaining: $${alloc.invoice.balanceDue.toFixed(2)}`);
-      }
-      doc.text("------------------------------------------------------------------");
-      doc.moveDown();
-    }
-
-    doc.fontSize(11).text(`Paid toward delivered sales: $${p.allocatedAmount.toFixed(2)}`);
-    if (p.unappliedAmount.gt(0)) doc.text(`${p.orderId ? "Order payment awaiting delivery" : "Needs Owner review"}: $${p.unappliedAmount.toFixed(2)}`);
-
-    addDocumentFooter(doc, branding);
-    doc.end();
+    const total = p.order?.totalAmount ?? p.order?.subtotal ?? new Prisma.Decimal(0);
+    const orderPaid = p.order?.payments.reduce((sum, row) => sum.add(row.amount), new Prisma.Decimal(0)) ?? new Prisma.Decimal(0);
+    const pdf = await createPaymentReceiptPdf({ receiptNo: p.paymentNo, paymentDate: p.paymentDate.toISOString().slice(0, 10), status: p.status, customer: { name: p.customer.name, phone: p.customer.primaryPhone }, amount: p.amount.toFixed(2), method: p.paymentMethod.replaceAll("_", " "), reference: p.reference, account: p.financialAccount ? { name: p.financialAccount.name, identifierMasked: p.financialAccount.identifierMasked } : null, collectedBy: p.recordedBy.displayName, order: p.order ? { orderNo: p.order.orderNo, total: total.toFixed(2), paidThisTime: p.amount.toFixed(2), remainingPendingDelivery: Prisma.Decimal.max(0, total.sub(orderPaid)).toFixed(2) } : null, deliveredOrders: p.allocations.map((allocation) => ({ invoiceNo: allocation.invoice.invoiceNo, paid: allocation.amount.toFixed(2), remaining: allocation.invoice.balanceDue.toFixed(2) })), branding: await this.documentBranding() });
+    response.setHeader("Content-Type", "application/pdf");
+    response.setHeader("Content-Disposition", `inline; filename="payment-receipt-${p.paymentNo}.pdf"`);
+    response.send(pdf);
   }
 
   @UseGuards(SessionGuard)

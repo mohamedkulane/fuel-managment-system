@@ -11,21 +11,25 @@ enum Role {
   OWNER
   OFFICE_EMPLOYEE
 }
+
 enum FuelCode {
   DIESEL
   PETROL
 }
+
 enum CustomerStatus {
   ACTIVE
   HOLD
   INACTIVE
 }
+
 enum ReceiptStatus {
   DRAFT
   POSTED
   CANCELLED
   REVERSED
 }
+
 enum OrderStatus {
   DRAFT
   CONFIRMED
@@ -35,6 +39,7 @@ enum OrderStatus {
   FULFILLED
   CANCELLED
 }
+
 enum DeliverySheetStatus {
   PREPARED
   PRINTED
@@ -42,21 +47,25 @@ enum DeliverySheetStatus {
   PARTIALLY_RECONCILED
   RECONCILED
 }
+
 enum DispatchStatus {
   PREPARED
   POSTED
   PARTIALLY_RECONCILED
   RECONCILED
 }
+
 enum CommercialDisposition {
   NONE
   CANCEL_REMAINDER
   BACKORDER_REMAINDER
 }
+
 enum Location {
   WAREHOUSE
   IN_TRANSIT
 }
+
 enum MovementType {
   RECEIPT
   DISPATCH
@@ -73,10 +82,12 @@ enum InvoiceStatus {
   CANCELLED
   REVERSED
 }
+
 enum PaymentStatus {
   POSTED
   REVERSED
 }
+
 enum PaymentMethod {
   CASH
   BANK_TRANSFER
@@ -84,6 +95,7 @@ enum PaymentMethod {
   EDAHAB
   OTHER
 }
+
 enum LedgerEntryType {
   INVOICE
   PAYMENT
@@ -93,31 +105,94 @@ enum LedgerEntryType {
   ADJUSTMENT
 }
 
+enum SupplierStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum SupplierPurchaseStatus {
+  OPEN
+  PARTIALLY_PAID
+  PAID
+  REVERSED
+}
+
+enum FinancialAccountType {
+  CASH
+  MOBILE_MONEY
+  BANK
+  OTHER
+}
+
+enum AccountOverdraftPolicy {
+  UNSET
+  BLOCK_NEGATIVE
+  ALLOW_NEGATIVE
+}
+
+enum FinancialMovementDirection {
+  MONEY_IN
+  MONEY_OUT
+}
+
+enum FinancialMovementKind {
+  OPENING_BALANCE
+  CUSTOMER_PAYMENT
+  CUSTOMER_PAYMENT_REVERSAL
+  SUPPLIER_PAYMENT
+  SUPPLIER_PAYMENT_REVERSAL
+  EXPENSE
+  EXPENSE_REVERSAL
+  TRANSFER_IN
+  TRANSFER_OUT
+  ADJUSTMENT
+}
+
+enum ExpenseStatus {
+  POSTED
+  REVERSED
+}
+
+enum AccountTransferStatus {
+  POSTED
+  REVERSED
+}
+
 model User {
-  id             String   @id @default(uuid()) @db.Uuid
-  displayName    String
-  email          String   @unique
-  passwordHash   String
-  role           Role
-  isActive       Boolean  @default(true)
-  createdAt      DateTime @default(now())
-  lastLoginAt    DateTime?
-  sessions       Session[]
-  audits         AuditEvent[]
-  createdCustomers Customer[] @relation("CustomerCreator")
-  createdOrders  SalesOrder[] @relation("OrderCreator")
-  createdReceipts TankerReceipt[] @relation("ReceiptCreator")
-  postedReceipts TankerReceipt[] @relation("ReceiptPoster")
-  createdPrices  PriceVersion[]
-  createdUnits   FuelUnitVersion[]
-  dispatches     Dispatch[]
-  confirmations  DeliveryConfirmation[]
-  createdInvoices Invoice[] @relation("InvoiceCreator")
-  recordedPayments Payment[] @relation("PaymentRecorder")
-  createdAllocations PaymentAllocation[] @relation("AllocationCreator")
-  reversedPayments PaymentReversal[] @relation("PaymentReverser")
-  approvedOrderDiscounts SalesOrder[] @relation("OrderDiscountApprover")
-  documentBrandingUpdates DocumentBranding[] @relation("DocumentBrandingUpdater")
+  id                         String                     @id @default(uuid()) @db.Uuid
+  displayName                String
+  email                      String                     @unique
+  passwordHash               String
+  role                       Role
+  isActive                   Boolean                    @default(true)
+  createdAt                  DateTime                   @default(now())
+  lastLoginAt                DateTime?
+  sessions                   Session[]
+  audits                     AuditEvent[]
+  createdCustomers           Customer[]                 @relation("CustomerCreator")
+  createdOrders              SalesOrder[]               @relation("OrderCreator")
+  createdReceipts            TankerReceipt[]            @relation("ReceiptCreator")
+  postedReceipts             TankerReceipt[]            @relation("ReceiptPoster")
+  createdPrices              PriceVersion[]
+  createdUnits               FuelUnitVersion[]
+  dispatches                 Dispatch[]
+  confirmations              DeliveryConfirmation[]
+  createdInvoices            Invoice[]                  @relation("InvoiceCreator")
+  recordedPayments           Payment[]                  @relation("PaymentRecorder")
+  createdAllocations         PaymentAllocation[]        @relation("AllocationCreator")
+  reversedPayments           PaymentReversal[]          @relation("PaymentReverser")
+  approvedOrderDiscounts     SalesOrder[]               @relation("OrderDiscountApprover")
+  documentBrandingUpdates    DocumentBranding[]         @relation("DocumentBrandingUpdater")
+  createdSuppliers           Supplier[]                 @relation("SupplierCreator")
+  createdFinancialAccounts   FinancialAccount[]         @relation("FinancialAccountCreator")
+  recordedFinancialMovements FinancialAccountMovement[] @relation("FinancialMovementCreator")
+  mappedPayments             Payment[]                  @relation("PaymentAccountMapper")
+  createdSupplierPurchases   SupplierPurchase[]         @relation("SupplierPurchaseCreator")
+  recordedSupplierPayments   SupplierPayment[]          @relation("SupplierPaymentRecorder")
+  reversedSupplierPayments   SupplierPaymentReversal[]  @relation("SupplierPaymentReverser")
+  createdExpenses            BusinessExpense[]          @relation("ExpenseCreator")
+  reversedExpenses           ExpenseReversal[]          @relation("ExpenseReverser")
+  createdTransfers           AccountTransfer[]          @relation("AccountTransferCreator")
 }
 
 model DocumentBranding {
@@ -131,403 +206,433 @@ model DocumentBranding {
 }
 
 model Session {
-  id        String   @id @default(uuid()) @db.Uuid
-  userId    String   @db.Uuid
-  tokenHash String   @unique
-  expiresAt DateTime
-  revokedAt DateTime?
+  id            String    @id @default(uuid()) @db.Uuid
+  userId        String    @db.Uuid
+  tokenHash     String    @unique
+  expiresAt     DateTime
+  revokedAt     DateTime?
   userAgentHash String?
-  user      User @relation(fields: [userId], references: [id], onDelete: Restrict)
-  createdAt DateTime @default(now())
+  user          User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+  createdAt     DateTime  @default(now())
+
   @@index([userId, expiresAt])
 }
 
 model AuditEvent {
-  id            String   @id @default(uuid()) @db.Uuid
-  actorId       String?  @db.Uuid
-  entityType    String
-  entityId      String
-  action        String
+  id             String   @id @default(uuid()) @db.Uuid
+  actorId        String?  @db.Uuid
+  entityType     String
+  entityId       String
+  action         String
   beforeRedacted Json?
   afterRedacted  Json?
-  reason        String?
-  correlationId String?
-  createdAt     DateTime @default(now())
-  actor         User? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  reason         String?
+  correlationId  String?
+  createdAt      DateTime @default(now())
+  actor          User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
   @@index([entityType, entityId, createdAt])
 }
 
 model FuelType {
-  id        String @id @default(uuid()) @db.Uuid
-  code      FuelCode @unique
-  displayName String
-  active    Boolean @default(true)
-  units     FuelUnitVersion[]
-  prices    PriceVersion[]
-  receiptLines TankerReceiptLine[]
-  orderLines SalesOrderLine[]
-  movements InventoryMovement[]
-  balances StockBalance[]
-  invoiceLines InvoiceLine[]
+  id                String              @id @default(uuid()) @db.Uuid
+  code              FuelCode            @unique
+  displayName       String
+  active            Boolean             @default(true)
+  units             FuelUnitVersion[]
+  prices            PriceVersion[]
+  receiptLines      TankerReceiptLine[]
+  orderLines        SalesOrderLine[]
+  movements         InventoryMovement[]
+  balances          StockBalance[]
+  invoiceLines      InvoiceLine[]
+  supplierPurchases SupplierPurchase[]
 }
 
 model SalesUnit {
-  id       String @id @default(uuid()) @db.Uuid
-  code     String @unique
-  name     String
-  active   Boolean @default(true)
-  versions FuelUnitVersion[]
-  prices   PriceVersion[]
-  orderLines SalesOrderLine[]
+  id           String            @id @default(uuid()) @db.Uuid
+  code         String            @unique
+  name         String
+  active       Boolean           @default(true)
+  versions     FuelUnitVersion[]
+  prices       PriceVersion[]
+  orderLines   SalesOrderLine[]
   invoiceLines InvoiceLine[]
 }
 
 model FuelUnitVersion {
-  id              String @id @default(uuid()) @db.Uuid
-  fuelId          String @db.Uuid
-  salesUnitId     String @db.Uuid
-  litersPerUnit   Decimal @db.Decimal(18, 6)
+  id               String           @id @default(uuid()) @db.Uuid
+  fuelId           String           @db.Uuid
+  salesUnitId      String           @db.Uuid
+  litersPerUnit    Decimal          @db.Decimal(18, 6)
   effectiveFromUtc DateTime
-  effectiveToUtc  DateTime?
-  createdById     String @db.Uuid
-  fuel            FuelType @relation(fields: [fuelId], references: [id], onDelete: Restrict)
-  salesUnit       SalesUnit @relation(fields: [salesUnitId], references: [id], onDelete: Restrict)
-  createdBy       User @relation(fields: [createdById], references: [id], onDelete: Restrict)
-  orderLines      SalesOrderLine[]
+  effectiveToUtc   DateTime?
+  createdById      String           @db.Uuid
+  fuel             FuelType         @relation(fields: [fuelId], references: [id], onDelete: Restrict)
+  salesUnit        SalesUnit        @relation(fields: [salesUnitId], references: [id], onDelete: Restrict)
+  createdBy        User             @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  orderLines       SalesOrderLine[]
+
   @@index([fuelId, salesUnitId, effectiveFromUtc])
 }
 
 model PriceVersion {
-  id              String @id @default(uuid()) @db.Uuid
-  fuelId          String @db.Uuid
-  salesUnitId     String @db.Uuid
-  unitPrice       Decimal @db.Decimal(20, 4)
-  currencyCode    String @default("USD")
+  id               String           @id @default(uuid()) @db.Uuid
+  fuelId           String           @db.Uuid
+  salesUnitId      String           @db.Uuid
+  unitPrice        Decimal          @db.Decimal(20, 4)
+  currencyCode     String           @default("USD")
   effectiveFromUtc DateTime
-  effectiveToUtc  DateTime?
-  reason          String?
-  createdById     String @db.Uuid
-  fuel            FuelType @relation(fields: [fuelId], references: [id], onDelete: Restrict)
-  salesUnit       SalesUnit @relation(fields: [salesUnitId], references: [id], onDelete: Restrict)
-  createdBy       User @relation(fields: [createdById], references: [id], onDelete: Restrict)
-  orderLines      SalesOrderLine[]
+  effectiveToUtc   DateTime?
+  reason           String?
+  createdById      String           @db.Uuid
+  fuel             FuelType         @relation(fields: [fuelId], references: [id], onDelete: Restrict)
+  salesUnit        SalesUnit        @relation(fields: [salesUnitId], references: [id], onDelete: Restrict)
+  createdBy        User             @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  orderLines       SalesOrderLine[]
+
   @@index([fuelId, salesUnitId, effectiveFromUtc])
 }
 
 model Customer {
-  id          String @id @default(uuid()) @db.Uuid
-  code        String @unique
-  name        String
-  primaryPhone String?
-  otherPhone  String?
-  notes       String?
-  status      CustomerStatus @default(ACTIVE)
-  creditLimit Decimal? @db.Decimal(20, 2)
-  createdById String @db.Uuid
-  createdBy   User @relation("CustomerCreator", fields: [createdById], references: [id], onDelete: Restrict)
-  addresses   CustomerAddress[]
-  orders      SalesOrder[]
-  invoices    Invoice[]
-  payments    Payment[]
+  id            String                @id @default(uuid()) @db.Uuid
+  code          String                @unique
+  name          String
+  primaryPhone  String?
+  otherPhone    String?
+  notes         String?
+  status        CustomerStatus        @default(ACTIVE)
+  creditLimit   Decimal?              @db.Decimal(20, 2)
+  createdById   String                @db.Uuid
+  createdBy     User                  @relation("CustomerCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  addresses     CustomerAddress[]
+  orders        SalesOrder[]
+  invoices      Invoice[]
+  payments      Payment[]
   ledgerEntries CustomerLedgerEntry[]
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+
   @@index([name])
 }
 
 model CustomerAddress {
-  id String @id @default(uuid()) @db.Uuid
-  customerId String @db.Uuid
-  label String
+  id          String   @id @default(uuid()) @db.Uuid
+  customerId  String   @db.Uuid
+  label       String
   addressText String
-  district String?
-  city String?
-  isDefault Boolean @default(false)
-  active Boolean @default(true)
-  customer Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  district    String?
+  city        String?
+  isDefault   Boolean  @default(false)
+  active      Boolean  @default(true)
+  customer    Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+
   @@index([customerId, isDefault])
 }
 
 model TankerReceipt {
-  id String @id @default(uuid()) @db.Uuid
-  receiptNo String @unique
-  tankerReference String?
-  arrivedAt DateTime
-  status ReceiptStatus @default(DRAFT)
-  createdById String @db.Uuid
-  postedById String? @db.Uuid
-  postedAt DateTime?
-  postIdempotencyKey String? @unique
-  notes String?
-  createdBy User @relation("ReceiptCreator", fields: [createdById], references: [id], onDelete: Restrict)
-  postedBy User? @relation("ReceiptPoster", fields: [postedById], references: [id], onDelete: Restrict)
-  lines TankerReceiptLine[]
-  createdAt DateTime @default(now())
+  id                 String              @id @default(uuid()) @db.Uuid
+  receiptNo          String              @unique
+  tankerReference    String?
+  arrivedAt          DateTime
+  status             ReceiptStatus       @default(DRAFT)
+  createdById        String              @db.Uuid
+  postedById         String?             @db.Uuid
+  postedAt           DateTime?
+  postIdempotencyKey String?             @unique
+  notes              String?
+  supplierId         String?             @db.Uuid
+  createdBy          User                @relation("ReceiptCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  postedBy           User?               @relation("ReceiptPoster", fields: [postedById], references: [id], onDelete: Restrict)
+  supplier           Supplier?           @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  supplierPurchase   SupplierPurchase?
+  lines              TankerReceiptLine[]
+  createdAt          DateTime            @default(now())
+
   @@index([arrivedAt])
+  @@index([supplierId])
 }
 
 model TankerReceiptLine {
-  id                      String   @id @default(uuid()) @db.Uuid
-  receiptId               String   @db.Uuid
-  fuelId                  String   @db.Uuid
-  quantityFuusto          Decimal? @db.Decimal(18, 3)
-  litersPerFuustoSnapshot Decimal? @db.Decimal(18, 6)
-  expectedLiters          Decimal? @db.Decimal(18, 3)
-  actualLiters            Decimal  @db.Decimal(18, 3)
-  unitPurchaseCost        Decimal? @db.Decimal(20, 4)
-  totalPurchaseCost       Decimal? @db.Decimal(20, 4)
+  id                      String        @id @default(uuid()) @db.Uuid
+  receiptId               String        @db.Uuid
+  fuelId                  String        @db.Uuid
+  quantityFuusto          Decimal?      @db.Decimal(18, 3)
+  litersPerFuustoSnapshot Decimal?      @db.Decimal(18, 6)
+  expectedLiters          Decimal?      @db.Decimal(18, 3)
+  actualLiters            Decimal       @db.Decimal(18, 3)
+  unitPurchaseCost        Decimal?      @db.Decimal(20, 4)
+  totalPurchaseCost       Decimal?      @db.Decimal(20, 4)
   receipt                 TankerReceipt @relation(fields: [receiptId], references: [id], onDelete: Restrict)
   fuel                    FuelType      @relation(fields: [fuelId], references: [id], onDelete: Restrict)
+
   @@index([fuelId])
 }
 
 model SalesOrder {
-  id String @id @default(uuid()) @db.Uuid
-  orderNo String @unique
-  customerId String @db.Uuid
-  orderDate DateTime
-  requestedDeliveryDate DateTime?
-  addressSnapshot String
-  status OrderStatus @default(DRAFT)
-  createdById String @db.Uuid
-  confirmedById String? @db.Uuid
-  confirmedAt DateTime?
-  confirmationIdempotencyKey String? @unique
-  currencyCode String @default("USD")
-  notes String?
-  subtotal Decimal? @db.Decimal(20, 4)
-  fixedDiscountAmount Decimal @db.Decimal(20, 4) @default(0)
-  totalAmount Decimal? @db.Decimal(20, 4)
-  discountReason String?
-  discountApprovedById String? @db.Uuid
-  discountApprovedAt DateTime?
-  discountApprovedBy User? @relation("OrderDiscountApprover", fields: [discountApprovedById], references: [id], onDelete: Restrict)
-  customer Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
-  createdBy User @relation("OrderCreator", fields: [createdById], references: [id], onDelete: Restrict)
-  lines SalesOrderLine[]
-  events OrderEvent[]
-  payments Payment[]
-  createdAt DateTime @default(now())
+  id                         String           @id @default(uuid()) @db.Uuid
+  orderNo                    String           @unique
+  customerId                 String           @db.Uuid
+  orderDate                  DateTime
+  requestedDeliveryDate      DateTime?
+  addressSnapshot            String
+  status                     OrderStatus      @default(DRAFT)
+  createdById                String           @db.Uuid
+  confirmedById              String?          @db.Uuid
+  confirmedAt                DateTime?
+  confirmationIdempotencyKey String?          @unique
+  currencyCode               String           @default("USD")
+  notes                      String?
+  subtotal                   Decimal?         @db.Decimal(20, 4)
+  fixedDiscountAmount        Decimal          @default(0) @db.Decimal(20, 4)
+  totalAmount                Decimal?         @db.Decimal(20, 4)
+  discountReason             String?
+  discountApprovedById       String?          @db.Uuid
+  discountApprovedAt         DateTime?
+  discountApprovedBy         User?            @relation("OrderDiscountApprover", fields: [discountApprovedById], references: [id], onDelete: Restrict)
+  customer                   Customer         @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  createdBy                  User             @relation("OrderCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  lines                      SalesOrderLine[]
+  events                     OrderEvent[]
+  payments                   Payment[]
+  createdAt                  DateTime         @default(now())
+
   @@index([customerId, orderDate])
   @@index([discountApprovedById])
 }
 
 model SalesOrderLine {
-  id String @id @default(uuid()) @db.Uuid
-  orderId String @db.Uuid
-  fuelId String @db.Uuid
-  salesUnitId String @db.Uuid
-  requestedUnits Decimal @db.Decimal(18, 3)
-  conversionVersionId String? @db.Uuid
-  litersPerUnitSnapshot Decimal? @db.Decimal(18, 6)
-  requestedLitersSnapshot Decimal? @db.Decimal(18, 3)
-  priceVersionId String? @db.Uuid
-  unitPriceSnapshot Decimal? @db.Decimal(20, 4)
-  currencyCode String @default("USD")
-  confirmedAt DateTime?
-  orderIdempotencyKey String?
-  order SalesOrder @relation(fields: [orderId], references: [id], onDelete: Restrict)
-  fuel FuelType @relation(fields: [fuelId], references: [id], onDelete: Restrict)
-  salesUnit SalesUnit @relation(fields: [salesUnitId], references: [id], onDelete: Restrict)
-  conversionVersion FuelUnitVersion? @relation(fields: [conversionVersionId], references: [id], onDelete: Restrict)
-  priceVersion PriceVersion? @relation(fields: [priceVersionId], references: [id], onDelete: Restrict)
-  events OrderEvent[]
-  sheetLines DeliverySheetLine[]
-  dispatchLines DispatchLine[]
-  invoiceLines InvoiceLine[]
+  id                      String              @id @default(uuid()) @db.Uuid
+  orderId                 String              @db.Uuid
+  fuelId                  String              @db.Uuid
+  salesUnitId             String              @db.Uuid
+  requestedUnits          Decimal             @db.Decimal(18, 3)
+  conversionVersionId     String?             @db.Uuid
+  litersPerUnitSnapshot   Decimal?            @db.Decimal(18, 6)
+  requestedLitersSnapshot Decimal?            @db.Decimal(18, 3)
+  priceVersionId          String?             @db.Uuid
+  unitPriceSnapshot       Decimal?            @db.Decimal(20, 4)
+  currencyCode            String              @default("USD")
+  confirmedAt             DateTime?
+  orderIdempotencyKey     String?
+  order                   SalesOrder          @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  fuel                    FuelType            @relation(fields: [fuelId], references: [id], onDelete: Restrict)
+  salesUnit               SalesUnit           @relation(fields: [salesUnitId], references: [id], onDelete: Restrict)
+  conversionVersion       FuelUnitVersion?    @relation(fields: [conversionVersionId], references: [id], onDelete: Restrict)
+  priceVersion            PriceVersion?       @relation(fields: [priceVersionId], references: [id], onDelete: Restrict)
+  events                  OrderEvent[]
+  sheetLines              DeliverySheetLine[]
+  dispatchLines           DispatchLine[]
+  invoiceLines            InvoiceLine[]
+
   @@index([orderId])
 }
 
 model OrderEvent {
-  id String @id @default(uuid()) @db.Uuid
-  orderId String @db.Uuid
-  lineId String? @db.Uuid
-  kind String
-  oldValues Json?
-  newValues Json
-  actorId String @db.Uuid
-  reason String?
-  occurredAt DateTime @default(now())
-  order SalesOrder @relation(fields: [orderId], references: [id], onDelete: Restrict)
-  line SalesOrderLine? @relation(fields: [lineId], references: [id], onDelete: Restrict)
+  id         String          @id @default(uuid()) @db.Uuid
+  orderId    String          @db.Uuid
+  lineId     String?         @db.Uuid
+  kind       String
+  oldValues  Json?
+  newValues  Json
+  actorId    String          @db.Uuid
+  reason     String?
+  occurredAt DateTime        @default(now())
+  order      SalesOrder      @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  line       SalesOrderLine? @relation(fields: [lineId], references: [id], onDelete: Restrict)
+
   @@index([orderId, occurredAt])
 }
 
 model DeliverySheet {
-  id String @id @default(uuid()) @db.Uuid
-  sheetNo String @unique
-  serviceDate DateTime @db.Date
-  status DeliverySheetStatus @default(PREPARED)
-  revision Int @default(1)
-  createdById String @db.Uuid
-  notes String?
-  createdAt DateTime @default(now())
-  lines DeliverySheetLine[]
-  dispatches Dispatch[]
+  id          String              @id @default(uuid()) @db.Uuid
+  sheetNo     String              @unique
+  serviceDate DateTime            @db.Date
+  status      DeliverySheetStatus @default(PREPARED)
+  revision    Int                 @default(1)
+  createdById String              @db.Uuid
+  notes       String?
+  createdAt   DateTime            @default(now())
+  lines       DeliverySheetLine[]
+  dispatches  Dispatch[]
+
   @@index([serviceDate, createdAt])
 }
 
 model DeliverySheetLine {
-  id String @id @default(uuid()) @db.Uuid
-  sheetId String @db.Uuid
-  orderLineId String @db.Uuid
-  scheduledUnits Decimal @db.Decimal(18, 3)
-  orderNoSnapshot String
+  id                          String         @id @default(uuid()) @db.Uuid
+  sheetId                     String         @db.Uuid
+  orderLineId                 String         @db.Uuid
+  scheduledUnits              Decimal        @db.Decimal(18, 3)
+  orderNoSnapshot             String
   displayCustomerNameSnapshot String
-  phoneSnapshot String?
-  addressSnapshot String
-  fuelLabelSnapshot String
-  instructions String?
-  sheet DeliverySheet @relation(fields: [sheetId], references: [id], onDelete: Restrict)
-  orderLine SalesOrderLine @relation(fields: [orderLineId], references: [id], onDelete: Restrict)
-  dispatchLines DispatchLine[]
+  phoneSnapshot               String?
+  addressSnapshot             String
+  fuelLabelSnapshot           String
+  instructions                String?
+  sheet                       DeliverySheet  @relation(fields: [sheetId], references: [id], onDelete: Restrict)
+  orderLine                   SalesOrderLine @relation(fields: [orderLineId], references: [id], onDelete: Restrict)
+  dispatchLines               DispatchLine[]
+
   @@unique([sheetId, orderLineId])
 }
 
 model Dispatch {
-  id String @id @default(uuid()) @db.Uuid
-  dispatchNo String @unique
-  deliverySheetId String? @db.Uuid
-  status DispatchStatus @default(PREPARED)
-  dispatchedAt DateTime?
-  postedById String? @db.Uuid
-  postedAt DateTime?
-  idempotencyKey String? @unique
-  postIdempotencyKey String? @unique
-  notes String?
-  deliverySheet DeliverySheet? @relation(fields: [deliverySheetId], references: [id], onDelete: Restrict)
-  postedBy User? @relation(fields: [postedById], references: [id], onDelete: Restrict)
-  lines DispatchLine[]
-  confirmations DeliveryConfirmation[]
+  id                 String                 @id @default(uuid()) @db.Uuid
+  dispatchNo         String                 @unique
+  deliverySheetId    String?                @db.Uuid
+  status             DispatchStatus         @default(PREPARED)
+  dispatchedAt       DateTime?
+  postedById         String?                @db.Uuid
+  postedAt           DateTime?
+  idempotencyKey     String?                @unique
+  postIdempotencyKey String?                @unique
+  notes              String?
+  deliverySheet      DeliverySheet?         @relation(fields: [deliverySheetId], references: [id], onDelete: Restrict)
+  postedBy           User?                  @relation(fields: [postedById], references: [id], onDelete: Restrict)
+  lines              DispatchLine[]
+  confirmations      DeliveryConfirmation[]
+
   @@index([deliverySheetId])
 }
 
 model DispatchLine {
-  id String @id @default(uuid()) @db.Uuid
-  dispatchId String @db.Uuid
-  orderLineId String @db.Uuid
-  sheetLineId String? @db.Uuid
-  dispatchedUnits Decimal @db.Decimal(18, 3)
-  dispatchedLiters Decimal @db.Decimal(18, 3)
-  litersPerUnitSnapshot Decimal @db.Decimal(18, 6)
-  dispatch Dispatch @relation(fields: [dispatchId], references: [id], onDelete: Restrict)
-  orderLine SalesOrderLine @relation(fields: [orderLineId], references: [id], onDelete: Restrict)
-  sheetLine DeliverySheetLine? @relation(fields: [sheetLineId], references: [id], onDelete: Restrict)
-  confirmations DeliveryConfirmationLine[]
+  id                    String                     @id @default(uuid()) @db.Uuid
+  dispatchId            String                     @db.Uuid
+  orderLineId           String                     @db.Uuid
+  sheetLineId           String?                    @db.Uuid
+  dispatchedUnits       Decimal                    @db.Decimal(18, 3)
+  dispatchedLiters      Decimal                    @db.Decimal(18, 3)
+  litersPerUnitSnapshot Decimal                    @db.Decimal(18, 6)
+  dispatch              Dispatch                   @relation(fields: [dispatchId], references: [id], onDelete: Restrict)
+  orderLine             SalesOrderLine             @relation(fields: [orderLineId], references: [id], onDelete: Restrict)
+  sheetLine             DeliverySheetLine?         @relation(fields: [sheetLineId], references: [id], onDelete: Restrict)
+  confirmations         DeliveryConfirmationLine[]
+
   @@unique([dispatchId, orderLineId])
 }
 
 model DeliveryConfirmation {
-  id String @id @default(uuid()) @db.Uuid
-  confirmationNo String @unique
-  dispatchId String @db.Uuid
-  confirmedAt DateTime
-  recordedById String @db.Uuid
-  notes String?
-  idempotencyKey String @unique
-  dispatch Dispatch @relation(fields: [dispatchId], references: [id], onDelete: Restrict)
-  recordedBy User @relation(fields: [recordedById], references: [id], onDelete: Restrict)
-  lines DeliveryConfirmationLine[]
+  id             String                     @id @default(uuid()) @db.Uuid
+  confirmationNo String                     @unique
+  dispatchId     String                     @db.Uuid
+  confirmedAt    DateTime
+  recordedById   String                     @db.Uuid
+  notes          String?
+  idempotencyKey String                     @unique
+  dispatch       Dispatch                   @relation(fields: [dispatchId], references: [id], onDelete: Restrict)
+  recordedBy     User                       @relation(fields: [recordedById], references: [id], onDelete: Restrict)
+  lines          DeliveryConfirmationLine[]
+
   @@index([dispatchId, confirmedAt])
 }
 
 model DeliveryConfirmationLine {
-  id String @id @default(uuid()) @db.Uuid
-  confirmationId String @db.Uuid
-  dispatchLineId String @db.Uuid
-  acceptedUnits Decimal @db.Decimal(18, 3)
-  acceptedLiters Decimal @db.Decimal(18, 3)
-  physicalReturnedLiters Decimal @db.Decimal(18, 3)
-  commercialDisposition CommercialDisposition @default(NONE)
-  discrepancyReason String?
-  billingSourceKey String @unique
-  confirmation DeliveryConfirmation @relation(fields: [confirmationId], references: [id], onDelete: Restrict)
-  dispatchLine DispatchLine @relation(fields: [dispatchLineId], references: [id], onDelete: Restrict)
-  invoice Invoice?
+  id                     String                @id @default(uuid()) @db.Uuid
+  confirmationId         String                @db.Uuid
+  dispatchLineId         String                @db.Uuid
+  acceptedUnits          Decimal               @db.Decimal(18, 3)
+  acceptedLiters         Decimal               @db.Decimal(18, 3)
+  physicalReturnedLiters Decimal               @db.Decimal(18, 3)
+  commercialDisposition  CommercialDisposition @default(NONE)
+  discrepancyReason      String?
+  billingSourceKey       String                @unique
+  confirmation           DeliveryConfirmation  @relation(fields: [confirmationId], references: [id], onDelete: Restrict)
+  dispatchLine           DispatchLine          @relation(fields: [dispatchLineId], references: [id], onDelete: Restrict)
+  invoice                Invoice?
 }
 
 model Invoice {
-  id                         String   @id @default(uuid()) @db.Uuid
-  invoiceNo                  String   @unique
-  customerId                 String   @db.Uuid
-  deliveryConfirmationLineId String?  @unique @db.Uuid
-  billingSourceKey           String   @unique
+  id                         String        @id @default(uuid()) @db.Uuid
+  invoiceNo                  String        @unique
+  customerId                 String        @db.Uuid
+  deliveryConfirmationLineId String?       @unique @db.Uuid
+  billingSourceKey           String        @unique
   issueDate                  DateTime
   dueDate                    DateTime?
   status                     InvoiceStatus @default(UNPAID)
-  subtotal                   Decimal  @db.Decimal(20, 4)
-  discountAmount             Decimal  @db.Decimal(20, 4) @default(0)
-  taxAmount                  Decimal  @db.Decimal(20, 4) @default(0)
-  totalAmount                Decimal  @db.Decimal(20, 4)
-  paidAmount                 Decimal  @db.Decimal(20, 4) @default(0)
-  balanceDue                 Decimal  @db.Decimal(20, 4)
-  currencyCode               String   @default("USD")
+  subtotal                   Decimal       @db.Decimal(20, 4)
+  discountAmount             Decimal       @default(0) @db.Decimal(20, 4)
+  taxAmount                  Decimal       @default(0) @db.Decimal(20, 4)
+  totalAmount                Decimal       @db.Decimal(20, 4)
+  paidAmount                 Decimal       @default(0) @db.Decimal(20, 4)
+  balanceDue                 Decimal       @db.Decimal(20, 4)
+  currencyCode               String        @default("USD")
   notes                      String?
-  createdById                String   @db.Uuid
-  createdAt                  DateTime @default(now())
+  createdById                String        @db.Uuid
+  createdAt                  DateTime      @default(now())
 
-  customer                 Customer                 @relation(fields: [customerId], references: [id], onDelete: Restrict)
-  createdBy                User                     @relation("InvoiceCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  customer                 Customer                  @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  createdBy                User                      @relation("InvoiceCreator", fields: [createdById], references: [id], onDelete: Restrict)
   deliveryConfirmationLine DeliveryConfirmationLine? @relation(fields: [deliveryConfirmationLineId], references: [id], onDelete: Restrict)
 
   lines       InvoiceLine[]
   allocations PaymentAllocation[]
+
   @@index([customerId, issueDate])
   @@index([status])
 }
 
 model InvoiceLine {
-  id                    String   @id @default(uuid()) @db.Uuid
-  invoiceId             String   @db.Uuid
-  orderLineId           String   @db.Uuid
-  fuelId                String   @db.Uuid
-  salesUnitId           String   @db.Uuid
-  acceptedUnits         Decimal  @db.Decimal(18, 3)
-  acceptedLiters        Decimal  @db.Decimal(18, 3)
-  unitPriceSnapshot     Decimal  @db.Decimal(20, 4)
-  litersPerUnitSnapshot Decimal  @db.Decimal(18, 6)
-  lineTotal             Decimal  @db.Decimal(20, 4)
+  id                    String  @id @default(uuid()) @db.Uuid
+  invoiceId             String  @db.Uuid
+  orderLineId           String  @db.Uuid
+  fuelId                String  @db.Uuid
+  salesUnitId           String  @db.Uuid
+  acceptedUnits         Decimal @db.Decimal(18, 3)
+  acceptedLiters        Decimal @db.Decimal(18, 3)
+  unitPriceSnapshot     Decimal @db.Decimal(20, 4)
+  litersPerUnitSnapshot Decimal @db.Decimal(18, 6)
+  lineTotal             Decimal @db.Decimal(20, 4)
 
   invoice   Invoice        @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
   orderLine SalesOrderLine @relation(fields: [orderLineId], references: [id], onDelete: Restrict)
   fuel      FuelType       @relation(fields: [fuelId], references: [id], onDelete: Restrict)
   salesUnit SalesUnit      @relation(fields: [salesUnitId], references: [id], onDelete: Restrict)
+
   @@index([invoiceId])
 }
 
 model Payment {
-  id              String        @id @default(uuid()) @db.Uuid
-  paymentNo       String        @unique
-  customerId      String        @db.Uuid
-  orderId         String?       @db.Uuid
-  amount          Decimal       @db.Decimal(20, 4)
-  allocatedAmount Decimal       @db.Decimal(20, 4) @default(0)
-  unappliedAmount Decimal       @db.Decimal(20, 4)
-  paymentDate     DateTime
-  paymentMethod   PaymentMethod @default(CASH)
-  reference       String?
-  notes           String?
-  idempotencyKey  String?       @unique
-  status          PaymentStatus @default(POSTED)
-  recordedById    String        @db.Uuid
-  createdAt       DateTime      @default(now())
+  id                 String        @id @default(uuid()) @db.Uuid
+  paymentNo          String        @unique
+  customerId         String        @db.Uuid
+  orderId            String?       @db.Uuid
+  amount             Decimal       @db.Decimal(20, 4)
+  allocatedAmount    Decimal       @default(0) @db.Decimal(20, 4)
+  unappliedAmount    Decimal       @db.Decimal(20, 4)
+  paymentDate        DateTime
+  paymentMethod      PaymentMethod @default(CASH)
+  reference          String?
+  notes              String?
+  idempotencyKey     String?       @unique
+  status             PaymentStatus @default(POSTED)
+  recordedById       String        @db.Uuid
+  financialAccountId String?       @db.Uuid
+  accountMappedAt    DateTime?
+  accountMappedById  String?       @db.Uuid
+  createdAt          DateTime      @default(now())
 
-  customer    Customer            @relation(fields: [customerId], references: [id], onDelete: Restrict)
-  order       SalesOrder?         @relation(fields: [orderId], references: [id], onDelete: Restrict)
-  recordedBy  User                @relation("PaymentRecorder", fields: [recordedById], references: [id], onDelete: Restrict)
-  allocations PaymentAllocation[]
-  reversals   PaymentReversal[]
+  customer         Customer            @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  order            SalesOrder?         @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  recordedBy       User                @relation("PaymentRecorder", fields: [recordedById], references: [id], onDelete: Restrict)
+  financialAccount FinancialAccount?   @relation(fields: [financialAccountId], references: [id], onDelete: Restrict)
+  accountMappedBy  User?               @relation("PaymentAccountMapper", fields: [accountMappedById], references: [id], onDelete: Restrict)
+  allocations      PaymentAllocation[]
+  reversals        PaymentReversal[]
+
   @@index([customerId, paymentDate])
   @@index([orderId])
+  @@index([financialAccountId, paymentDate])
 }
 
 model WorkflowRequest {
-  key String @id
-  actorId String @db.Uuid
-  kind String
+  key         String   @id
+  actorId     String   @db.Uuid
+  kind        String
   payloadHash String
-  result Json
-  createdAt DateTime @default(now())
+  result      Json
+  createdAt   DateTime @default(now())
 }
 
 model PaymentAllocation {
@@ -538,20 +643,21 @@ model PaymentAllocation {
   allocatedAt DateTime @default(now())
   createdById String   @db.Uuid
 
-  payment   Payment  @relation(fields: [paymentId], references: [id], onDelete: Restrict)
-  invoice   Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
-  createdBy User     @relation("AllocationCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  payment   Payment @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  invoice   Invoice @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  createdBy User    @relation("AllocationCreator", fields: [createdById], references: [id], onDelete: Restrict)
+
   @@unique([paymentId, invoiceId])
 }
 
 model PaymentReversal {
-  id           String   @id @default(uuid()) @db.Uuid
-  reversalNo   String   @unique
-  paymentId    String   @unique @db.Uuid
-  idempotencyKey String @unique
-  reason       String
-  reversedById String   @db.Uuid
-  reversedAt   DateTime @default(now())
+  id             String   @id @default(uuid()) @db.Uuid
+  reversalNo     String   @unique
+  paymentId      String   @unique @db.Uuid
+  idempotencyKey String   @unique
+  reason         String
+  reversedById   String   @db.Uuid
+  reversedAt     DateTime @default(now())
 
   payment    Payment @relation(fields: [paymentId], references: [id], onDelete: Restrict)
   reversedBy User    @relation("PaymentReverser", fields: [reversedById], references: [id], onDelete: Restrict)
@@ -563,41 +669,255 @@ model CustomerLedgerEntry {
   occurredAt     DateTime        @default(now())
   entryType      LedgerEntryType
   referenceNo    String
-  debitAmount    Decimal         @db.Decimal(20, 4) @default(0)
-  creditAmount   Decimal         @db.Decimal(20, 4) @default(0)
+  debitAmount    Decimal         @default(0) @db.Decimal(20, 4)
+  creditAmount   Decimal         @default(0) @db.Decimal(20, 4)
   runningBalance Decimal         @db.Decimal(20, 4)
   sourceType     String
   sourceId       String
   notes          String?
 
   customer Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+
   @@index([customerId, occurredAt])
 }
 
 model InventoryMovement {
-  id String @id @default(uuid()) @db.Uuid
-  fuelId String @db.Uuid
-  location Location
-  signedDeltaLiters Decimal @db.Decimal(18, 3)
-  eventType MovementType
-  sourceType String
-  sourceId String
-  sourceLineId String?
-  occurredAt DateTime @default(now())
-  createdById String @db.Uuid
-  reversalOfId String?
-  fuel FuelType @relation(fields: [fuelId], references: [id], onDelete: Restrict)
+  id                String       @id @default(uuid()) @db.Uuid
+  fuelId            String       @db.Uuid
+  location          Location
+  signedDeltaLiters Decimal      @db.Decimal(18, 3)
+  eventType         MovementType
+  sourceType        String
+  sourceId          String
+  sourceLineId      String?
+  occurredAt        DateTime     @default(now())
+  createdById       String       @db.Uuid
+  reversalOfId      String?
+  fuel              FuelType     @relation(fields: [fuelId], references: [id], onDelete: Restrict)
+
   @@unique([sourceType, sourceLineId, eventType, location])
   @@index([fuelId, location, occurredAt])
   @@index([sourceType, sourceId])
 }
 
 model StockBalance {
-  id String @id @default(uuid()) @db.Uuid
-  fuelId String @db.Uuid
-  location Location
-  balanceLiters Decimal @db.Decimal(18, 3)
-  version Int @default(0)
-  fuel FuelType @relation(fields: [fuelId], references: [id], onDelete: Restrict)
+  id            String   @id @default(uuid()) @db.Uuid
+  fuelId        String   @db.Uuid
+  location      Location
+  balanceLiters Decimal  @db.Decimal(18, 3)
+  version       Int      @default(0)
+  fuel          FuelType @relation(fields: [fuelId], references: [id], onDelete: Restrict)
+
   @@unique([fuelId, location])
+}
+
+model Supplier {
+  id          String         @id @default(uuid()) @db.Uuid
+  code        String         @unique
+  name        String
+  phone       String?
+  location    String?
+  notes       String?
+  status      SupplierStatus @default(ACTIVE)
+  createdById String         @db.Uuid
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  createdBy User               @relation("SupplierCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  receipts  TankerReceipt[]
+  purchases SupplierPurchase[]
+  payments  SupplierPayment[]
+
+  @@index([name])
+}
+
+model SupplierPurchase {
+  id                      String                 @id @default(uuid()) @db.Uuid
+  purchaseNo              String                 @unique
+  supplierId              String                 @db.Uuid
+  receiptId               String                 @unique @db.Uuid
+  fuelId                  String                 @db.Uuid
+  quantityFuusto          Decimal                @db.Decimal(18, 3)
+  litersPerFuustoSnapshot Decimal                @db.Decimal(18, 6)
+  unitCost                Decimal                @db.Decimal(20, 4)
+  totalCost               Decimal                @db.Decimal(20, 4)
+  paidAmount              Decimal                @default(0) @db.Decimal(20, 4)
+  balanceDue              Decimal                @db.Decimal(20, 4)
+  purchaseDate            DateTime
+  status                  SupplierPurchaseStatus @default(OPEN)
+  createdById             String                 @db.Uuid
+  createdAt               DateTime               @default(now())
+
+  supplier    Supplier                    @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  receipt     TankerReceipt               @relation(fields: [receiptId], references: [id], onDelete: Restrict)
+  fuel        FuelType                    @relation(fields: [fuelId], references: [id], onDelete: Restrict)
+  createdBy   User                        @relation("SupplierPurchaseCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  allocations SupplierPaymentAllocation[]
+
+  @@index([supplierId, purchaseDate])
+  @@index([status])
+}
+
+model FinancialAccount {
+  id                  String                 @id @default(uuid()) @db.Uuid
+  code                String                 @unique
+  name                String
+  type                FinancialAccountType
+  identifierMasked    String?
+  currencyCode        String                 @default("USD")
+  openingBalance      Decimal                @db.Decimal(20, 4)
+  openingBalanceAsOf  DateTime
+  currentBalance      Decimal                @db.Decimal(20, 4)
+  overdraftPolicy     AccountOverdraftPolicy @default(UNSET)
+  allowOfficePayments Boolean                @default(true)
+  active              Boolean                @default(true)
+  notes               String?
+  createdById         String                 @db.Uuid
+  createdAt           DateTime               @default(now())
+  updatedAt           DateTime               @updatedAt
+
+  createdBy        User                       @relation("FinancialAccountCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  movements        FinancialAccountMovement[]
+  customerPayments Payment[]
+  supplierPayments SupplierPayment[]
+  expenses         BusinessExpense[]
+  transfersFrom    AccountTransfer[]          @relation("TransferFromAccount")
+  transfersTo      AccountTransfer[]          @relation("TransferToAccount")
+
+  @@index([active, name])
+}
+
+model FinancialAccountMovement {
+  id           String                     @id @default(uuid()) @db.Uuid
+  accountId    String                     @db.Uuid
+  occurredAt   DateTime
+  direction    FinancialMovementDirection
+  kind         FinancialMovementKind
+  amount       Decimal                    @db.Decimal(20, 4)
+  balanceAfter Decimal                    @db.Decimal(20, 4)
+  sourceType   String
+  sourceId     String
+  referenceNo  String
+  description  String?
+  createdById  String                     @db.Uuid
+  reversalOfId String?                    @db.Uuid
+  createdAt    DateTime                   @default(now())
+
+  account    FinancialAccount           @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  createdBy  User                       @relation("FinancialMovementCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  reversalOf FinancialAccountMovement?  @relation("MovementReversal", fields: [reversalOfId], references: [id], onDelete: Restrict)
+  reversals  FinancialAccountMovement[] @relation("MovementReversal")
+
+  @@unique([accountId, sourceType, sourceId, kind])
+  @@index([accountId, occurredAt])
+  @@index([sourceType, sourceId])
+}
+
+model SupplierPayment {
+  id                 String        @id @default(uuid()) @db.Uuid
+  paymentNo          String        @unique
+  supplierId         String        @db.Uuid
+  financialAccountId String        @db.Uuid
+  amount             Decimal       @db.Decimal(20, 4)
+  allocatedAmount    Decimal       @default(0) @db.Decimal(20, 4)
+  paymentDate        DateTime
+  reference          String?
+  notes              String?
+  status             PaymentStatus @default(POSTED)
+  idempotencyKey     String        @unique
+  recordedById       String        @db.Uuid
+  createdAt          DateTime      @default(now())
+
+  supplier         Supplier                    @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  financialAccount FinancialAccount            @relation(fields: [financialAccountId], references: [id], onDelete: Restrict)
+  recordedBy       User                        @relation("SupplierPaymentRecorder", fields: [recordedById], references: [id], onDelete: Restrict)
+  allocations      SupplierPaymentAllocation[]
+  reversal         SupplierPaymentReversal?
+
+  @@index([supplierId, paymentDate])
+  @@index([financialAccountId, paymentDate])
+}
+
+model SupplierPaymentAllocation {
+  id                 String   @id @default(uuid()) @db.Uuid
+  supplierPaymentId  String   @db.Uuid
+  supplierPurchaseId String   @db.Uuid
+  amount             Decimal  @db.Decimal(20, 4)
+  allocatedAt        DateTime @default(now())
+
+  supplierPayment  SupplierPayment  @relation(fields: [supplierPaymentId], references: [id], onDelete: Restrict)
+  supplierPurchase SupplierPurchase @relation(fields: [supplierPurchaseId], references: [id], onDelete: Restrict)
+
+  @@unique([supplierPaymentId, supplierPurchaseId])
+}
+
+model SupplierPaymentReversal {
+  id                String   @id @default(uuid()) @db.Uuid
+  reversalNo        String   @unique
+  supplierPaymentId String   @unique @db.Uuid
+  idempotencyKey    String   @unique
+  reason            String
+  reversedById      String   @db.Uuid
+  reversedAt        DateTime @default(now())
+
+  supplierPayment SupplierPayment @relation(fields: [supplierPaymentId], references: [id], onDelete: Restrict)
+  reversedBy      User            @relation("SupplierPaymentReverser", fields: [reversedById], references: [id], onDelete: Restrict)
+}
+
+model BusinessExpense {
+  id                 String        @id @default(uuid()) @db.Uuid
+  expenseNo          String        @unique
+  description        String
+  category           String
+  amount             Decimal       @db.Decimal(20, 4)
+  expenseDate        DateTime
+  financialAccountId String?       @db.Uuid
+  outsideTracked     Boolean       @default(false)
+  reference          String?
+  notes              String?
+  status             ExpenseStatus @default(POSTED)
+  idempotencyKey     String        @unique
+  createdById        String        @db.Uuid
+  createdAt          DateTime      @default(now())
+
+  financialAccount FinancialAccount? @relation(fields: [financialAccountId], references: [id], onDelete: Restrict)
+  createdBy        User              @relation("ExpenseCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  reversal         ExpenseReversal?
+
+  @@index([expenseDate])
+  @@index([financialAccountId, expenseDate])
+}
+
+model ExpenseReversal {
+  id             String   @id @default(uuid()) @db.Uuid
+  reversalNo     String   @unique
+  expenseId      String   @unique @db.Uuid
+  idempotencyKey String   @unique
+  reason         String
+  reversedById   String   @db.Uuid
+  reversedAt     DateTime @default(now())
+
+  expense    BusinessExpense @relation(fields: [expenseId], references: [id], onDelete: Restrict)
+  reversedBy User            @relation("ExpenseReverser", fields: [reversedById], references: [id], onDelete: Restrict)
+}
+
+model AccountTransfer {
+  id             String                @id @default(uuid()) @db.Uuid
+  transferNo     String                @unique
+  fromAccountId  String                @db.Uuid
+  toAccountId    String                @db.Uuid
+  amount         Decimal               @db.Decimal(20, 4)
+  transferDate   DateTime
+  reference      String?
+  notes          String?
+  status         AccountTransferStatus @default(POSTED)
+  idempotencyKey String                @unique
+  createdById    String                @db.Uuid
+  createdAt      DateTime              @default(now())
+
+  fromAccount FinancialAccount @relation("TransferFromAccount", fields: [fromAccountId], references: [id], onDelete: Restrict)
+  toAccount   FinancialAccount @relation("TransferToAccount", fields: [toAccountId], references: [id], onDelete: Restrict)
+  createdBy   User             @relation("AccountTransferCreator", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([transferDate])
 }
