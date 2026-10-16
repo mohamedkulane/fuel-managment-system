@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { statementBounds, statementRows } from "./customer-statement.js";
 import { Body, ConflictException, Controller, Delete, Get, Headers, Inject, Param, Patch, Post, Put, Query, Req, Res, UseGuards, BadRequestException, ForbiddenException, NotFoundException } from "@nestjs/common";
 import type { Response } from "express";
@@ -15,6 +16,44 @@ import { addDocumentFooter, drawDocumentLogo, resolveDocumentBranding, validateL
 import { CustomerAccountService } from "./customer-account.service.js";
 import { SimpleWorkflowsService } from "./simple-workflows.service.js";
 import { FinancialWorkflowsService } from "./financial-workflows.service.js";
+
+function resolvePermissionDependencies(codes: PermissionCode[]): PermissionCode[] {
+  const result = new Set<PermissionCode>(codes);
+  if (result.has("customers.create") || result.has("customers.update") || result.has("customers.archive") || result.has("customers.restore")) {
+    result.add("customers.view");
+  }
+  if (result.has("orders.create") || result.has("orders.amend") || result.has("orders.cancel") || result.has("orders.delivery.confirm") || result.has("orders.delivery.overage_approve") || result.has("orders.invoice.view")) {
+    result.add("orders.view");
+  }
+  if (result.has("orders.delivery.overage_approve")) {
+    result.add("orders.delivery.confirm");
+  }
+  if (result.has("stock.receive") || result.has("stock.adjust") || result.has("stock.purchase_cost.view")) {
+    result.add("stock.view");
+  }
+  if (result.has("prices.update")) {
+    result.add("prices.view");
+  }
+  if (result.has("suppliers.create") || result.has("suppliers.update") || result.has("suppliers.pay")) {
+    result.add("suppliers.view");
+  }
+  if (result.has("expenses.create") || result.has("expenses.reverse")) {
+    result.add("expenses.view");
+  }
+  if (result.has("accounts.create") || result.has("accounts.transfer") || result.has("accounts.movements.view")) {
+    result.add("accounts.view");
+  }
+  if (result.has("payments.record") || result.has("payments.reverse") || result.has("payments.receipt.view")) {
+    result.add("payments.view");
+  }
+  if (result.has("reports.export") || result.has("reports.financial.view") || result.has("reports.profit.view")) {
+    result.add("reports.view");
+  }
+  if (result.has("settings.manage") || result.has("users.manage") || result.has("permissions.manage") || result.has("audit.view")) {
+    result.add("settings.view");
+  }
+  return [...result];
+}
 
 type DecimalInput = string;
 const dec = (value: DecimalInput): Prisma.Decimal => new Prisma.Decimal(value);
@@ -186,22 +225,41 @@ export class AppController {
     @Body() body: { fuelId?: string; signedDeltaLiters?: string; signedDeltaFuusto?: string; quantityFuusto?: string; reason?: string }
   ) {
     const actor = requirePermission(request, "stock.adjust");
+    const key = requireIdempotencyKey(headerKey);
     const reason = body.reason?.trim();
     if (!body.fuelId || !reason) throw new BadRequestException("fuelId and reason are required");
 
     let delta: Prisma.Decimal;
     if (body.signedDeltaFuusto || body.quantityFuusto) {
-      const fuusto = dec(body.signedDeltaFuusto || body.quantityFuusto!);
+      const rawFuusto = body.signedDeltaFuusto || body.quantityFuusto!;
+      const fuusto = dec(rawFuusto);
       if (fuusto.eq(0)) throw new BadRequestException("Fuusto quantity cannot be zero");
+      if (!fuusto.modulo(1).isZero()) {
+        throw new BadRequestException("Tirada fuustooyinka waa inay noqotaa tiro idil (Fuusto quantity must be a whole integer)");
+      }
       delta = fuusto.mul(240);
     } else if (body.signedDeltaLiters) {
-      delta = dec(body.signedDeltaLiters);
-      if (delta.eq(0)) throw new BadRequestException("signedDeltaLiters cannot be zero");
+      const liters = dec(body.signedDeltaLiters);
+      if (liters.eq(0)) throw new BadRequestException("signedDeltaLiters cannot be zero");
+      if (!liters.modulo(240).isZero()) {
+        throw new BadRequestException("Stock adjustment must be in whole fuusto (multiples of 240 liters)");
+      }
+      delta = liters;
     } else {
       throw new BadRequestException("quantityFuusto or signedDeltaLiters is required");
     }
 
+    const payloadHash = createHash("sha256").update(JSON.stringify({ fuelId: body.fuelId, delta: delta.toFixed(3), reason })).digest("hex");
+
     const result = await this.prisma.$transaction(async (tx) => {
+      const prior = await tx.workflowRequest.findUnique({ where: { key } });
+      if (prior) {
+        if (prior.actorId !== actor.id || prior.kind !== "stock-adjustment" || prior.payloadHash !== payloadHash) {
+          throw new ConflictException("Idempotency key was used for a different request");
+        }
+        return { ...(prior.result as object), replay: true };
+      }
+
       const where = { fuelId_location: { fuelId: body.fuelId!, location: "WAREHOUSE" as const } };
       if (delta.lt(0)) {
         const changed = await tx.stockBalance.updateMany({
@@ -226,15 +284,32 @@ export class AppController {
       await tx.auditEvent.create({
         data: { actorId: actor.id, entityType: "InventoryMovement", entityId: movement.id, action: "ADJUSTED", reason }
       });
-      return movement;
+
+      const responseData = {
+        id: movement.id,
+        fuelId: movement.fuelId,
+        location: movement.location,
+        signedDeltaLiters: movement.signedDeltaLiters.toFixed(3),
+        signedDeltaFuusto: movement.signedDeltaLiters.div(240).toFixed(3),
+        eventType: movement.eventType,
+        sourceType: movement.sourceType,
+        sourceId: movement.sourceId
+      };
+
+      await tx.workflowRequest.create({
+        data: {
+          key,
+          actorId: actor.id,
+          kind: "stock-adjustment",
+          payloadHash,
+          result: responseData
+        }
+      });
+
+      return responseData;
     });
-    return {
-      data: {
-        ...result,
-        signedDeltaLiters: result.signedDeltaLiters.toFixed(3),
-        signedDeltaFuusto: result.signedDeltaLiters.div(240).toFixed(3)
-      }
-    };
+
+    return { data: result };
   }
 
   @UseGuards(SessionGuard)
@@ -506,7 +581,7 @@ export class AppController {
               where: { receiptId: row.id, fuelId: line.fuelId }
             });
             if (!existingPurchase) {
-              const purchase = await this.financialWorkflows.createSupplierPurchase(tx, actor, {
+              await this.financialWorkflows.createSupplierPurchase(tx, actor, {
                 supplierId: row.supplierId,
                 receiptId: row.id,
                 fuelId: line.fuelId,
@@ -515,19 +590,18 @@ export class AppController {
                 totalCost: line.totalPurchaseCost,
                 purchaseDate: row.arrivedAt
               });
-              if (row.paidNow && row.paidNow.gt(0) && row.payingAccountId) {
-                await this.financialWorkflows.createSupplierPaymentInTransaction(tx, actor, `${key}:supplier:${line.id}`, {
-                  supplierId: row.supplierId,
-                  financialAccountId: row.payingAccountId,
-                  amount: row.paidNow,
-                  paymentDate: row.arrivedAt,
-                  reference: row.receiptNo,
-                  notes: "Paid with stock receipt",
-                  purchaseId: purchase.id
-                });
-              }
             }
           }
+        }
+        if (row.paidNow && row.paidNow.gt(0) && row.payingAccountId) {
+          await this.financialWorkflows.createSupplierPaymentInTransaction(tx, actor, `${key}:supplier`, {
+            supplierId: row.supplierId,
+            financialAccountId: row.payingAccountId,
+            amount: row.paidNow,
+            paymentDate: row.arrivedAt,
+            reference: row.receiptNo,
+            notes: "Paid with stock receipt"
+          });
         }
       }
 
@@ -929,7 +1003,7 @@ export class AppController {
           include: {
             fuel: true,
             invoiceLines: {
-              include: { invoice: { include: { allocations: { include: { payment: true } } } } }
+              include: { invoice: { include: { lines: { include: { fuel: true } }, allocations: { include: { payment: true } } } } }
             }
           }
         }
@@ -962,9 +1036,38 @@ export class AppController {
     const fifoPaid = activeInvoices.flatMap((invoice) => invoice.allocations)
       .filter((allocation) => allocation.payment.status === "POSTED" && allocation.payment.orderId !== order.id)
       .reduce((sum, allocation) => sum.add(allocation.amount), dec("0"));
-    const subtotal = order.subtotal ?? pricedLines.reduce((sum, item) => sum.add(item.line.requestedUnits.mul(item.unitPrice)), dec("0"));
-    const total = order.totalAmount ?? subtotal.sub(order.fixedDiscountAmount);
-    const paid = Prisma.Decimal.min(total, directPaid.add(fifoPaid));
+
+    const hasDeliveredInvoices = activeInvoices.length > 0;
+    const subtotal = hasDeliveredInvoices
+      ? activeInvoices.reduce((sum, inv) => sum.add(inv.subtotal), dec("0"))
+      : (order.subtotal ?? pricedLines.reduce((sum, item) => sum.add(item.line.requestedUnits.mul(item.unitPrice)), dec("0")));
+    const discount = hasDeliveredInvoices
+      ? activeInvoices.reduce((sum, inv) => sum.add(inv.discountAmount), dec("0"))
+      : order.fixedDiscountAmount;
+    const total = hasDeliveredInvoices
+      ? activeInvoices.reduce((sum, inv) => sum.add(inv.totalAmount), dec("0"))
+      : (order.totalAmount ?? subtotal.sub(discount));
+    const paid = hasDeliveredInvoices
+      ? Prisma.Decimal.min(total, directPaid.add(fifoPaid))
+      : Prisma.Decimal.min(total, directPaid.add(fifoPaid));
+    const remaining = hasDeliveredInvoices
+      ? activeInvoices.reduce((sum, inv) => sum.add(inv.balanceDue), dec("0"))
+      : Prisma.Decimal.max(dec("0"), total.sub(paid));
+
+    const invoiceLines = hasDeliveredInvoices
+      ? activeInvoices.flatMap((inv) => inv.lines.map((invLine) => ({
+          fuel: invLine.fuel.code === "PETROL" ? ("Basiin" as const) : ("Naafto" as const),
+          quantity: invLine.acceptedUnits.toFixed(0),
+          unitPrice: invLine.unitPriceSnapshot.toFixed(2),
+          amount: invLine.lineTotal.toFixed(2)
+        })))
+      : pricedLines.map(({ line, unitPrice }) => ({
+          fuel: line.fuel.code === "PETROL" ? ("Basiin" as const) : ("Naafto" as const),
+          quantity: line.requestedUnits.toFixed(0),
+          unitPrice: unitPrice.toFixed(2),
+          amount: line.requestedUnits.mul(unitPrice).toFixed(2)
+        }));
+
     const formatter = new Intl.DateTimeFormat("en-GB", { timeZone: "Africa/Mogadishu", day: "2-digit", month: "short", year: "numeric" });
     const customerAddress = order.customer.addresses.find((address) => address.isDefault) ?? order.customer.addresses[0];
     const pdf = await createOrderInvoicePdf({
@@ -975,18 +1078,13 @@ export class AppController {
       status: order.status.replaceAll("_", " "),
       customer: { name: order.customer.name, phone: order.customer.primaryPhone, location: customerAddress?.addressText ?? null },
       deliveryLocation: order.addressSnapshot,
-      lines: pricedLines.map(({ line, unitPrice }) => ({
-        fuel: line.fuel.code === "PETROL" ? "Basiin" : "Naafto",
-        quantity: line.requestedUnits.toFixed(0),
-        unitPrice: unitPrice.toFixed(2),
-        amount: line.requestedUnits.mul(unitPrice).toFixed(2)
-      })),
+      lines: invoiceLines,
       subtotal: subtotal.toFixed(2),
-      discount: order.fixedDiscountAmount.toFixed(2),
+      discount: discount.toFixed(2),
       total: total.toFixed(2),
       paid: paid.toFixed(2),
-      remaining: Prisma.Decimal.max(dec("0"), total.sub(paid)).toFixed(2),
-      deliveryPending: activeInvoices.length === 0,
+      remaining: remaining.toFixed(2),
+      deliveryPending: !hasDeliveredInvoices,
       draftPreview,
       branding: await this.documentBranding()
     });
@@ -1391,6 +1489,15 @@ export class AppController {
     try {
       const row = await this.prisma.$transaction(async (tx) => {
         const created = await tx.user.create({ data: { displayName, email, passwordHash, role }, select: managedUserSelect });
+        if (created.role === "OFFICE_EMPLOYEE") {
+          await tx.userPermission.createMany({
+            data: STANDARD_OFFICE_PERMISSIONS.map((perm) => ({
+              userId: created.id,
+              permission: perm,
+              grantedById: actor.id
+            }))
+          });
+        }
         await tx.auditEvent.create({ data: { actorId: actor.id, entityType: "User", entityId: created.id, action: "CREATED", afterRedacted: { displayName: created.displayName, email: created.email, role: created.role, isActive: created.isActive } } });
         return created;
       });
@@ -1478,9 +1585,7 @@ export class AppController {
     if (!user) throw new NotFoundException("User not found");
     const granted = user.role === "OWNER"
       ? [...PERMISSION_CODES]
-      : user.permissions.length > 0
-        ? user.permissions.map((p) => p.permission)
-        : [...STANDARD_OFFICE_PERMISSIONS];
+      : user.permissions.map((p) => p.permission as PermissionCode);
     return { data: { userId: user.id, role: user.role, permissions: granted } };
   }
 
@@ -1492,6 +1597,9 @@ export class AppController {
     @Body() body: { permissions?: string[] }
   ) {
     const actor = requirePermission(request, "permissions.manage");
+    if (id === actor.id) {
+      throw new ForbiddenException("Cannot modify your own permissions");
+    }
     if (!Array.isArray(body?.permissions)) {
       throw new BadRequestException("permissions array is required");
     }
@@ -1502,7 +1610,21 @@ export class AppController {
     }
 
     const validCodes = new Set<string>(PERMISSION_CODES);
-    const sanitized = [...new Set(body.permissions.filter((p) => validCodes.has(p)))];
+    const rawSanitized = [...new Set(body.permissions.filter((p): p is PermissionCode => validCodes.has(p)))];
+    const sanitized = resolvePermissionDependencies(rawSanitized);
+
+    if (actor.role !== "OWNER") {
+      const adminPerms: PermissionCode[] = ["permissions.manage", "users.manage", "settings.manage", "audit.view", "prices.update"];
+      const actorPermSet = new Set(actor.permissions ?? []);
+      for (const p of sanitized) {
+        if (adminPerms.includes(p)) {
+          throw new ForbiddenException(`Shaqaaluhu ma bixin karo ogolaanshaha maamulka: ${p}`);
+        }
+        if (!actorPermSet.has(p)) {
+          throw new ForbiddenException(`Ma bixin kartid ogolaansho aadan lahayn: ${p}`);
+        }
+      }
+    }
 
     await this.prisma.$transaction(async (tx) => {
       await tx.userPermission.deleteMany({ where: { userId: id } });
@@ -2306,7 +2428,12 @@ export class AppController {
   async accountsReceivableSummary(@Req() request?: AuthenticatedRequest) {
     if (request) requirePermission(request, "accounts.view");
     const customers = await this.prisma.customer.findMany({
-      where: { status: { in: ["ACTIVE", "HOLD"] } },
+      where: {
+        OR: [
+          { status: { in: ["ACTIVE", "HOLD"] } },
+          { status: "INACTIVE", invoices: { some: { status: { in: ["UNPAID", "PARTIALLY_PAID"] } } } }
+        ]
+      },
       include: {
         invoices: { where: { status: { in: ["UNPAID", "PARTIALLY_PAID"] } } }
       }
@@ -2563,7 +2690,12 @@ export class AppController {
         include: { dispatchLine: { include: { orderLine: { include: { fuel: true } } } } }
       }),
       this.prisma.customer.findMany({
-        where: { status: { in: ["ACTIVE", "HOLD"] } },
+        where: {
+          OR: [
+            { status: { in: ["ACTIVE", "HOLD"] } },
+            { status: "INACTIVE", invoices: { some: { status: { in: ["UNPAID", "PARTIALLY_PAID"] } } } }
+          ]
+        },
         include: { invoices: { where: { status: { in: ["UNPAID", "PARTIALLY_PAID"] } } } }
       })
     ]);

@@ -38,9 +38,7 @@ export class SessionGuard implements CanActivate {
 
     const permissions: PermissionCode[] = session.user.role === "OWNER"
       ? [...PERMISSION_CODES]
-      : session.user.permissions.length > 0
-        ? session.user.permissions.map((p) => p.permission as PermissionCode)
-        : [...STANDARD_OFFICE_PERMISSIONS];
+      : session.user.permissions.map((p) => p.permission as PermissionCode);
 
     request.actor = {
       id: session.user.id,

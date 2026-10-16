@@ -6,6 +6,7 @@ import cookieParser from "cookie-parser";
 import argon2 from "argon2";
 import { randomUUID } from "node:crypto";
 import { Prisma, PrismaClient } from "@fuel/database";
+import { STANDARD_OFFICE_PERMISSIONS } from "@fuel/shared";
 import { AppModule } from "./app.module.js";
 
 type JsonResult<T> = { data: T };
@@ -56,6 +57,13 @@ describe("Phase 1 Complete Acceptance Verification Suite", () => {
       }
     });
     officeUserId = office.id;
+    await prisma.userPermission.createMany({
+      data: STANDARD_OFFICE_PERMISSIONS.map((permission) => ({
+        userId: office.id,
+        permission,
+        grantedById: owner.id
+      }))
+    });
 
     const diesel = await prisma.fuelType.upsert({ where: { code: "DIESEL" }, update: {}, create: { code: "DIESEL", displayName: "Diesel / Naafto" } });
     const petrol = await prisma.fuelType.upsert({ where: { code: "PETROL" }, update: {}, create: { code: "PETROL", displayName: "Petrol / Basiin" } });
@@ -219,9 +227,10 @@ describe("Phase 1 Complete Acceptance Verification Suite", () => {
     // Valid adjustment succeeds
     const adj = await request<{ signedDeltaLiters: string }>("/stock/adjustments", {
       method: "POST",
-      body: JSON.stringify({ fuelId: diesel.id, signedDeltaLiters: "250", reason: "Owner verified calibration audit" })
+      headers: { "idempotency-key": randomUUID() },
+      body: JSON.stringify({ fuelId: diesel.id, signedDeltaLiters: "240", reason: "Owner verified calibration audit" })
     });
-    expect(adj.signedDeltaLiters).toBe("250.000");
+    expect(adj.signedDeltaLiters).toBe("240.000");
   });
 
   it("10 & 11. Verifies Price & Unit Conversion Versioning Overlap Prevention", async () => {

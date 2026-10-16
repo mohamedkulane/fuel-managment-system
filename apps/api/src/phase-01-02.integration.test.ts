@@ -6,6 +6,7 @@ import cookieParser from "cookie-parser";
 import argon2 from "argon2";
 import { randomUUID } from "node:crypto";
 import { Prisma, PrismaClient } from "@fuel/database";
+import { STANDARD_OFFICE_PERMISSIONS } from "@fuel/shared";
 import { AppModule } from "./app.module.js";
 
 type JsonResult<T> = { data: T };
@@ -22,10 +23,15 @@ describe("Phase 1 and 2 HTTP workflow", () => {
   beforeAll(async () => {
     prisma = new PrismaClient();
     const suffix = randomUUID().slice(0, 8);
-    await prisma.user.createMany({ data: [
-      { email: `owner-${suffix}@test.invalid`, displayName: "Test Owner", role: "OWNER", passwordHash: await argon2.hash(ownerPassword) },
-      { email: `office-${suffix}@test.invalid`, displayName: "Test Office", role: "OFFICE_EMPLOYEE", passwordHash: await argon2.hash(officePassword) }
-    ] });
+    const owner = await prisma.user.create({ data: { email: `owner-${suffix}@test.invalid`, displayName: "Test Owner", role: "OWNER", passwordHash: await argon2.hash(ownerPassword) } });
+    const office = await prisma.user.create({ data: { email: `office-${suffix}@test.invalid`, displayName: "Test Office", role: "OFFICE_EMPLOYEE", passwordHash: await argon2.hash(officePassword) } });
+    await prisma.userPermission.createMany({
+      data: STANDARD_OFFICE_PERMISSIONS.map((permission) => ({
+        userId: office.id,
+        permission,
+        grantedById: owner.id
+      }))
+    });
     const diesel = await prisma.fuelType.upsert({ where: { code: "DIESEL" }, update: {}, create: { code: "DIESEL", displayName: "Diesel / Naafto" } });
     const petrol = await prisma.fuelType.upsert({ where: { code: "PETROL" }, update: {}, create: { code: "PETROL", displayName: "Petrol / Basiin" } });
     testUnitCode = `FUUSTO_TEST_${suffix}`;

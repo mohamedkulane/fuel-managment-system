@@ -164,7 +164,6 @@ export class SimpleWorkflowsService {
       const units = quantity(input.quantity); const liters = units.mul(240);
       if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date)) throw new BadRequestException("Purchase date is required");
       const date = new Date(`${input.date}T12:00:00+03:00`); if (!Number.isFinite(date.getTime())) throw new BadRequestException("Invalid date");
-      if (!await tx.fuelType.findFirst({ where: { id:input.fuelId, active:true } })) throw new BadRequestException("Select an active fuel");
       if ((input.unitCost || input.totalCost || input.supplierId || input.paidNow || input.financialAccountId) && actor.role !== "OWNER") throw new ForbiddenException("Supplier costs and payments are owner-only");
       const unit = input.unitCost ? amount(input.unitCost,"Unit cost") : input.totalCost ? amount(input.totalCost,"Total cost").div(units).toDecimalPlaces(4) : null;
       const total = input.totalCost ? amount(input.totalCost,"Total cost") : unit?.mul(units).toDecimalPlaces(4) ?? null;
@@ -250,9 +249,9 @@ export class SimpleWorkflowsService {
                   location,
                   signedDeltaLiters: location === "WAREHOUSE" ? extraLiters.neg() : extraLiters,
                   eventType: "DISPATCH",
-                  sourceType: "DispatchLine",
+                  sourceType: "DispatchLineExcess",
                   sourceId: source.dispatchId,
-                  sourceLineId: source.id,
+                  sourceLineId: `${source.id}:${key}`,
                   createdById: actor.id
                 }
               });
@@ -713,7 +712,9 @@ export class SimpleWorkflowsService {
   }
 
   async keepExcessCredit(actor: Actor, key: string | undefined, orderId: string) {
-    if (actor.role !== "OWNER") throw new ForbiddenException("Keliya milkiilaha ayaa go'aamin kara hadhaaga dalabka");
+    if (actor.role !== "OWNER" && !hasPermission(actor, "orders.create") && !hasPermission(actor, "payments.record")) {
+      throw new ForbiddenException("Keliya milkiilaha ama shaqaalaha la oggolaaday ayaa go'aamin kara hadhaaga dalabka");
+    }
     return this.execute(actor, key, "excess-credit-keep", { orderId }, async tx => {
       const order = await tx.salesOrder.findUnique({
         where: { id: orderId },
@@ -729,13 +730,6 @@ export class SimpleWorkflowsService {
           where: { id: p.id },
           data: { orderId: null }
         });
-        const openInvoices = await tx.invoice.findMany({
-          where: { customerId: order.customerId, status: { in: ["UNPAID", "PARTIALLY_PAID"] } },
-          orderBy: [{ issueDate: "asc" }, { id: "asc" }]
-        });
-        for (const inv of openInvoices) {
-          await this.allocate(tx, actor, p.id, inv.id);
-        }
       }
 
       await tx.auditEvent.create({
@@ -758,7 +752,9 @@ export class SimpleWorkflowsService {
     orderId: string,
     input: { financialAccountId: string; amount?: string; reason?: string }
   ) {
-    if (actor.role !== "OWNER") throw new ForbiddenException("Keliya milkiilaha ayaa lacag celin kara");
+    if (actor.role !== "OWNER" && !hasPermission(actor, "payments.reverse") && !hasPermission(actor, "orders.create")) {
+      throw new ForbiddenException("Keliya milkiilaha ama shaqaalaha la oggolaaday ayaa lacag celin kara");
+    }
     const accountId = required(input.financialAccountId, "Akoonka lacagta celinta");
     const reason = required(input.reason || "Excess Paid Now refunded to customer", "Sababta celinta");
 
@@ -783,7 +779,6 @@ export class SimpleWorkflowsService {
         await tx.payment.update({
           where: { id: p.id },
           data: {
-            amount: p.amount.sub(slice),
             unappliedAmount: p.unappliedAmount.sub(slice)
           }
         });

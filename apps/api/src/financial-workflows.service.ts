@@ -2,7 +2,8 @@ import { BadRequestException, ConflictException, ForbiddenException, Inject, Inj
 import { createHash, randomUUID } from "node:crypto";
 import { Prisma } from "@fuel/database";
 import { PrismaService } from "./prisma.service.js";
-import type { Actor } from "./auth.js";
+import { type Actor, hasPermission } from "./auth.js";
+import type { PermissionCode } from "@fuel/shared";
 
 type Tx = Prisma.TransactionClient;
 type Direction = "MONEY_IN" | "MONEY_OUT";
@@ -38,6 +39,11 @@ export class FinancialWorkflowsService {
 
   private owner(actor: Actor) {
     if (actor.role !== "OWNER") throw new ForbiddenException("Owner permission required");
+  }
+
+  private requirePerm(actor: Actor, permission: PermissionCode) {
+    if (actor.role === "OWNER") return;
+    if (!hasPermission(actor, permission)) throw new ForbiddenException(`Ogolaansho uma haysatid hawshan (${permission})`);
   }
 
   private accountMethod(type: string, value?: string) {
@@ -115,13 +121,13 @@ export class FinancialWorkflowsService {
   }
 
   async accounts(actor: Actor) {
-    this.owner(actor);
+    this.requirePerm(actor, "accounts.view");
     const rows = await this.db.financialAccount.findMany({ orderBy: [{ active: "desc" }, { name: "asc" }], include: { _count: { select: { movements: true } } } });
     return rows.map((row) => ({ id: row.id, code: row.code, name: row.name, type: row.type, identifierMasked: row.identifierMasked, currencyCode: row.currencyCode, openingBalance: row.openingBalance.toFixed(4), openingBalanceAsOf: row.openingBalanceAsOf.toISOString(), currentBalance: row.currentBalance.toFixed(4), overdraftPolicy: row.overdraftPolicy, allowOfficePayments: row.allowOfficePayments, active: row.active, movementCount: row._count.movements }));
   }
 
   createAccount(actor: Actor, key: string | undefined, input: { name?: string; type?: string; paymentMethod?: string; identifierMasked?: string; openingBalance?: string; openingBalanceAsOf?: string; overdraftPolicy?: string; allowOfficePayments?: boolean; notes?: string }) {
-    this.owner(actor);
+    this.requirePerm(actor, "accounts.create");
     return this.execute(actor, key, "financial-account-create", input, async (tx) => {
       const name = text(input.name, "Account name", 120);
       if (!input.type || !["CASH", "MOBILE_MONEY", "BANK", "OTHER"].includes(input.type)) throw new BadRequestException("Select an account type");
@@ -138,7 +144,7 @@ export class FinancialWorkflowsService {
   }
 
   async accountDetail(actor: Actor, id: string, query?: { page?: number; limit?: number; fromDate?: string; toDate?: string }) {
-    this.owner(actor);
+    this.requirePerm(actor, "accounts.view");
     const row = await this.db.financialAccount.findUnique({ where: { id } });
     if (!row) throw new NotFoundException("Account not found");
 
@@ -192,7 +198,7 @@ export class FinancialWorkflowsService {
   }
 
   async transfers(actor: Actor) {
-    this.owner(actor);
+    this.requirePerm(actor, "accounts.view");
     const rows = await this.db.accountTransfer.findMany({
       orderBy: [{ transferDate: "desc" }, { createdAt: "desc" }],
       include: { fromAccount: true, toAccount: true }
@@ -214,7 +220,7 @@ export class FinancialWorkflowsService {
   }
 
   async updateAccount(actor: Actor, id: string, input: { name?: string; paymentMethod?: string; identifierMasked?: string; overdraftPolicy?: string; allowOfficePayments?: boolean; active?: boolean }) {
-    this.owner(actor);
+    this.requirePerm(actor, "accounts.create");
     if (input.overdraftPolicy !== undefined && !["BLOCK_NEGATIVE", "ALLOW_NEGATIVE"].includes(input.overdraftPolicy)) throw new BadRequestException("Choose a valid negative-balance policy");
     return this.db.$transaction(async tx => {
       const before = await tx.financialAccount.findUniqueOrThrow({ where: { id } });
@@ -225,7 +231,7 @@ export class FinancialWorkflowsService {
   }
 
   reverseTransfer(actor: Actor, key: string | undefined, id: string, reasonInput: unknown) {
-    this.owner(actor); const reason = text(reasonInput, "Reason");
+    this.requirePerm(actor, "accounts.transfer"); const reason = text(reasonInput, "Reason");
     return this.execute(actor, key, "transfer-reversal", { id, reason }, async tx => {
       const row = await tx.accountTransfer.findUnique({ where: { id } });
       if (!row) throw new NotFoundException("Transfer not found");
@@ -239,7 +245,7 @@ export class FinancialWorkflowsService {
   }
 
   transfer(actor: Actor, key: string | undefined, input: { fromAccountId?: string; toAccountId?: string; amount?: string; transferDate?: string; reference?: string; notes?: string }) {
-    this.owner(actor);
+    this.requirePerm(actor, "accounts.transfer");
     return this.execute(actor, key, "account-transfer", input, async (tx) => {
       const fromId = text(input.fromAccountId, "From account"); const toId = text(input.toAccountId, "To account");
       if (fromId === toId) throw new BadRequestException("Choose two different accounts");
@@ -252,13 +258,13 @@ export class FinancialWorkflowsService {
   }
 
   async suppliers(actor: Actor) {
-    this.owner(actor);
+    this.requirePerm(actor, "suppliers.view");
     const rows = await this.db.supplier.findMany({ orderBy: [{ status: "asc" }, { name: "asc" }], include: { purchases: { where: { status: { in: ["OPEN", "PARTIALLY_PAID"] } }, select: { balanceDue: true } } } });
     return rows.map((row) => ({ id: row.id, code: row.code, name: row.name, phone: row.phone, location: row.location, notes: row.notes, status: row.status, debt: row.purchases.reduce((sum, p) => sum.add(p.balanceDue), dec(0)).toFixed(4) }));
   }
 
   createSupplier(actor: Actor, input: { name?: string; phone?: string; location?: string; notes?: string }) {
-    this.owner(actor);
+    this.requirePerm(actor, "suppliers.create");
     return this.db.$transaction(async (tx) => {
       const row = await tx.supplier.create({ data: { code: documentNo("SUP"), name: text(input.name, "Supplier name", 160), phone: optionalText(input.phone, 80), location: optionalText(input.location, 200), notes: optionalText(input.notes), createdById: actor.id } });
       await tx.auditEvent.create({ data: { actorId: actor.id, entityType: "Supplier", entityId: row.id, action: "CREATED" } });
@@ -267,7 +273,7 @@ export class FinancialWorkflowsService {
   }
 
   updateSupplier(actor: Actor, id: string, input: { name?: string; phone?: string; location?: string; notes?: string; status?: "ACTIVE" | "INACTIVE" }) {
-    this.owner(actor);
+    this.requirePerm(actor, "suppliers.update");
     if (input.status !== undefined && !["ACTIVE", "INACTIVE"].includes(input.status)) throw new BadRequestException("Invalid supplier status");
     return this.db.$transaction(async (tx) => {
       const row = await tx.supplier.update({
@@ -286,7 +292,7 @@ export class FinancialWorkflowsService {
   }
 
   async supplierDetail(actor: Actor, id: string) {
-    this.owner(actor);
+    this.requirePerm(actor, "suppliers.view");
     const row = await this.db.supplier.findUnique({ where: { id }, include: { purchases: { orderBy: { purchaseDate: "desc" } }, payments: { orderBy: { paymentDate: "desc" }, include: { financialAccount: true } } } });
     if (!row) throw new NotFoundException("Supplier not found");
     return { id: row.id, name: row.name, phone: row.phone, debt: row.purchases.filter((p) => p.status !== "REVERSED").reduce((sum, p) => sum.add(p.balanceDue), dec(0)).toFixed(4), purchases: row.purchases.map((p) => ({ id: p.id, purchaseNo: p.purchaseNo, purchaseDate: p.purchaseDate.toISOString(), totalCost: p.totalCost.toFixed(4), paidAmount: p.paidAmount.toFixed(4), balanceDue: p.balanceDue.toFixed(4), status: p.status })), payments: row.payments.map((p) => ({ id: p.id, paymentNo: p.paymentNo, paymentDate: p.paymentDate.toISOString(), amount: p.amount.toFixed(4), status: p.status, accountName: p.financialAccount.name })) };
@@ -321,7 +327,7 @@ export class FinancialWorkflowsService {
   }
 
   supplierPayment(actor: Actor, key: string | undefined, supplierId: string, input: { financialAccountId?: string; amount?: string; paymentDate?: string; reference?: string; notes?: string }) {
-    this.owner(actor);
+    this.requirePerm(actor, "suppliers.pay");
     return this.execute(actor, key, "supplier-payment", { supplierId, ...input }, async (tx) => {
       const payment = await this.createSupplierPaymentInTransaction(tx, actor, key!, { supplierId, financialAccountId: text(input.financialAccountId, "Financial account"), amount: money(input.amount, "Payment"), paymentDate: dateValue(input.paymentDate, "Payment date"), reference: optionalText(input.reference, 200), notes: optionalText(input.notes) });
       return { id: payment.id };
@@ -329,7 +335,7 @@ export class FinancialWorkflowsService {
   }
 
   reverseSupplierPayment(actor: Actor, key: string | undefined, id: string, reasonInput: unknown) {
-    this.owner(actor); const reason = text(reasonInput, "Reason", 500);
+    this.requirePerm(actor, "suppliers.pay"); const reason = text(reasonInput, "Reason", 500);
     return this.execute(actor, key, "supplier-payment-reversal", { id, reason }, async (tx) => {
       const payment = await tx.supplierPayment.findUnique({ where: { id }, include: { allocations: { include: { supplierPurchase: true } }, reversal: true } });
       if (!payment) throw new NotFoundException("Supplier payment not found");
@@ -349,13 +355,13 @@ export class FinancialWorkflowsService {
   }
 
   async expenses(actor: Actor) {
-    this.owner(actor);
+    this.requirePerm(actor, "expenses.view");
     const rows = await this.db.businessExpense.findMany({ orderBy: [{ expenseDate: "desc" }, { createdAt: "desc" }], include: { financialAccount: true } });
     return rows.map((row) => ({ id: row.id, expenseNo: row.expenseNo, description: row.description, category: row.category, amount: row.amount.toFixed(4), expenseDate: row.expenseDate.toISOString(), accountName: row.financialAccount?.name ?? "Outside / Not Tracked", outsideTracked: row.outsideTracked, reference: row.reference, status: row.status }));
   }
 
   createExpense(actor: Actor, key: string | undefined, input: { description?: string; category?: string; amount?: string; expenseDate?: string; financialAccountId?: string; outsideTracked?: boolean; reference?: string; notes?: string }) {
-    this.owner(actor);
+    this.requirePerm(actor, "expenses.create");
     return this.execute(actor, key, "expense-create", input, async (tx) => {
       if (!input.outsideTracked && !input.financialAccountId) throw new BadRequestException("Select a financial account or Outside / Not Tracked");
       const value = money(input.amount, "Expense"); const at = dateValue(input.expenseDate, "Expense date");
@@ -367,7 +373,7 @@ export class FinancialWorkflowsService {
   }
 
   reverseExpense(actor: Actor, key: string | undefined, id: string, reasonInput: unknown) {
-    this.owner(actor); const reason = text(reasonInput, "Reason", 500);
+    this.requirePerm(actor, "expenses.reverse"); const reason = text(reasonInput, "Reason", 500);
     return this.execute(actor, key, "expense-reversal", { id, reason }, async (tx) => {
       const expense = await tx.businessExpense.findUnique({ where: { id }, include: { reversal: true } });
       if (!expense) throw new NotFoundException("Expense not found");

@@ -38,9 +38,9 @@ export function SupplierDebt() {
     onSuccess: async () => {
       setAddOpen(false);
       await client.invalidateQueries({ queryKey: ["suppliers"] });
-      notifySuccess("Supplier created");
+      notifySuccess("Keeniyaha si guul leh ayaa loo abuuray");
     },
-    onError: (error) => notifyError(error, "Supplier not created")
+    onError: (error) => notifyError(error, "Lama abuuri karin keeniyaha")
   });
 
   const update = useMutation({
@@ -50,9 +50,9 @@ export function SupplierDebt() {
       setEditing(null);
       await client.invalidateQueries({ queryKey: ["suppliers"] });
       if (selected) await client.invalidateQueries({ queryKey: ["supplier", selected] });
-      notifySuccess("Supplier updated");
+      notifySuccess("Xogta keeniyaha waa la cusbooneysiiyey");
     },
-    onError: (error) => notifyError(error, "Supplier not updated")
+    onError: (error) => notifyError(error, "Lama cusbooneysiin karin keeniyaha")
   });
 
   const reversePayment = useMutation({
@@ -62,15 +62,15 @@ export function SupplierDebt() {
       setReversingPayment(null);
       await client.invalidateQueries({ queryKey: ["suppliers"] });
       if (selected) await client.invalidateQueries({ queryKey: ["supplier", selected] });
-      notifySuccess("Supplier payment reversed");
+      notifySuccess("Lacag-bixinta keeniyaha waa la laalay");
     },
-    onError: (error) => notifyError(error, "Reversal failed")
+    onError: (error) => notifyError(error, "Ka-noqoshada lacag-bixinta way fashilantay")
   });
 
   const payment = useWorkflow<Record<string, string>>(
     paying ? `/suppliers/${paying.id}/payments` : "/suppliers/none/payments",
     () => setPaying(null),
-    { success: "Supplier payment recorded", error: "Supplier payment failed" }
+    { success: "Lacag-bixinta keeniyaha si guul leh ayaa loo diiwaangeliyey", error: "Lama diiwaangelin karin lacag-bixinta keeniyaha" }
   );
 
   function add(event: FormEvent<HTMLFormElement>) {
@@ -128,7 +128,7 @@ export function SupplierDebt() {
         action={
           <ActionButton className="btn" onClick={() => setAddOpen(true)}>
             <Plus size={17} />
-            Add Supplier
+            Ku dar Keeniye
           </ActionButton>
         }
       />
@@ -165,7 +165,7 @@ export function SupplierDebt() {
                   <td>
                     <div className="actions">
                       <ActionButton className="btn small" onClick={() => setSelected(row.id)}>
-                        View Account
+                        Eeg Akoonka
                       </ActionButton>
                       <ActionButton className="btn small" onClick={() => setEditing(row)}>
                         <Edit2 size={14} />
@@ -174,7 +174,7 @@ export function SupplierDebt() {
                       {Number(row.debt) > 0 && (
                         <ActionButton className="btn small primary" onClick={() => setPaying(row)}>
                           <Wallet size={15} />
-                          Pay Supplier
+                          Bixi Lacagta
                         </ActionButton>
                       )}
                     </div>
@@ -183,7 +183,7 @@ export function SupplierDebt() {
               ))}
             </tbody>
           </table>
-          {suppliers.data?.length === 0 && <Empty>No suppliers yet.</Empty>}
+          {suppliers.data?.length === 0 && <Empty>Weli ma jiraan keenayaal.</Empty>}
         </div>
       )}
 
@@ -197,7 +197,7 @@ export function SupplierDebt() {
               </p>
             </div>
             <ActionButton className="btn small" onClick={() => setSelected("")}>
-              Close
+              Xir
             </ActionButton>
           </div>
           {detail.isPending ? (
@@ -235,7 +235,7 @@ export function SupplierDebt() {
                     {detail.data?.purchases.length === 0 && (
                       <tr>
                         <td colSpan={6} className="muted text-center">
-                          No purchases recorded yet.
+                          Weli ma jiraan wax iibsi ah oo la diiwaangeliyey.
                         </td>
                       </tr>
                     )}
@@ -281,7 +281,7 @@ export function SupplierDebt() {
                     {detail.data?.payments.length === 0 && (
                       <tr>
                         <td colSpan={6} className="muted text-center">
-                          No payments recorded yet.
+                          Weli ma jiraan lacag-bixinno la diiwaangeliyey.
                         </td>
                       </tr>
                     )}
@@ -294,62 +294,62 @@ export function SupplierDebt() {
       )}
 
       {/* Add Supplier Modal */}
-      <Modal isOpen={addOpen} onClose={() => setAddOpen(false)} title="Add Supplier">
+      <Modal isOpen={addOpen} onClose={() => setAddOpen(false)} title="Ku dar Keeniye">
         <form onSubmit={add}>
           <div className="form-grid">
-            <Field name="name" label="Supplier name" required />
-            <Field name="phone" label="Phone" />
-            <Field name="location" label="Location" />
-            <Field name="notes" label="Notes" />
+            <Field name="name" label="Magaca keeniyaha" required />
+            <Field name="phone" label="Telefoonka" />
+            <Field name="location" label="Goobta" />
+            <Field name="notes" label="Faallo" />
           </div>
           {create.isError && <ErrorState message={create.error.message} />}
           <div className="form-actions">
             <ActionButton className="btn" type="button" onClick={() => setAddOpen(false)}>
-              Cancel
+              Ka noqo
             </ActionButton>
-            <SubmitButton busy={create.isPending}>Save Supplier</SubmitButton>
+            <SubmitButton busy={create.isPending}>Keydi Keeniyaha</SubmitButton>
           </div>
         </form>
       </Modal>
 
       {/* Edit Supplier Modal */}
-      <Modal isOpen={Boolean(editing)} onClose={() => setEditing(null)} title="Edit Supplier">
+      <Modal isOpen={Boolean(editing)} onClose={() => setEditing(null)} title="Wax ka beddel Keeniyaha">
         <form onSubmit={edit}>
           <div className="form-grid">
-            <Field name="name" label="Supplier name" defaultValue={editing?.name} required />
-            <Field name="phone" label="Phone" defaultValue={editing?.phone ?? ""} />
-            <Field name="location" label="Location" defaultValue={editing?.location ?? ""} />
+            <Field name="name" label="Magaca keeniyaha" defaultValue={editing?.name} required />
+            <Field name="phone" label="Telefoonka" defaultValue={editing?.phone ?? ""} />
+            <Field name="location" label="Goobta" defaultValue={editing?.location ?? ""} />
             <div className="field">
-              <FormLabel htmlFor="edit-supplier-status">Status</FormLabel>
+              <FormLabel htmlFor="edit-supplier-status">Xaaladda</FormLabel>
               <select id="edit-supplier-status" name="status" className="select" defaultValue={editing?.status ?? "ACTIVE"}>
                 <option value="ACTIVE">{so("Active")}</option>
                 <option value="INACTIVE">{so("Inactive")}</option>
               </select>
             </div>
-            <Field name="notes" label="Notes" defaultValue={editing?.notes ?? ""} />
+            <Field name="notes" label="Faallo" defaultValue={editing?.notes ?? ""} />
           </div>
           {update.isError && <ErrorState message={update.error.message} />}
           <div className="form-actions">
             <ActionButton className="btn" type="button" onClick={() => setEditing(null)}>
-              Cancel
+              Ka noqo
             </ActionButton>
-            <SubmitButton busy={update.isPending}>Save Changes</SubmitButton>
+            <SubmitButton busy={update.isPending}>Keydi Isbeddelada</SubmitButton>
           </div>
         </form>
       </Modal>
 
       {/* Pay Supplier Modal */}
-      <Modal isOpen={Boolean(paying)} onClose={() => setPaying(null)} title="Pay Supplier Debt">
+      <Modal isOpen={Boolean(paying)} onClose={() => setPaying(null)} title="Bixi Daynta Keeniyaha">
         <form onSubmit={pay}>
           <p>
-            <Building2 size={17} /> {paying?.name} · Debt ${decimal(paying?.debt)}
+            <Building2 size={17} /> {paying?.name} · Deynta: ${decimal(paying?.debt)}
           </p>
           <div className="form-grid">
             <div className="field">
-              <FormLabel htmlFor="supplierAccount">Financial account</FormLabel>
+              <FormLabel htmlFor="supplierAccount">Akoonka lacagta laga bixinayo</FormLabel>
               <select id="supplierAccount" name="financialAccountId" className="select" required defaultValue="">
                 <option value="" disabled>
-                  Select account
+                  Dooro akoon
                 </option>
                 {accounts.data?.map((row) => (
                   <option key={row.id} value={row.id}>
@@ -358,39 +358,39 @@ export function SupplierDebt() {
                 ))}
               </select>
             </div>
-            <Field name="amount" label="Amount ($)" type="number" min="0.01" max={paying?.debt} step="0.01" required />
-            <Field name="paymentDate" label="Payment date" type="date" defaultValue={businessDate()} required />
-            <Field name="reference" label="Reference" />
-            <Field name="notes" label="Notes" />
+            <Field name="amount" label="Qadarka ($)" type="number" min="0.01" max={paying?.debt} step="0.01" required />
+            <Field name="paymentDate" label="Taariikhda lacag-bixinta" type="date" defaultValue={businessDate()} required />
+            <Field name="reference" label="Tixraac (Reference)" />
+            <Field name="notes" label="Faallo" />
           </div>
           {payment.isError && <ErrorState message={payment.error.message} />}
           <div className="form-actions">
             <ActionButton className="btn" type="button" onClick={() => setPaying(null)}>
-              Cancel
+              Ka noqo
             </ActionButton>
-            <SubmitButton busy={payment.isPending}>Pay Supplier</SubmitButton>
+            <SubmitButton busy={payment.isPending}>Bixi Lacagta Keeniyaha</SubmitButton>
           </div>
         </form>
       </Modal>
 
       {/* Reverse Supplier Payment Modal */}
-      <Modal isOpen={Boolean(reversingPayment)} onClose={() => setReversingPayment(null)} title="Reverse Supplier Payment">
+      <Modal isOpen={Boolean(reversingPayment)} onClose={() => setReversingPayment(null)} title="La noqo Bixinta Lacagta Keeniyaha">
         <form onSubmit={submitReversal}>
           <p>
-            <b>{reversingPayment?.paymentNo}</b> · Amount: ${decimal(reversingPayment?.amount)}
+            <b>{reversingPayment?.paymentNo}</b> · Qadarka: ${decimal(reversingPayment?.amount)}
           </p>
           <p className="muted" style={{ marginBottom: "1rem" }}>
-            Reversing this payment will restore the supplier payable and record an opposite Money In movement to the financial account.
+            Ka-noqoshada lacag-bixintan waxay dib u soo celinaysaa deynta keeniyaha, waxayna akoonka maaliyadda u gelinaysaa dhaqdhaqaaq lacag soo gashay (Money In).
           </p>
           <div className="form-grid">
-            <Field name="reason" label="Reason for reversal" required placeholder="Tusaale: Khalad gelinta lacagta" />
+            <Field name="reason" label="Sababta ka-noqoshada" required placeholder="Tusaale: Khalad gelinta lacagta" />
           </div>
           {reversePayment.isError && <ErrorState message={reversePayment.error.message} />}
           <div className="form-actions">
             <ActionButton className="btn" type="button" onClick={() => setReversingPayment(null)}>
-              Cancel
+              Ka noqo
             </ActionButton>
-            <SubmitButton busy={reversePayment.isPending}>Confirm Reversal</SubmitButton>
+            <SubmitButton busy={reversePayment.isPending}>Xaqiiji Ka-noqoshada</SubmitButton>
           </div>
         </form>
       </Modal>

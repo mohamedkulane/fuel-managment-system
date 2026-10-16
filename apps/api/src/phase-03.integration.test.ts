@@ -6,6 +6,7 @@ import cookieParser from "cookie-parser";
 import argon2 from "argon2";
 import { randomUUID } from "node:crypto";
 import { Prisma, PrismaClient } from "@fuel/database";
+import { STANDARD_OFFICE_PERMISSIONS } from "@fuel/shared";
 import { AppModule } from "./app.module.js";
 
 type JsonResult<T> = { data: T };
@@ -45,6 +46,13 @@ describe("Phase 3 Invoicing, Credit, Debt & Payment Integration Suite", () => {
     });
     const office = await prisma.user.create({
       data: { email: `office-p3-${suffix}@test.invalid`, displayName: "P3 Office", role: "OFFICE_EMPLOYEE", passwordHash: await argon2.hash(officePassword) }
+    });
+    await prisma.userPermission.createMany({
+      data: STANDARD_OFFICE_PERMISSIONS.map((permission) => ({
+        userId: office.id,
+        permission,
+        grantedById: owner.id
+      }))
     });
 
     const diesel = await prisma.fuelType.upsert({ where: { code: "DIESEL" }, update: {}, create: { code: "DIESEL", displayName: "Diesel / Naafto" } });

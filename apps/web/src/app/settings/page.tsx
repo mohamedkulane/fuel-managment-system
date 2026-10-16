@@ -39,9 +39,9 @@ export default function SettingsPage() {
     onSuccess: async () => {
       setShowCreate(false);
       await client.invalidateQueries({ queryKey: ["users"] });
-      notifySuccess("User created");
+      notifySuccess("Shaqaalaha si guul leh ayaa loo abuuray");
     },
-    onError: (error) => notifyError(error, "Could not create user")
+    onError: (error) => notifyError(error, "Lama abuuri karin shaqaalaha")
   });
   const updateUser = useMutation({
     mutationFn: ({ id, body }: UpdateUserInput) => api<User>(`/users/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
@@ -51,9 +51,9 @@ export default function SettingsPage() {
         client.invalidateQueries({ queryKey: ["users"] }),
         updated.id === me.data?.id ? client.invalidateQueries({ queryKey: ["me"] }) : Promise.resolve()
       ]);
-      notifySuccess("User updated");
+      notifySuccess("Shaqaalaha waa la cusbooneysiiyey");
     },
-    onError: (error) => notifyError(error, "Could not update user")
+    onError: (error) => notifyError(error, "Lama cusbooneysiin karin shaqaalaha")
   });
   const changeStatus = useMutation({
     mutationFn: ({ user, isActive }: { user: User; isActive: boolean }) => isActive
@@ -62,17 +62,17 @@ export default function SettingsPage() {
     onSuccess: async (updated) => {
       setDeactivating(null);
       await client.invalidateQueries({ queryKey: ["users"] });
-      notifySuccess(updated.isActive ? "User activated" : "User deactivated");
+      notifySuccess(updated.isActive ? "Shaqaalaha waa la hawlgeliyey" : "Shaqaalaha waa la joojiyey");
     },
-    onError: (error) => notifyError(error, "Could not change user status")
+    onError: (error) => notifyError(error, "Lama beddeli karin xaaladda shaqaalaha")
   });
   const saveBranding = useMutation({
     mutationFn: (body: DocumentBranding) => api<DocumentBranding>("/settings/document-branding", { method: "PATCH", body: JSON.stringify(body) }),
     onSuccess: async () => {
       await client.invalidateQueries({ queryKey: ["settings", "document-branding"] });
-      notifySuccess("Document branding saved");
+      notifySuccess("Muuqaalka dukumentiyada waa la keydiyey");
     },
-    onError: (error) => notifyError(error, "Could not save document branding")
+    onError: (error) => notifyError(error, "Lama keydin karin muuqaalka dukumentiyada")
   });
 
   function submitCreate(event: FormEvent<HTMLFormElement>) {
@@ -118,11 +118,11 @@ export default function SettingsPage() {
         eyebrow="Maamulka Nidaamka"
         title="Dejinta Nidaamka"
         description=""
-        actions={owner && <ActionButton className="btn primary" onClick={() => setShowCreate(true)}>Add User</ActionButton>}
+        actions={owner && <ActionButton className="btn primary" onClick={() => setShowCreate(true)}>Ku dar Shaqaale</ActionButton>}
       />
 
       <Card>
-        <CardHead title="Account" action={owner && currentUser && <ActionButton className="btn" onClick={() => setEditing(currentUser)}>Edit Profile</ActionButton>} />
+        <CardHead title="Akoonkaaga" action={owner && currentUser && <ActionButton className="btn" onClick={() => setEditing(currentUser)}>Wax ka beddel Xogtaada</ActionButton>} />
         <div className="card-body">
           <div className="info-pair"><span>Magac</span><b>{me.data?.displayName}</b></div>
           <div className="info-pair"><span>Iimayl</span><b>{me.data?.email}</b></div>
@@ -130,7 +130,7 @@ export default function SettingsPage() {
         </div>
       </Card>
 
-      {owner && <details className="simple-disclosure"><summary>Audit history</summary><ActionLink className="btn" href="/audits">View Audit Log</ActionLink></details>}
+      {owner && <details className="simple-disclosure"><summary>Diiwaanka Kormeerka (Audit Log)</summary><ActionLink className="btn" href="/audits">Eeg Diiwaanka Kormeerka</ActionLink></details>}
 
       {owner && (
         <Card>
@@ -153,7 +153,7 @@ export default function SettingsPage() {
                 </div>
               </div>
               {saveBranding.isError && <ErrorState message={saveBranding.error.message} />}
-              <div className="form-actions"><SubmitButton busy={saveBranding.isPending}>Save Document Branding</SubmitButton></div>
+              <div className="form-actions"><SubmitButton busy={saveBranding.isPending}>Keydi Muuqaalka Dukumentiyada</SubmitButton></div>
             </form>
           )}
         </Card>
@@ -174,16 +174,16 @@ export default function SettingsPage() {
                       <td data-label="Magaca" className="strong">{user.displayName}{user.id === me.data?.id && <small className="muted"> (Adiga)</small>}</td>
                       <td data-label="Iimaylka">{user.email}</td>
                       <td data-label="Doorka"><Badge tone="info">{formatRole(user.role)}</Badge></td>
-                      <td data-label="Xaaladda"><Badge tone={user.isActive ? "ok" : "neutral"}>{user.isActive ? "Active" : "Inactive"}</Badge></td>
+                      <td data-label="Xaaladda"><Badge tone={user.isActive ? "ok" : "neutral"}>{user.isActive ? "Shaqeynaya" : "Joogsan"}</Badge></td>
                       <td data-label="Galitaankii">{user.lastLoginAt ? dateTime(user.lastLoginAt) : "Weli ma gelin"}</td>
                       <td data-label="">
                         <div className="actions" style={{ justifyContent: "flex-end" }}>
                           <ActionButton className="btn small secondary" onClick={() => setPermissionsUser(user)}>Ogolaanshaha</ActionButton>
-                          <ActionButton className="btn small" onClick={() => setEditing(user)}>Edit</ActionButton>
+                          <ActionButton className="btn small" onClick={() => setEditing(user)}>Wax ka beddel</ActionButton>
                           {user.isActive ? (
-                            user.id !== me.data?.id && <ActionButton className="btn small danger" onClick={() => setDeactivating(user)}>Deactivate</ActionButton>
+                            user.id !== me.data?.id && <ActionButton className="btn small danger" onClick={() => setDeactivating(user)}>Jooji</ActionButton>
                           ) : (
-                            <ActionButton className="btn small" disabled={changeStatus.isPending} onClick={() => changeStatus.mutate({ user, isActive: true })}>Activate</ActionButton>
+                            <ActionButton className="btn small" disabled={changeStatus.isPending} onClick={() => changeStatus.mutate({ user, isActive: true })}>Hawlgeli</ActionButton>
                           )}
                         </div>
                       </td>
@@ -197,7 +197,7 @@ export default function SettingsPage() {
         </Card>
       )}
 
-      <Modal isOpen={showCreate && owner} onClose={() => setShowCreate(false)} title="Add User">
+      <Modal isOpen={showCreate && owner} onClose={() => setShowCreate(false)} title="Ku dar Shaqaale">
         <form onSubmit={submitCreate}>
           <div className="form-grid">
             <div className="field full"><FormLabel htmlFor="create-display-name">Magaca Muuqda *</FormLabel><input id="create-display-name" className="input" name="displayName" maxLength={120} autoComplete="name" required /></div>
@@ -209,11 +209,11 @@ export default function SettingsPage() {
             <div className="field"><FormLabel htmlFor="create-password">Furaha Ku-meel-gaarka ah *</FormLabel><input id="create-password" className="input" name="password" type="password" autoComplete="new-password" minLength={12} required /><small className="muted">Ugu yaraan 12 xaraf (Minimum 12 characters)</small></div>
           </div>
           {createUser.isError && <ErrorState message={createUser.error.message} />}
-          <div className="form-actions"><ActionButton className="btn" type="button" onClick={() => setShowCreate(false)}>Cancel</ActionButton><SubmitButton busy={createUser.isPending}>Create User</SubmitButton></div>
+          <div className="form-actions"><ActionButton className="btn" type="button" onClick={() => setShowCreate(false)}>Ka noqo</ActionButton><SubmitButton busy={createUser.isPending}>Abuur Shaqaale</SubmitButton></div>
         </form>
       </Modal>
 
-      <Modal isOpen={Boolean(editing) && owner} onClose={() => setEditing(null)} title={editing?.id === me.data?.id ? "Edit Owner Profile" : "Edit User"}>
+      <Modal isOpen={Boolean(editing) && owner} onClose={() => setEditing(null)} title={editing?.id === me.data?.id ? "Wax ka beddel Xogta Milkiilaha" : "Wax ka beddel Shaqaalaha"}>
         {editing && (
           <form key={editing.id} onSubmit={submitEdit}>
             <div className="form-grid">
@@ -226,17 +226,17 @@ export default function SettingsPage() {
               <div className="field"><FormLabel htmlFor="edit-password">Furaha cusub</FormLabel><input id="edit-password" className="input" name="password" type="password" autoComplete="new-password" minLength={12} /><small className="muted">Bannaan ka tag haddii aadan doonayn inaad beddesho furaha hadda jira.</small></div>
             </div>
             {updateUser.isError && <ErrorState message={updateUser.error.message} />}
-            <div className="form-actions"><ActionButton className="btn" type="button" onClick={() => setEditing(null)}>Cancel</ActionButton><SubmitButton busy={updateUser.isPending}>Save Changes</SubmitButton></div>
+            <div className="form-actions"><ActionButton className="btn" type="button" onClick={() => setEditing(null)}>Ka noqo</ActionButton><SubmitButton busy={updateUser.isPending}>Keydi Isbeddelada</SubmitButton></div>
           </form>
         )}
       </Modal>
 
-      <Modal isOpen={Boolean(deactivating) && owner} onClose={() => setDeactivating(null)} title="Deactivate User">
+      <Modal isOpen={Boolean(deactivating) && owner} onClose={() => setDeactivating(null)} title="Jooji Shaqaalaha">
         {deactivating && (
           <div>
             <p>Ma joojinaysaa <strong>{deactivating.displayName}</strong>? Waa laga saarayaa nidaamka, mana geli karo ilaa dib loo hawlgeliyo.</p>
             {changeStatus.isError && <ErrorState message={changeStatus.error.message} />}
-            <div className="form-actions"><ActionButton className="btn" type="button" onClick={() => setDeactivating(null)}>Cancel</ActionButton><ActionButton className="btn danger" type="button" disabled={changeStatus.isPending} onClick={() => changeStatus.mutate({ user: deactivating, isActive: false })}>{changeStatus.isPending ? "Deactivating…" : "Deactivate"}</ActionButton></div>
+            <div className="form-actions"><ActionButton className="btn" type="button" onClick={() => setDeactivating(null)}>Ka noqo</ActionButton><ActionButton className="btn danger" type="button" disabled={changeStatus.isPending} onClick={() => changeStatus.mutate({ user: deactivating, isActive: false })}>{changeStatus.isPending ? "Waa la joojinayaa…" : "Jooji Shaqaalaha"}</ActionButton></div>
           </div>
         )}
       </Modal>

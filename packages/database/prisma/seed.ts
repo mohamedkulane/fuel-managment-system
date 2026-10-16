@@ -34,6 +34,39 @@ async function main(): Promise<void> {
     }
   });
 
+  const standardOfficePermissions = [
+    "dashboard.view",
+    "customers.view",
+    "customers.create",
+    "customers.update",
+    "orders.view",
+    "orders.create",
+    "orders.delivery.confirm",
+    "orders.invoice.view",
+    "stock.view",
+    "stock.receive",
+    "prices.view",
+    "suppliers.view",
+    "suppliers.create",
+    "suppliers.update",
+    "expenses.view",
+    "expenses.create",
+    "accounts.view",
+    "accounts.movements.view",
+    "payments.view",
+    "payments.record",
+    "payments.receipt.view",
+    "reports.view",
+    "settings.view"
+  ];
+  for (const permission of standardOfficePermissions) {
+    await prisma.userPermission.upsert({
+      where: { userId_permission: { userId: office.id, permission } },
+      update: {},
+      create: { userId: office.id, permission, grantedById: owner.id }
+    });
+  }
+
   // 2. Master Fuel Products & Sales Units
   const diesel = await prisma.fuelType.upsert({
     where: { code: "DIESEL" },
