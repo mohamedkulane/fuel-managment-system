@@ -56,9 +56,9 @@ export default function StockPage() {
         client.invalidateQueries({ queryKey: ["stock", "balances"] }),
         client.invalidateQueries({ queryKey: ["stock", "movements"] })
       ]);
-      notifySuccess("Stock adjusted");
+      notifySuccess("Kaydka shidaalka si guul leh ayaa loo saxay");
     },
-    onError: error => notifyError(error, "Stock not added")
+    onError: error => notifyError(error, "Kaydka lama beddeli karin")
   });
 
   function handleAdjustSubmit(e: FormEvent<HTMLFormElement>) {
@@ -66,7 +66,7 @@ export default function StockPage() {
     const d = new FormData(e.currentTarget);
     adjust.mutate({
       fuelId: d.get("fuelId"),
-      signedDeltaLiters: d.get("delta"),
+      quantityFuusto: d.get("fuustoDelta"),
       reason: d.get("reason")
     });
   }
@@ -89,12 +89,12 @@ export default function StockPage() {
                 Wax Ka Beddelka Kaydka
               </ActionButton>
             )}
-            <ActionButton className="btn primary" onClick={() => setShowReceive(true)}>Receive Stock</ActionButton>
+            <ActionButton className="btn primary" onClick={() => setShowReceive(true)}>Soo Geli Shidaal</ActionButton>
           </>
         }
       />
 
-      <Modal isOpen={showAdjust} onClose={() => setShowAdjust(false)} title="Wax Ka Beddelka Kaydka (Milkiilaha Kaliya)">
+      <Modal isOpen={showAdjust} onClose={() => setShowAdjust(false)} title="Wax Ka Beddelka Kaydka">
         <form onSubmit={handleAdjustSubmit}>
           <div className="notice warn" style={{ marginBottom: 16 }}>
             Wax ka beddelku wuxuu beddelaa shidaalka bakhaarka ee rasmiga ah. Waxaa qasab ah sabab faahfaahsan oo audit ah.
@@ -112,8 +112,8 @@ export default function StockPage() {
               </select>
             </div>
             <div className="field">
-              <FormLabel htmlFor="delta">Kala duwanaanshaha Litarada * (+ / -)</FormLabel>
-              <input id="delta" className="input" name="delta" required placeholder="tusaale: 12000 ama -2400" inputMode="decimal" />
+              <FormLabel htmlFor="fuustoDelta">Kala duwanaanshaha Fuustada * (+ / -)</FormLabel>
+              <input id="fuustoDelta" className="input" name="fuustoDelta" required placeholder="tusaale: +5 ama -2" inputMode="numeric" />
             </div>
             <div className="field full">
               <FormLabel htmlFor="reason">Sababta Rasmiga ah ee Audit-ka *</FormLabel>
@@ -151,10 +151,10 @@ export default function StockPage() {
         </div>
       )}
 
-      <Modal isOpen={showReceive} onClose={() => setShowReceive(false)} title="Shidaal Soo Geli / Receive Stock"><ReceiveStockForm onSaved={() => setShowReceive(false)} /></Modal>
+      <Modal isOpen={showReceive} onClose={() => setShowReceive(false)} title="Soo Geli Shidaal"><ReceiveStockForm onSaved={() => setShowReceive(false)} /></Modal>
       <FuelPrices />
       {isOwner && <SupplierDebt />}
-      <Card><CardHead title="Shidaalkii soo galay" action={<ActionLink className="btn" href="/stock/receive">View Receipts</ActionLink>} /><div className="card-body"><p>Eeg shidaalka la soo iibsaday iyo rasiidhadiisa.</p></div></Card>
+      <Card><CardHead title="Shidaalkii soo galay" action={<ActionLink className="btn" href="/stock/receive">Eeg Rasiidhada</ActionLink>} /><div className="card-body"><p>Eeg shidaalka la soo iibsaday iyo rasiidhadiisa.</p></div></Card>
       <Card><details className="simple-disclosure"><summary>Taariikhda kaydka</summary>
         <div className="toolbar">
           <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", width: "100%" }}>

@@ -50,6 +50,13 @@ type Order = {
   customer: { name: string };
   lines: OrderLine[];
   events: Array<{ id: string; kind: string; occurredAt: string; reason?: string | null }>;
+  payments?: Array<{
+    id: string;
+    amount: string;
+    unappliedAmount: string;
+    paymentDate: string;
+    status: string;
+  }>;
 };
 
 export default function OrderPage() {
@@ -58,6 +65,9 @@ export default function OrderPage() {
   const [cancelModalOpen, setCancelModalOpen] = useState(false);
   const [cancelRemainderModalOpen, setCancelRemainderModalOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
+  const [refundModalOpen, setRefundModalOpen] = useState(false);
+  const [refundAccount, setRefundAccount] = useState("");
+  const [refundReason, setRefundReason] = useState("");
 
   useEffect(() => {
     setInvoiceOpen(new URLSearchParams(window.location.search).get("invoice") === "1");
@@ -66,6 +76,11 @@ export default function OrderPage() {
   const query = useQuery({ queryKey: ["order", id], queryFn: () => api<Order>(`/orders/${id}`) });
   const client = useQueryClient();
   const me = useQuery({ queryKey: ["me"], queryFn: () => api<Actor>("/auth/me") });
+  const accountsQuery = useQuery({
+    queryKey: ["financial-accounts", "selectable"],
+    queryFn: () => api<Array<{ id: string; name: string }>>("/financial-accounts/selectable"),
+    enabled: me.data?.role === "OWNER"
+  });
 
   const approveDiscount = useMutation({
     mutationFn: () => api(`/orders/${id}/approve-discount`, { method: "POST", body: JSON.stringify({}) }),
@@ -98,6 +113,28 @@ export default function OrderPage() {
     onError: (error) => notifyError(error, "Joojinta inta harsan way fashilantay")
   });
 
+  const keepCreditMutation = useMutation({
+    mutationFn: () => api(`/simple/orders/${id}/excess-credit/keep`, { method: "POST" }),
+    onSuccess: async () => {
+      await client.invalidateQueries();
+      notifySuccess("Lacagta dheeraadka ah waxaa loo haynayaa macmiilka");
+    },
+    onError: (err) => notifyError(err, "Hawshu way fashilantay")
+  });
+
+  const refundCreditMutation = useMutation({
+    mutationFn: () => api(`/simple/orders/${id}/excess-credit/refund`, {
+      method: "POST",
+      body: JSON.stringify({ financialAccountId: refundAccount, reason: refundReason })
+    }),
+    onSuccess: async () => {
+      await client.invalidateQueries();
+      setRefundModalOpen(false);
+      notifySuccess("Lacagta dheeraadka ah si guul leh ayaa loo celiyay");
+    },
+    onError: (err) => notifyError(err, "Lacag celintu way fashilantay")
+  });
+
   if (query.isError)
     return (
       <main className="page detail-page">
@@ -113,6 +150,7 @@ export default function OrderPage() {
   const hasPriceChangeNotice = isDraft && row?.lines.some((l) => l.currentActiveUnitPrice);
   const fixedDiscountNum = row?.fixedDiscountAmount || "0";
   const hasDiscount = new Decimal(fixedDiscountNum).gt(0);
+  const unappliedCredit = row?.payments?.filter(p => p.status === "POSTED").reduce((sum, p) => sum + Number(p.unappliedAmount), 0) ?? 0;
 
   return (
     <main className="page detail-page">
@@ -127,7 +165,7 @@ export default function OrderPage() {
             </ActionLink>
             {row && (
               <ActionButton className="btn secondary" type="button" onClick={() => setInvoiceOpen((open) => !open)}>
-                {invoiceOpen ? "Qari Rasiidka" : "Eeg Rasiidka (Invoice)"}
+                {invoiceOpen ? "Qari Rasiidka" : "Eeg Rasiidka"}
               </ActionButton>
             )}
             {row && ["CONFIRMED", "SCHEDULED", "IN_PROGRESS", "PARTIALLY_FULFILLED"].includes(row.status) && (
@@ -152,7 +190,7 @@ export default function OrderPage() {
           <OrderInvoicePreview orderId={row.id} orderNo={row.orderNo} open={invoiceOpen} />
 
           {/* Modal: Cancel Order */}
-          <Modal isOpen={cancelModalOpen} onClose={() => setCancelModalOpen(false)} title="Jooji Dalabka (Cancel Order)">
+          <Modal isOpen={cancelModalOpen} onClose={() => setCancelModalOpen(false)} title="Jooji Dalabka">
             <form
               onSubmit={(e) => {
                 e.preventDefault();
@@ -170,7 +208,7 @@ export default function OrderPage() {
               </div>
 
               <div className="field">
-                <FormLabel htmlFor="cancel-order-reason">Sababta Joojinta (Reason required)</FormLabel>
+                <FormLabel htmlFor="cancel-order-reason">Sababta Joojinta (Waa qasab)</FormLabel>
                 <textarea
                   id="cancel-order-reason"
                   className="input w-full min-h-[80px]"
@@ -211,7 +249,7 @@ export default function OrderPage() {
               </div>
 
               <div className="field">
-                <FormLabel htmlFor="cancel-remainder-reason">Sababta (Reason required)</FormLabel>
+                <FormLabel htmlFor="cancel-remainder-reason">Sababta (Waa qasab)</FormLabel>
                 <textarea
                   id="cancel-remainder-reason"
                   className="input w-full min-h-[80px]"
@@ -235,16 +273,61 @@ export default function OrderPage() {
             </form>
           </Modal>
 
+          {/* Modal: Refund Excess Credit */}
+          <Modal isOpen={refundModalOpen} onClose={() => setRefundModalOpen(false)} title="U Celi Lacagta Dheeraadka ah Macmiilka">
+            <form onSubmit={(e) => { e.preventDefault(); refundCreditMutation.mutate(); }}>
+              <div className="notice warn" style={{ marginBottom: 12 }}>
+                Waxaad macmiilka u celinaysaa lacag dhan <strong>${decimal(String(unappliedCredit))}</strong> oo ah lacag hore loo bixiyey oo aan shidaal lagu qaadan.
+              </div>
+              <div className="form-grid">
+                <div className="field full">
+                  <FormLabel htmlFor="refund-account">Akoonka Lacagta Laga Celinayo *</FormLabel>
+                  <select id="refund-account" className="select" required value={refundAccount} onChange={(e) => setRefundAccount(e.target.value)}>
+                    <option value="">Dooro akoonka lacagta laga celinayo</option>
+                    {accountsQuery.data?.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                  </select>
+                </div>
+                <div className="field full">
+                  <FormLabel htmlFor="refund-reason">Sababta Celinta *</FormLabel>
+                  <input id="refund-reason" className="input" required value={refundReason} onChange={(e) => setRefundReason(e.target.value)} placeholder="tusaale: Shidaal aan la geynin oo lacagtiisii dib loogu celiyay macmiilka" />
+                </div>
+              </div>
+              {refundCreditMutation.isError && <ErrorState message={refundCreditMutation.error.message} />}
+              <div className="form-actions" style={{ marginTop: 16 }}>
+                <ActionButton type="button" className="btn" onClick={() => setRefundModalOpen(false)}>Ka noqo</ActionButton>
+                <SubmitButton busy={refundCreditMutation.isPending} className="btn danger">Xaqiiji Celinta</SubmitButton>
+              </div>
+            </form>
+          </Modal>
+
+          {unappliedCredit > 0 && (
+            <div className="notice warn" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12, marginBottom: 16 }}>
+              <div>
+                <strong>Lacag Dheeraad ah oo Xallin u Baahan:</strong> Waxaa dalabkan ku taal <b>${decimal(String(unappliedCredit))}</b> oo horey loo bixiyey balse aan shidaal lagu qaadan.
+              </div>
+              {me.data?.role === "OWNER" && (
+                <div style={{ display: "flex", gap: 8 }}>
+                  <ActionButton className="btn primary small" disabled={keepCreditMutation.isPending} onClick={() => keepCreditMutation.mutate()}>
+                    U Hay Macmiilka
+                  </ActionButton>
+                  <ActionButton className="btn secondary small" onClick={() => { setRefundModalOpen(true); setRefundReason(`Soo celinta hadhaaga dalabka ${row.orderNo}`); }}>
+                    U Celi Macmiilka
+                  </ActionButton>
+                </div>
+              )}
+            </div>
+          )}
+
           {row.status === "CANCELLED" && (
             <div className="p-3 bg-red-500/10 border border-red-500/20 rounded mb-4 text-red-600 dark:text-red-400">
-              <strong className="block text-sm">Dalabkan waa la joojiyay (Cancelled):</strong>
+              <strong className="block text-sm">Dalabkan waa la joojiyay:</strong>
               <p className="text-xs mt-1">{row.cancellationReason || "Sabab lama sheegin"}</p>
             </div>
           )}
 
           {isDraft && hasDiscount && (
             <div className="notice">
-              <p>Dhimistan waxay sugaysaa oggolaanshaha milkiilaha (Owner approval).</p>
+              <p>Dhimistan waxay sugaysaa oggolaanshaha milkiilaha.</p>
               {me.data?.role === "OWNER" && (
                 <ActionButton className="btn primary" disabled={approveDiscount.isPending} onClick={() => approveDiscount.mutate()}>
                   Oggolow Dhimista

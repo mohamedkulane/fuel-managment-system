@@ -87,7 +87,7 @@ export default function CustomersPage() {
       setArchiveTarget(null);
       setArchiveReason("");
       await client.invalidateQueries({ queryKey: ["customers"] });
-      notifySuccess("Macmiilka waa la kaydiyay (Archived)");
+      notifySuccess("Macmiilka waa la kaydiyay");
     },
     onError: (error) => notifyError(error, "Kaydinta macmiilka way fashilantay")
   });
@@ -96,7 +96,7 @@ export default function CustomersPage() {
     mutationFn: (id: string) => api<Customer>(`/customers/${id}/restore`, { method: "POST", body: JSON.stringify({}) }),
     onSuccess: async () => {
       await client.invalidateQueries({ queryKey: ["customers"] });
-      notifySuccess("Macmiilka waa la soo celiyay (Restored)");
+      notifySuccess("Macmiilka waa la soo celiyay");
     },
     onError: (error) => notifyError(error, "Soo celinta macmiilka way fashilantay")
   });
@@ -153,7 +153,7 @@ export default function CustomersPage() {
             setPage(1);
           }}
         >
-          Firfircoon (Active)
+          Firfircoon
         </button>
         <button
           type="button"
@@ -168,7 +168,7 @@ export default function CustomersPage() {
             setPage(1);
           }}
         >
-          La Kaydiyay (Archived)
+          La Kaydiyay
         </button>
       </div>
 
@@ -240,7 +240,7 @@ export default function CustomersPage() {
           </div>
 
           <div className="field">
-            <FormLabel htmlFor="archive-customer-reason">Sababta loo kaydinayo (Reason required)</FormLabel>
+            <FormLabel htmlFor="archive-customer-reason">Sababta loo kaydinayo (Waa qasab)</FormLabel>
             <textarea
               id="archive-customer-reason"
               className="input w-full min-h-[80px]"
@@ -266,7 +266,7 @@ export default function CustomersPage() {
 
       <Card>
         <CardHead
-          title={activeTab === "ACTIVE" ? "Macaamiisha Firfircoon" : "Macaamiisha La Kaydiyay (Archived)"}
+          title={activeTab === "ACTIVE" ? "Macaamiisha Firfircoon" : "Macaamiisha La Kaydiyay"}
           description="Ka raadi magaca macmiilka, koodhka, ama telefoonka"
         />
         <div className="toolbar customers-toolbar">
@@ -339,7 +339,7 @@ export default function CustomersPage() {
               <tbody>
                 {items.map((row) => (
                   <tr key={row.id}>
-                    <td data-label="Name">
+                    <td data-label="Macmiilka">
                       <span className="strong">{row.name}</span>
                       <br />
                       <small className="mono">{row.code}</small>
@@ -347,9 +347,9 @@ export default function CustomersPage() {
                         <Badge tone="neutral">La Kaydiyay</Badge>
                       )}
                     </td>
-                    <td data-label="Phone">{row.primaryPhone ?? "—"}</td>
-                    <td data-label="Location">{row.addresses[0]?.addressText ?? "—"}</td>
-                    <td data-label="Debt" className="strong">
+                    <td data-label="Telefoonka">{row.primaryPhone ?? "—"}</td>
+                    <td data-label="Goobta">{row.addresses[0]?.addressText ?? "—"}</td>
+                    <td data-label="Deynta hadda" className="strong">
                       ${decimal(row.outstandingDebt)}
                       {row.status === "HOLD" && <small className="text-muted"> · La hakiyay</small>}
                     </td>

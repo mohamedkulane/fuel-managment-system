@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Headers, Inject, Post, Query, Req, Res, UseGuards, BadRequestException } from "@nestjs/common";
+import { Body, Controller, Get, Headers, Inject, Param, Post, Query, Req, Res, UseGuards, BadRequestException } from "@nestjs/common";
 import type { Response } from "express";
 import { PrismaService } from "./prisma.service.js";
 import { AuthenticatedRequest, requirePermission, SessionGuard } from "./auth.js";
@@ -82,6 +82,12 @@ export class SimpleWorkflowsController {
   }
   @Post("deliveries") async delivery(@Req() req: AuthenticatedRequest, @Headers("idempotency-key") key: string | undefined, @Body() input: SimpleDeliveryInput) {
     return { data: await this.service.delivery(requirePermission(req, "orders.delivery.confirm"), key, input) };
+  }
+  @Post("orders/:id/excess-credit/keep") async keepCredit(@Req() req: AuthenticatedRequest, @Headers("idempotency-key") key: string | undefined, @Param("id") id: string) {
+    return { data: await this.service.keepExcessCredit(requirePermission(req, "orders.create"), key, id) };
+  }
+  @Post("orders/:id/excess-credit/refund") async refundCredit(@Req() req: AuthenticatedRequest, @Headers("idempotency-key") key: string | undefined, @Param("id") id: string, @Body() input: { financialAccountId: string; amount?: string; reason?: string }) {
+    return { data: await this.service.refundExcessCredit(requirePermission(req, "orders.create"), key, id, input) };
   }
 }
 

@@ -9,5 +9,5 @@ const target = new URL(testUrl);
 if (!/test/i.test(target.pathname) && !/^test_/i.test(target.searchParams.get("schema") ?? "")) throw new Error("Use a database containing 'test' or a schema beginning test_.");
 process.env.DATABASE_URL = testUrl;
 
-export default defineConfig({ test: { include: ["src/**/*.integration.test.ts"], testTimeout: 30_000, hookTimeout: 30_000, maxWorkers: 1 } });
+export default defineConfig({ test: { include: ["src/**/*.integration.test.ts"], testTimeout: 30_000, hookTimeout: 30_000, maxWorkers: 1, fileParallelism: false } });
 

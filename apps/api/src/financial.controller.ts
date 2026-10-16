@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Headers, Inject, Param, Patch, Post, Req, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Headers, Inject, Param, Patch, Post, Query, Req, UseGuards } from "@nestjs/common";
 import { AuthenticatedRequest, requirePermission, SessionGuard } from "./auth.js";
 import { FinancialWorkflowsService } from "./financial-workflows.service.js";
 
@@ -10,9 +10,37 @@ export class FinancialController {
   @Get("financial-accounts/selectable") async selectable(@Req() request: AuthenticatedRequest) { return { data: await this.service.selectableAccounts(requirePermission(request, "accounts.view")) }; }
   @Get("financial-accounts") async accounts(@Req() request: AuthenticatedRequest) { return { data: await this.service.accounts(requirePermission(request, "accounts.view")) }; }
   @Post("financial-accounts") async createAccount(@Req() request: AuthenticatedRequest, @Headers("idempotency-key") key: string | undefined, @Body() body: Parameters<FinancialWorkflowsService["createAccount"]>[2]) { return { data: await this.service.createAccount(requirePermission(request, "accounts.create"), key, body) }; }
-  @Get("financial-accounts/:id") async account(@Req() request: AuthenticatedRequest, @Param("id") id: string) { return { data: await this.service.accountDetail(requirePermission(request, "accounts.view"), id) }; }
+  @Get("financial-accounts/:id") async account(
+    @Req() request: AuthenticatedRequest,
+    @Param("id") id: string,
+    @Query("page") page?: string,
+    @Query("limit") limit?: string,
+    @Query("fromDate") fromDate?: string,
+    @Query("toDate") toDate?: string
+  ) {
+    return { data: await this.service.accountDetail(requirePermission(request, "accounts.view"), id, { page: page ? Number(page) : undefined, limit: limit ? Number(limit) : undefined, fromDate, toDate }) };
+  }
+  @Get("financial-accounts/:id/movements") async movements(
+    @Req() request: AuthenticatedRequest,
+    @Param("id") id: string,
+    @Query("page") page?: string,
+    @Query("limit") limit?: string,
+    @Query("fromDate") fromDate?: string,
+    @Query("toDate") toDate?: string
+  ) {
+    return { data: await this.service.accountDetail(requirePermission(request, "accounts.view"), id, { page: page ? Number(page) : undefined, limit: limit ? Number(limit) : undefined, fromDate, toDate }) };
+  }
   @Patch("financial-accounts/:id") async updateAccount(@Req() request: AuthenticatedRequest, @Param("id") id: string, @Body() body: Parameters<FinancialWorkflowsService["updateAccount"]>[2]) { return { data: await this.service.updateAccount(requirePermission(request, "accounts.create"), id, body) }; }
+  @Get("financial-accounts/transfers") async transfers(@Req() request: AuthenticatedRequest) { return { data: await this.service.transfers(requirePermission(request, "accounts.view")) }; }
   @Post("financial-accounts/transfers") async transfer(@Req() request: AuthenticatedRequest, @Headers("idempotency-key") key: string | undefined, @Body() body: Parameters<FinancialWorkflowsService["transfer"]>[2]) { return { data: await this.service.transfer(requirePermission(request, "accounts.transfer"), key, body) }; }
+  @Post("financial-accounts/transfers/:id/reverse") async reverseTransfer(
+    @Req() request: AuthenticatedRequest,
+    @Param("id") id: string,
+    @Headers("idempotency-key") key: string | undefined,
+    @Body() body: { reason?: string }
+  ) {
+    return { data: await this.service.reverseTransfer(requirePermission(request, "accounts.transfer"), key, id, body?.reason) };
+  }
 
   @Get("suppliers") async suppliers(@Req() request: AuthenticatedRequest) { return { data: await this.service.suppliers(requirePermission(request, "suppliers.view")) }; }
   @Post("suppliers") async createSupplier(@Req() request: AuthenticatedRequest, @Body() body: Parameters<FinancialWorkflowsService["createSupplier"]>[1]) { return { data: await this.service.createSupplier(requirePermission(request, "suppliers.create"), body) }; }

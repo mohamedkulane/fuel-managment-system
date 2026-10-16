@@ -6,7 +6,7 @@ import { type Actor, hasPermission } from "./auth.js";
 import { FinancialWorkflowsService } from "./financial-workflows.service.js";
 
 type Tx = Prisma.TransactionClient;
-export type SimpleOrderInput = { customerId: string; fuelId: string; salesUnitId: string; quantity: string; expectedPriceId: string; address: string; discount?: string; paidNow?: string; financialAccountId?: string; paymentMethod?: "CASH" | "BANK_TRANSFER" | "EVC_PLUS" | "EDAHAB" | "OTHER"; paymentReference?: string; notes?: string };
+export type SimpleOrderInput = { customerId: string; fuelId: string; salesUnitId: string; quantity: string; expectedPriceId: string; address: string; discount?: string; paidNow?: string; financialAccountId?: string; paymentMethod?: "CASH" | "BANK_TRANSFER" | "EVC_PLUS" | "EDAHAB" | "OTHER"; paymentReference?: string; notes?: string; requestedDeliveryDate?: string };
 export type SimpleReceiptInput = { fuelId: string; quantity: string; date: string; supplier?: string; supplierId?: string; notes?: string; unitCost?: string; totalCost?: string; paidNow?: string; financialAccountId?: string };
 export type SimplePaymentInput = { customerId: string; amount: string; financialAccountId?: string; method?: "CASH" | "BANK_TRANSFER" | "EVC_PLUS" | "EDAHAB" | "OTHER"; reference?: string; notes?: string; paymentDate?: string };
 export type SimpleDeliveryInput = { orderId: string; lines: { orderLineId: string; acceptedUnits: string; remaining?: "RETURNED" | "IN_TRANSIT"; closeRemainder?: boolean; reason?: string; amendmentReason?: string }[] };
@@ -55,13 +55,12 @@ export class SimpleWorkflowsService {
   }
   private async collect(tx: Tx, actor: Actor, input: SimplePaymentInput, orderId?: string) {
     const value = amount(input.amount, "Payment");
-    const method = input.method ?? "CASH";
-    if (!["CASH","BANK_TRANSFER","EVC_PLUS","EDAHAB","OTHER"].includes(method)) throw new BadRequestException("Invalid payment method");
     if (!await tx.customer.findUnique({ where: { id: required(input.customerId,"Customer") } })) throw new NotFoundException("Customer not found");
     const paymentDate = input.paymentDate ? new Date(input.paymentDate) : new Date();
     if (!Number.isFinite(paymentDate.getTime())) throw new BadRequestException("Enter a valid payment date");
     const financialAccountId = required(input.financialAccountId, "Financial account");
-    const payment = await tx.payment.create({ data: { paymentNo: no("PAY"), customerId: input.customerId, orderId, amount: value, unappliedAmount: value, allocatedAmount: d("0"), paymentDate, paymentMethod: method, reference: input.reference?.trim() || null, notes: input.notes?.trim() || null, recordedById: actor.id, financialAccountId } });
+    const method = await this.financial.paymentMethod(tx, financialAccountId);
+    const payment = await tx.payment.create({ data: { paymentNo: no("PAY"), customerId: input.customerId, orderId, amount: value, unappliedAmount: value, allocatedAmount: d("0"), paymentDate, paymentMethod: method as any, reference: input.reference?.trim() || null, notes: input.notes?.trim() || null, recordedById: actor.id, financialAccountId } });
     await this.financial.postMovement(tx, actor, { accountId: financialAccountId, direction: "MONEY_IN", kind: "CUSTOMER_PAYMENT", amount: value, occurredAt: paymentDate, sourceType: "Payment", sourceId: payment.id, referenceNo: payment.paymentNo, description: orderId ? "Paid Now for order" : "Customer debt payment" });
     await this.ledger(tx, input.customerId, "PAYMENT", payment.paymentNo, payment.id, value);
     if (!orderId) {
@@ -704,11 +703,132 @@ export class SimpleWorkflowsService {
       if (paid.gt(netTotal)) throw new BadRequestException(`Order total is $${netTotal.toFixed(2)}. Paid now cannot be higher.`);
       if(customer.creditLimit !== null) { const debt = await tx.invoice.aggregate({where:{customerId:customer.id,status:{in:["UNPAID","PARTIALLY_PAID"]}},_sum:{balanceDue:true}}); if((debt._sum.balanceDue ?? d("0")).add(subtotal.sub(discount)).gt(customer.creditLimit)) throw new BadRequestException("Customer credit limit exceeded"); }
       const pending = discount.gt(0) && actor.role !== "OWNER";
-      const order = await tx.salesOrder.create({data:{orderNo:no("SO"),customerId:customer.id,orderDate:now,addressSnapshot:required(input.address,"Address"),notes:input.notes,createdById:actor.id,status:pending?"DRAFT":"CONFIRMED",confirmedAt:pending?null:now,confirmedById:pending?null:actor.id,confirmationIdempotencyKey:pending?null:key,subtotal:pending?null:subtotal,totalAmount:pending?null:netTotal,fixedDiscountAmount:discount,discountApprovedById:discount.gt(0)&&!pending?actor.id:null,discountApprovedAt:discount.gt(0)&&!pending?now:null,lines:{create:{fuelId:input.fuelId,salesUnitId:input.salesUnitId,requestedUnits:units,conversionVersionId:pending?null:conversion.id,litersPerUnitSnapshot:pending?null:d("240"),requestedLitersSnapshot:pending?null:units.mul(240),priceVersionId:pending?null:price.id,unitPriceSnapshot:pending?null:price.unitPrice,confirmedAt:pending?null:now}}}});
+      const deliveryDate = input.requestedDeliveryDate ? new Date(input.requestedDeliveryDate) : null;
+      const order = await tx.salesOrder.create({data:{orderNo:no("SO"),customerId:customer.id,orderDate:now,requestedDeliveryDate:deliveryDate,addressSnapshot:required(input.address,"Address"),notes:input.notes,createdById:actor.id,status:pending?"DRAFT":"CONFIRMED",confirmedAt:pending?null:now,confirmedById:pending?null:actor.id,confirmationIdempotencyKey:pending?null:key,subtotal:pending?null:subtotal,totalAmount:pending?null:netTotal,fixedDiscountAmount:discount,discountApprovedById:discount.gt(0)&&!pending?actor.id:null,discountApprovedAt:discount.gt(0)&&!pending?now:null,lines:{create:{fuelId:input.fuelId,salesUnitId:input.salesUnitId,requestedUnits:units,conversionVersionId:pending?null:conversion.id,litersPerUnitSnapshot:pending?null:d("240"),requestedLitersSnapshot:pending?null:units.mul(240),priceVersionId:pending?null:price.id,unitPriceSnapshot:pending?null:price.unitPrice,confirmedAt:pending?null:now}}}});
       if(paid.gt(0)) await this.collect(tx,actor,{customerId:customer.id,amount:paid.toFixed(4),financialAccountId:input.financialAccountId,method:input.paymentMethod,reference:input.paymentReference},order.id);
       await tx.orderEvent.create({data:{orderId:order.id,kind:pending?"DISCOUNT_REQUESTED":"CONFIRMED",newValues:{status:order.status,reviewedPriceId:price.id,fixedDiscountAmount:discount.toFixed(4)},actorId:actor.id}});
       await this.audit(tx,actor,"SalesOrder",order.id,pending?"DISCOUNT_REQUESTED":"CONFIRMED");
       return {id:order.id,status:order.status};
+    });
+  }
+
+  async keepExcessCredit(actor: Actor, key: string | undefined, orderId: string) {
+    if (actor.role !== "OWNER") throw new ForbiddenException("Keliya milkiilaha ayaa go'aamin kara hadhaaga dalabka");
+    return this.execute(actor, key, "excess-credit-keep", { orderId }, async tx => {
+      const order = await tx.salesOrder.findUnique({
+        where: { id: orderId },
+        include: { payments: { where: { status: "POSTED", unappliedAmount: { gt: 0 } } } }
+      });
+      if (!order) throw new NotFoundException("Dalabka lama helin");
+      if (!order.payments.length) throw new BadRequestException("Dalabkan ma laha lacag hadhaa ah");
+
+      let totalKept = d("0");
+      for (const p of order.payments) {
+        totalKept = totalKept.add(p.unappliedAmount);
+        await tx.payment.update({
+          where: { id: p.id },
+          data: { orderId: null }
+        });
+        const openInvoices = await tx.invoice.findMany({
+          where: { customerId: order.customerId, status: { in: ["UNPAID", "PARTIALLY_PAID"] } },
+          orderBy: [{ issueDate: "asc" }, { id: "asc" }]
+        });
+        for (const inv of openInvoices) {
+          await this.allocate(tx, actor, p.id, inv.id);
+        }
+      }
+
+      await tx.auditEvent.create({
+        data: {
+          actorId: actor.id,
+          entityType: "SalesOrder",
+          entityId: order.id,
+          action: "EXCESS_CREDIT_KEPT",
+          reason: `Excess Paid Now credit of $${totalKept.toFixed(2)} retained as general customer credit`
+        }
+      });
+
+      return { orderId, status: "CREDIT_KEPT", totalKept: totalKept.toFixed(4) };
+    });
+  }
+
+  async refundExcessCredit(
+    actor: Actor,
+    key: string | undefined,
+    orderId: string,
+    input: { financialAccountId: string; amount?: string; reason?: string }
+  ) {
+    if (actor.role !== "OWNER") throw new ForbiddenException("Keliya milkiilaha ayaa lacag celin kara");
+    const accountId = required(input.financialAccountId, "Akoonka lacagta celinta");
+    const reason = required(input.reason || "Excess Paid Now refunded to customer", "Sababta celinta");
+
+    return this.execute(actor, key, "excess-credit-refund", { orderId, accountId, ...input }, async tx => {
+      const order = await tx.salesOrder.findUnique({
+        where: { id: orderId },
+        include: { payments: { where: { status: "POSTED", unappliedAmount: { gt: 0 } } } }
+      });
+      if (!order) throw new NotFoundException("Dalabka lama helin");
+      if (!order.payments.length) throw new BadRequestException("Dalabkan ma laha lacag hadhaa ah oo la celiyo");
+
+      const totalUnapplied = order.payments.reduce((sum, p) => sum.add(p.unappliedAmount), d("0"));
+      const refundVal = input.amount ? amount(input.amount, "Lacagta la celinayo") : totalUnapplied;
+      if (refundVal.gt(totalUnapplied)) {
+        throw new BadRequestException(`Lacagta la celinayo ($${refundVal.toFixed(2)}) kama badnaan karto hadhaaga ($${totalUnapplied.toFixed(2)})`);
+      }
+
+      let remainingToRefund = refundVal;
+      for (const p of order.payments) {
+        if (remainingToRefund.lte(0)) break;
+        const slice = Prisma.Decimal.min(remainingToRefund, p.unappliedAmount);
+        await tx.payment.update({
+          where: { id: p.id },
+          data: {
+            amount: p.amount.sub(slice),
+            unappliedAmount: p.unappliedAmount.sub(slice)
+          }
+        });
+        remainingToRefund = remainingToRefund.sub(slice);
+      }
+
+      await this.financial.postMovement(tx, actor, {
+        accountId,
+        direction: "MONEY_OUT",
+        kind: "CUSTOMER_PAYMENT_REVERSAL",
+        amount: refundVal,
+        occurredAt: new Date(),
+        sourceType: "SalesOrderRefund",
+        sourceId: order.id,
+        referenceNo: order.orderNo,
+        description: reason
+      });
+
+      const totals = await tx.customerLedgerEntry.aggregate({ where: { customerId: order.customerId }, _sum: { debitAmount: true, creditAmount: true } });
+      const prior = (totals._sum.debitAmount ?? d("0")).sub(totals._sum.creditAmount ?? d("0"));
+      await tx.customerLedgerEntry.create({
+        data: {
+          customerId: order.customerId,
+          entryType: "ADJUSTMENT",
+          referenceNo: `REFUND-${order.orderNo}`,
+          debitAmount: refundVal,
+          creditAmount: d("0"),
+          runningBalance: prior.add(refundVal),
+          sourceType: "SalesOrderRefund",
+          sourceId: order.id,
+          notes: reason
+        }
+      });
+
+      await tx.auditEvent.create({
+        data: {
+          actorId: actor.id,
+          entityType: "SalesOrder",
+          entityId: order.id,
+          action: "EXCESS_CREDIT_REFUNDED",
+          reason: `Refunded $${refundVal.toFixed(2)} from account ${accountId}: ${reason}`
+        }
+      });
+
+      return { orderId, status: "REFUNDED", refundedAmount: refundVal.toFixed(4) };
     });
   }
 }

@@ -346,3 +346,180 @@ body{font-size:15px}.page-head h1,.page-header h1{font-size:24px}.page-head p{fo
   .cashflow-chart{grid-template-columns:46px minmax(0,1fr);gap:4px}
   .cashflow-series-toggle{gap:5px;padding:6px;font-size:9px}
 }
+
+/* =========================================================================
+   TABLE ALIGNMENT & COLUMN CONSISTENCY FIX
+   Ensures every row aligns strictly with its column header on all viewports
+   ========================================================================= */
+.table-wrap {
+  overflow-x: auto !important;
+  -webkit-overflow-scrolling: touch;
+  width: 100% !important;
+  max-width: 100% !important;
+  scrollbar-width: thin;
+  display: block;
+}
+
+.data-table,
+.table,
+.responsive-table {
+  width: 100% !important;
+  min-width: 650px !important;
+  border-collapse: collapse !important;
+  table-layout: auto !important;
+  display: table !important;
+}
+
+.data-table thead,
+.table thead,
+.responsive-table thead {
+  display: table-header-group !important;
+  position: static !important;
+  width: auto !important;
+  height: auto !important;
+  clip-path: none !important;
+  overflow: visible !important;
+}
+
+.data-table tbody,
+.table tbody,
+.responsive-table tbody {
+  display: table-row-group !important;
+}
+
+.data-table tr,
+.table tr,
+.responsive-table tr {
+  display: table-row !important;
+  padding: 0 !important;
+  border-bottom: 1px solid var(--line) !important;
+}
+
+.data-table th,
+.table th,
+.responsive-table th {
+  display: table-cell !important;
+  text-align: left;
+  vertical-align: middle;
+  padding: 10px 14px !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  color: var(--petrol) !important;
+  background: #f4f8f4 !important;
+  border-bottom: 2px solid var(--line-strong) !important;
+  white-space: nowrap !important;
+}
+
+.data-table td,
+.table td,
+.responsive-table td {
+  display: table-cell !important;
+  text-align: left;
+  vertical-align: middle;
+  padding: 11px 14px !important;
+  font-size: 13px !important;
+  color: var(--body) !important;
+  border-bottom: 1px solid var(--line) !important;
+  white-space: normal;
+  min-width: 0;
+}
+
+.data-table td:before,
+.table td:before,
+.responsive-table td:before {
+  display: none !important;
+}
+
+.data-table th:last-child,
+.data-table td:last-child,
+.table th:last-child,
+.table td:last-child,
+.responsive-table th:last-child,
+.responsive-table td:last-child {
+  text-align: right !important;
+}
+
+.data-table td .actions,
+.table td .actions,
+.responsive-table td .actions {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  gap: 6px !important;
+  flex-wrap: nowrap !important;
+}
+
+/* Tabular number alignment */
+.data-table td.mono,
+.table td.mono,
+.data-table td strong.mono,
+.data-table th.mono {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+/* =========================================================================
+   MOBILE BUTTON SIZING & OVERFLOW FIX
+   Prevents buttons from ballooning or stretching excessively on mobile
+   ========================================================================= */
+@media (max-width: 768px) {
+  .btn,
+  .btn.primary,
+  .btn.secondary,
+  .btn.dark,
+  .btn.danger {
+    font-size: 12.5px !important;
+    min-height: 35px !important;
+    height: auto !important;
+    padding: 6px 12px !important;
+    width: auto !important;
+    max-width: max-content !important;
+    flex: none !important;
+    white-space: nowrap !important;
+    border-radius: 7px !important;
+  }
+
+  .btn.small,
+  .btn.sm,
+  .data-table .btn,
+  .table .btn,
+  .actions .btn {
+    font-size: 11px !important;
+    min-height: 28px !important;
+    height: 28px !important;
+    padding: 3px 8px !important;
+    width: auto !important;
+    max-width: max-content !important;
+    flex: none !important;
+    border-radius: 5px !important;
+  }
+
+  .page-actions,
+  .form-actions {
+    display: flex !important;
+    align-items: center !important;
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+    width: 100% !important;
+  }
+
+  .page-actions .btn,
+  .form-actions .btn:not(.full-submit) {
+    flex: none !important;
+    width: auto !important;
+  }
+
+  .delivery-list-actions .btn {
+    flex: none !important;
+    width: auto !important;
+  }
+
+  .quick-actions .btn {
+    flex: none !important;
+    width: auto !important;
+    min-width: 0 !important;
+    min-height: 40px !important;
+    font-size: 13px !important;
+  }
+}
+

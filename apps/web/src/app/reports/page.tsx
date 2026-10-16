@@ -20,10 +20,13 @@ type ReportCard = {
 };
 
 const reports: ReportCard[] = [
- {id:"customers",title:"Macaamiisha iyo deymaha",category:"Financial",description:"Xisaabta iyo deynta macaamiisha.",endpoint:"/reports/customers"},
- {id:"sales",title:"Iibka",category:"Financial",description:"Iibka shidaalka la geeyey iyo biilasha.",endpoint:"/reports/invoices"},
- {id:"collections",title:"Lacagihii la qabtay",category:"Financial",description:"Lacagaha macaamiisha laga qabtay.",endpoint:"/reports/collections"},
- {id:"inventory",title:"Kaydka Shidaalka",category:"Inventory",description:"Kaydka iyo shidaalka soo galay ama baxay.",endpoint:"/reports/inventory"}
+  { id: "customers", title: "Macaamiisha iyo Deymaha", category: "Financial", description: "Xisaabta iyo deynta macaamiisha.", endpoint: "/reports/customers" },
+  { id: "sales", title: "Iibka Shidaalka", category: "Financial", description: "Iibka shidaalka la geeyey iyo biilasha.", endpoint: "/reports/invoices" },
+  { id: "collections", title: "Lacagihii La Qabtay", category: "Financial", description: "Lacagaha macaamiisha laga qabtay.", endpoint: "/reports/collections" },
+  { id: "inventory", title: "Kaydka Shidaalka", category: "Inventory", description: "Kaydka iyo shidaalka soo galay ama baxay.", endpoint: "/reports/inventory" },
+  { id: "supplier-debt", title: "Deymaha Keenayaasha", category: "Owner", description: "Deymaha lagu leeyahay keenayaasha shidaalka iyo rasiidhada.", endpoint: "/reports/supplier-debt", ownerOnly: true },
+  { id: "expenses", title: "Kharashaadka Ganacsiga", category: "Owner", description: "Kharashaadka maamulka, gaadiidka iyo howlaha.", endpoint: "/reports/expenses", ownerOnly: true },
+  { id: "cash-flow", title: "Socodka Lacagta & Hadhaaga", category: "Owner", description: "Socodka lacagta soo gashay/baxday iyo hadhaaga akoonnada.", endpoint: "/reports/cash-flow", ownerOnly: true }
 ];
 
 export default function ReportsHubPage() {
@@ -113,8 +116,14 @@ export default function ReportsHubPage() {
             </div>
           )}
 
-          <div className="report-filter-actions">
-            <PdfButton className="btn primary" path={activeReport.endpoint+"/pdf?fromDate="+fromDate+"&toDate="+toDate} failure="Report unavailable"            >Fur Warbixinta</PdfButton>
+          <div className="report-filter-actions" style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <PdfButton className="btn primary" path={activeReport.endpoint + "/pdf?fromDate=" + fromDate + "&toDate=" + toDate} failure="Warbixinta PDF lama heli karo">
+              Soo Dejiso PDF
+            </PdfButton>
+            <ActionButton type="button" className="btn secondary" onClick={() => handleDownload("xlsx")}>
+              <FileDown size={15} />
+              Soo Dejiso Excel
+            </ActionButton>
           </div>
         </div>
       </Card>

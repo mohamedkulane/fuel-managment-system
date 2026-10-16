@@ -74,7 +74,7 @@ describe("Simple workflows preserve stock and finance",()=>{
  });
  it("office discount stays pending and price changes require review",async()=>{
   const input={customerId,fuelId,salesUnitId:unitId,quantity:"1",discount:"5",expectedPriceId:priceId,address:"Hodan"};const result=await service.order(office,key(),input);expect((result as {status:string}).status).toBe("DRAFT");
-  const controller=new AppController(db,accounts,service);
+  const controller=new AppController(db,accounts,service,financial);
   const approved=await controller.approveDiscount({actor:owner} as never,(result as {id:string}).id,{reason:"Approved"});
   expect(approved.data.status).toBe("CONFIRMED");
   expect(approved.data.totalAmount).toBe("95.000000");

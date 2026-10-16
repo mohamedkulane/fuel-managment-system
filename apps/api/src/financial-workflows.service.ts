@@ -137,11 +137,80 @@ export class FinancialWorkflowsService {
     });
   }
 
-  async accountDetail(actor: Actor, id: string) {
+  async accountDetail(actor: Actor, id: string, query?: { page?: number; limit?: number; fromDate?: string; toDate?: string }) {
     this.owner(actor);
-    const row = await this.db.financialAccount.findUnique({ where: { id }, include: { movements: { orderBy: [{ occurredAt: "desc" }, { createdAt: "desc" }], take: 250 } } });
+    const row = await this.db.financialAccount.findUnique({ where: { id } });
     if (!row) throw new NotFoundException("Account not found");
-    return { id: row.id, name: row.name, currentBalance: row.currentBalance.toFixed(4), movements: row.movements.map((m) => ({ id: m.id, occurredAt: m.occurredAt.toISOString(), direction: m.direction, kind: m.kind, amount: m.amount.toFixed(4), balanceAfter: m.balanceAfter.toFixed(4), referenceNo: m.referenceNo, description: m.description, sourceType: m.sourceType, sourceId: m.sourceId })) };
+
+    const page = query?.page && query.page > 0 ? query.page : 1;
+    const limit = query?.limit && query.limit > 0 ? query.limit : 50;
+    const skip = (page - 1) * limit;
+
+    const where: Prisma.FinancialAccountMovementWhereInput = {
+      accountId: id,
+      ...(query?.fromDate || query?.toDate ? {
+        occurredAt: {
+          ...(query.fromDate ? { gte: new Date(`${query.fromDate}T00:00:00.000Z`) } : {}),
+          ...(query.toDate ? { lte: new Date(`${query.toDate}T23:59:59.999Z`) } : {})
+        }
+      } : {})
+    };
+
+    const [total, movements] = await Promise.all([
+      this.db.financialAccountMovement.count({ where }),
+      this.db.financialAccountMovement.findMany({
+        where,
+        orderBy: [{ occurredAt: "desc" }, { createdAt: "desc" }],
+        skip,
+        take: limit
+      })
+    ]);
+
+    return {
+      id: row.id,
+      name: row.name,
+      currentBalance: row.currentBalance.toFixed(4),
+      overdraftPolicy: row.overdraftPolicy,
+      type: row.type,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit) || 1,
+      movements: movements.map((m) => ({
+        id: m.id,
+        occurredAt: m.occurredAt.toISOString(),
+        direction: m.direction,
+        kind: m.kind,
+        amount: m.amount.toFixed(4),
+        balanceAfter: m.balanceAfter.toFixed(4),
+        referenceNo: m.referenceNo,
+        description: m.description,
+        sourceType: m.sourceType,
+        sourceId: m.sourceId
+      }))
+    };
+  }
+
+  async transfers(actor: Actor) {
+    this.owner(actor);
+    const rows = await this.db.accountTransfer.findMany({
+      orderBy: [{ transferDate: "desc" }, { createdAt: "desc" }],
+      include: { fromAccount: true, toAccount: true }
+    });
+    return rows.map((r) => ({
+      id: r.id,
+      transferNo: r.transferNo,
+      fromAccountId: r.fromAccountId,
+      fromAccountName: r.fromAccount.name,
+      toAccountId: r.toAccountId,
+      toAccountName: r.toAccount.name,
+      amount: r.amount.toFixed(4),
+      transferDate: r.transferDate.toISOString(),
+      reference: r.reference,
+      notes: r.notes,
+      status: r.status,
+      reversalReason: r.reversalReason
+    }));
   }
 
   async updateAccount(actor: Actor, id: string, input: { name?: string; paymentMethod?: string; identifierMasked?: string; overdraftPolicy?: string; allowOfficePayments?: boolean; active?: boolean }) {

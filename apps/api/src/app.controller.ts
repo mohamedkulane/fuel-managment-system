@@ -14,6 +14,7 @@ import { createPaymentReceiptPdf } from "./payment-receipt.pdf.js";
 import { addDocumentFooter, drawDocumentLogo, resolveDocumentBranding, validateLogoUrl } from "./document-branding.js";
 import { CustomerAccountService } from "./customer-account.service.js";
 import { SimpleWorkflowsService } from "./simple-workflows.service.js";
+import { FinancialWorkflowsService } from "./financial-workflows.service.js";
 
 type DecimalInput = string;
 const dec = (value: DecimalInput): Prisma.Decimal => new Prisma.Decimal(value);
@@ -49,7 +50,8 @@ export class AppController {
   public constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(CustomerAccountService) private readonly customerAccounts: CustomerAccountService,
-    @Inject(SimpleWorkflowsService) private readonly simpleWorkflows: SimpleWorkflowsService
+    @Inject(SimpleWorkflowsService) private readonly simpleWorkflows: SimpleWorkflowsService,
+    @Inject(FinancialWorkflowsService) private readonly financialWorkflows: FinancialWorkflowsService
   ) {}
 
   private async documentBranding() {
@@ -178,24 +180,61 @@ export class AppController {
 
   @UseGuards(SessionGuard)
   @Post("stock/adjustments")
-  async adjustStock(@Req() request: AuthenticatedRequest, @Body() body: { fuelId?: string; signedDeltaLiters?: string; reason?: string }) {
+  async adjustStock(
+    @Req() request: AuthenticatedRequest,
+    @Headers("idempotency-key") headerKey: string | undefined,
+    @Body() body: { fuelId?: string; signedDeltaLiters?: string; signedDeltaFuusto?: string; quantityFuusto?: string; reason?: string }
+  ) {
     const actor = requirePermission(request, "stock.adjust");
-    if (!body.fuelId || !body.signedDeltaLiters || !body.reason?.trim()) throw new BadRequestException("fuelId, signedDeltaLiters and reason are required");
-    const delta = dec(body.signedDeltaLiters);
-    if (delta.eq(0)) throw new BadRequestException("signedDeltaLiters cannot be zero");
+    const reason = body.reason?.trim();
+    if (!body.fuelId || !reason) throw new BadRequestException("fuelId and reason are required");
+
+    let delta: Prisma.Decimal;
+    if (body.signedDeltaFuusto || body.quantityFuusto) {
+      const fuusto = dec(body.signedDeltaFuusto || body.quantityFuusto!);
+      if (fuusto.eq(0)) throw new BadRequestException("Fuusto quantity cannot be zero");
+      delta = fuusto.mul(240);
+    } else if (body.signedDeltaLiters) {
+      delta = dec(body.signedDeltaLiters);
+      if (delta.eq(0)) throw new BadRequestException("signedDeltaLiters cannot be zero");
+    } else {
+      throw new BadRequestException("quantityFuusto or signedDeltaLiters is required");
+    }
+
     const result = await this.prisma.$transaction(async (tx) => {
       const where = { fuelId_location: { fuelId: body.fuelId!, location: "WAREHOUSE" as const } };
       if (delta.lt(0)) {
-        const changed = await tx.stockBalance.updateMany({ where: { fuelId: body.fuelId!, location: "WAREHOUSE", balanceLiters: { gte: delta.abs() } }, data: { balanceLiters: { decrement: delta.abs() }, version: { increment: 1 } } });
-        if (changed.count !== 1) throw new BadRequestException("Adjustment would make warehouse stock negative");
+        const changed = await tx.stockBalance.updateMany({
+          where: { fuelId: body.fuelId!, location: "WAREHOUSE", balanceLiters: { gte: delta.abs() } },
+          data: { balanceLiters: { decrement: delta.abs() }, version: { increment: 1 } }
+        });
+        if (changed.count !== 1) throw new BadRequestException("Kaydka kuma filna (Adjustment would make warehouse stock negative)");
       } else {
         await tx.stockBalance.update({ where, data: { balanceLiters: { increment: delta }, version: { increment: 1 } } });
       }
-      const movement = await tx.inventoryMovement.create({ data: { fuelId: body.fuelId!, location: "WAREHOUSE", signedDeltaLiters: delta, eventType: "ADJUSTMENT", sourceType: "StockAdjustment", sourceId: documentNo("ADJ"), createdById: actor.id } });
-      await tx.auditEvent.create({ data: { actorId: actor.id, entityType: "InventoryMovement", entityId: movement.id, action: "ADJUSTED", reason: body.reason } });
+      const movement = await tx.inventoryMovement.create({
+        data: {
+          fuelId: body.fuelId!,
+          location: "WAREHOUSE",
+          signedDeltaLiters: delta,
+          eventType: "ADJUSTMENT",
+          sourceType: "StockAdjustment",
+          sourceId: documentNo("ADJ"),
+          createdById: actor.id
+        }
+      });
+      await tx.auditEvent.create({
+        data: { actorId: actor.id, entityType: "InventoryMovement", entityId: movement.id, action: "ADJUSTED", reason }
+      });
       return movement;
     });
-    return { data: { ...result, signedDeltaLiters: result.signedDeltaLiters.toFixed(3) } };
+    return {
+      data: {
+        ...result,
+        signedDeltaLiters: result.signedDeltaLiters.toFixed(3),
+        signedDeltaFuusto: result.signedDeltaLiters.div(240).toFixed(3)
+      }
+    };
   }
 
   @UseGuards(SessionGuard)
@@ -345,11 +384,14 @@ export class AppController {
     @Body()
     body: {
       supplier?: string;
+      supplierId?: string;
       tankerReference?: string;
       arrivedAt?: string;
       purchaseDate?: string;
       notes?: string;
       financialAccountId?: string;
+      payingAccountId?: string;
+      paidNow?: string;
       lines?: Array<{
         fuelId?: string;
         quantityFuusto?: string;
@@ -411,6 +453,9 @@ export class AppController {
       data: {
         receiptNo: documentNo("REC"),
         tankerReference: body.supplier || body.tankerReference,
+        supplierId: body.supplierId || undefined,
+        paidNow: body.paidNow ? dec(body.paidNow) : dec("0"),
+        payingAccountId: body.payingAccountId || body.financialAccountId || undefined,
         arrivedAt: new Date(arrival),
         notes: body.notes,
         createdById: actor.id,
@@ -452,6 +497,38 @@ export class AppController {
           where: { fuelId_location: { fuelId: line.fuelId, location: "WAREHOUSE" } },
           data: { balanceLiters: { increment: line.actualLiters }, version: { increment: 1 } }
         });
+      }
+
+      if (row.supplierId) {
+        for (const line of row.lines) {
+          if (line.unitPurchaseCost && line.totalPurchaseCost) {
+            const existingPurchase = await tx.supplierPurchase.findFirst({
+              where: { receiptId: row.id, fuelId: line.fuelId }
+            });
+            if (!existingPurchase) {
+              const purchase = await this.financialWorkflows.createSupplierPurchase(tx, actor, {
+                supplierId: row.supplierId,
+                receiptId: row.id,
+                fuelId: line.fuelId,
+                quantityFuusto: line.quantityFuusto ?? line.actualLiters.div(240),
+                unitCost: line.unitPurchaseCost,
+                totalCost: line.totalPurchaseCost,
+                purchaseDate: row.arrivedAt
+              });
+              if (row.paidNow && row.paidNow.gt(0) && row.payingAccountId) {
+                await this.financialWorkflows.createSupplierPaymentInTransaction(tx, actor, `${key}:supplier:${line.id}`, {
+                  supplierId: row.supplierId,
+                  financialAccountId: row.payingAccountId,
+                  amount: row.paidNow,
+                  paymentDate: row.arrivedAt,
+                  reference: row.receiptNo,
+                  notes: "Paid with stock receipt",
+                  purchaseId: purchase.id
+                });
+              }
+            }
+          }
+        }
       }
 
       await tx.auditEvent.create({
@@ -927,7 +1004,16 @@ export class AppController {
         customer: true,
         discountApprovedBy: { select: { displayName: true } },
         lines: { include: { fuel: true, salesUnit: true, dispatchLines: { include: { confirmations: true } } } },
-        events: { orderBy: { occurredAt: "asc" } }
+        events: { orderBy: { occurredAt: "asc" } },
+        payments: {
+          select: {
+            id: true,
+            amount: true,
+            unappliedAmount: true,
+            paymentDate: true,
+            status: true
+          }
+        }
       }
     });
     if (!row) throw new NotFoundException("Order not found");
@@ -980,7 +1066,14 @@ export class AppController {
         fixedDiscountAmount: row.fixedDiscountAmount.toFixed(4),
         totalAmount: jsonDecimal(row.totalAmount),
         discountApprovedByName: row.discountApprovedBy?.displayName ?? null,
-        lines: formattedLines
+        lines: formattedLines,
+        payments: row.payments.map((p) => ({
+          id: p.id,
+          amount: p.amount.toFixed(2),
+          unappliedAmount: p.unappliedAmount.toFixed(2),
+          paymentDate: p.paymentDate.toISOString(),
+          status: p.status
+        }))
       }
     };
   }
@@ -3233,6 +3326,286 @@ export class AppController {
       { header: "Document Count", key: "count", align: "right" }
     ];
     const xlsxBuffer = await this.exportExcel({ title: "Financial Revenue & Stock Purchase Summary (Owner Only)", columns, rows });
+    response.type("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet").send(xlsxBuffer);
+  }
+
+  // --- SUPPLIER DEBT REPORT ---
+  @UseGuards(SessionGuard)
+  @Get("reports/supplier-debt")
+  async reportsSupplierDebt(@Req() request: AuthenticatedRequest) {
+    requirePermission(request, "suppliers.view");
+    const suppliers = await this.prisma.supplier.findMany({
+      orderBy: [{ status: "asc" }, { name: "asc" }],
+      include: {
+        purchases: { where: { status: { not: "REVERSED" } } },
+        payments: { where: { status: "POSTED" } }
+      }
+    });
+
+    const items = suppliers.map((s) => {
+      const totalPurchases = s.purchases.reduce((sum, p) => sum.add(p.totalCost), dec("0"));
+      const totalPaid = s.payments.reduce((sum, p) => sum.add(p.amount), dec("0"));
+      const balanceDue = s.purchases.filter(p => ["OPEN", "PARTIALLY_PAID"].includes(p.status)).reduce((sum, p) => sum.add(p.balanceDue), dec("0"));
+      return {
+        id: s.id,
+        code: s.code,
+        name: s.name,
+        phone: s.phone ?? "—",
+        location: s.location ?? "—",
+        status: s.status,
+        totalPurchases: totalPurchases.toFixed(2),
+        totalPaid: totalPaid.toFixed(2),
+        balanceDue: balanceDue.toFixed(2)
+      };
+    });
+
+    const totalDebt = items.reduce((sum, i) => sum.add(dec(i.balanceDue)), dec("0")).toFixed(2);
+    const totalPurchased = items.reduce((sum, i) => sum.add(dec(i.totalPurchases)), dec("0")).toFixed(2);
+    const totalPaid = items.reduce((sum, i) => sum.add(dec(i.totalPaid)), dec("0")).toFixed(2);
+
+    return {
+      data: {
+        items,
+        summary: {
+          totalSuppliers: suppliers.length,
+          totalPurchased,
+          totalPaid,
+          totalDebt
+        }
+      }
+    };
+  }
+
+  @UseGuards(SessionGuard)
+  @Get("reports/supplier-debt/pdf")
+  async reportsSupplierDebtPdf(@Req() request: AuthenticatedRequest, @Res() response: Response) {
+    requirePermission(request, "reports.export");
+    requirePermission(request, "suppliers.view");
+    const data = await this.reportsSupplierDebt(request);
+    const columns: ColumnDef[] = [
+      { header: "Iibiyaha", key: "name", width: 25 },
+      { header: "Telefoonka", key: "phone", width: 15 },
+      { header: "Wadarta Iibka ($)", key: "totalPurchases", format: "currency", align: "right" },
+      { header: "Wadarta La Bixiyey ($)", key: "totalPaid", format: "currency", align: "right" },
+      { header: "Deynta Hadda ($)", key: "balanceDue", format: "currency", align: "right" },
+      { header: "Xaaladda", key: "status", format: "badge" }
+    ];
+    const pdfBuffer = await this.exportPdf({ title: "Warbixinta Deymaha Iibiyeyaasha", columns, rows: data.data.items });
+    response.type("application/pdf").send(pdfBuffer);
+  }
+
+  @UseGuards(SessionGuard)
+  @Get("reports/supplier-debt/xlsx")
+  async reportsSupplierDebtXlsx(@Req() request: AuthenticatedRequest, @Res() response: Response) {
+    requirePermission(request, "reports.export");
+    requirePermission(request, "suppliers.view");
+    const data = await this.reportsSupplierDebt(request);
+    const columns: ColumnDef[] = [
+      { header: "Iibiyaha", key: "name", width: 25 },
+      { header: "Telefoonka", key: "phone", width: 15 },
+      { header: "Wadarta Iibka ($)", key: "totalPurchases", format: "currency", align: "right" },
+      { header: "Wadarta La Bixiyey ($)", key: "totalPaid", format: "currency", align: "right" },
+      { header: "Deynta Hadda ($)", key: "balanceDue", format: "currency", align: "right" },
+      { header: "Xaaladda", key: "status", format: "badge" }
+    ];
+    const xlsxBuffer = await this.exportExcel({ title: "Warbixinta Deymaha Iibiyeyaasha", columns, rows: data.data.items });
+    response.type("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet").send(xlsxBuffer);
+  }
+
+  // --- BUSINESS EXPENSES REPORT ---
+  @UseGuards(SessionGuard)
+  @Get("reports/expenses")
+  async reportsExpenses(@Req() request: AuthenticatedRequest, @Query("fromDate") fromDate?: string, @Query("toDate") toDate?: string) {
+    requirePermission(request, "expenses.view");
+    const where: Prisma.BusinessExpenseWhereInput = {
+      status: { not: "REVERSED" },
+      ...(fromDate || toDate
+        ? {
+            expenseDate: {
+              ...(fromDate ? { gte: new Date(`${fromDate}T00:00:00.000Z`) } : {}),
+              ...(toDate ? { lte: new Date(`${toDate}T23:59:59.999Z`) } : {})
+            }
+          }
+        : {})
+    };
+
+    const expenses = await this.prisma.businessExpense.findMany({
+      where,
+      orderBy: [{ expenseDate: "desc" }, { createdAt: "desc" }],
+      include: { financialAccount: true }
+    });
+
+    const items = expenses.map((e) => ({
+      id: e.id,
+      expenseNo: e.expenseNo,
+      expenseDate: e.expenseDate.toISOString().slice(0, 10),
+      category: e.category,
+      description: e.description,
+      accountName: e.financialAccount?.name ?? "Banaanka / Lama socon",
+      amount: e.amount.toFixed(2),
+      status: e.status
+    }));
+
+    const totalExpense = expenses.reduce((sum, e) => sum.add(e.amount), dec("0")).toFixed(2);
+
+    const byCategoryMap = new Map<string, Prisma.Decimal>();
+    for (const e of expenses) {
+      byCategoryMap.set(e.category, (byCategoryMap.get(e.category) ?? dec("0")).add(e.amount));
+    }
+    const categories = Array.from(byCategoryMap.entries()).map(([category, sum]) => ({
+      category,
+      amount: sum.toFixed(2)
+    }));
+
+    return {
+      data: {
+        items,
+        categories,
+        summary: {
+          totalCount: expenses.length,
+          totalExpense
+        }
+      }
+    };
+  }
+
+  @UseGuards(SessionGuard)
+  @Get("reports/expenses/pdf")
+  async reportsExpensesPdf(@Req() request: AuthenticatedRequest, @Query("fromDate") fromDate: string | undefined, @Query("toDate") toDate: string | undefined, @Res() response: Response) {
+    requirePermission(request, "reports.export");
+    requirePermission(request, "expenses.view");
+    const data = await this.reportsExpenses(request, fromDate, toDate);
+    const columns: ColumnDef[] = [
+      { header: "Taariikhda", key: "expenseDate", width: 14 },
+      { header: "Qaybta", key: "category", width: 20 },
+      { header: "Faahfaahinta", key: "description", width: 30 },
+      { header: "Akoonka", key: "accountName", width: 20 },
+      { header: "Qadarka ($)", key: "amount", format: "currency", align: "right" }
+    ];
+    const pdfBuffer = await this.exportPdf({ title: "Warbixinta Kharashaadka Ganacsiga", columns, rows: data.data.items });
+    response.type("application/pdf").send(pdfBuffer);
+  }
+
+  @UseGuards(SessionGuard)
+  @Get("reports/expenses/xlsx")
+  async reportsExpensesXlsx(@Req() request: AuthenticatedRequest, @Query("fromDate") fromDate: string | undefined, @Query("toDate") toDate: string | undefined, @Res() response: Response) {
+    requirePermission(request, "reports.export");
+    requirePermission(request, "expenses.view");
+    const data = await this.reportsExpenses(request, fromDate, toDate);
+    const columns: ColumnDef[] = [
+      { header: "Taariikhda", key: "expenseDate", width: 14 },
+      { header: "Qaybta", key: "category", width: 20 },
+      { header: "Faahfaahinta", key: "description", width: 30 },
+      { header: "Akoonka", key: "accountName", width: 20 },
+      { header: "Qadarka ($)", key: "amount", format: "currency", align: "right" }
+    ];
+    const xlsxBuffer = await this.exportExcel({ title: "Warbixinta Kharashaadka Ganacsiga", columns, rows: data.data.items });
+    response.type("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet").send(xlsxBuffer);
+  }
+
+  // --- CASH FLOW & ACCOUNT BALANCES REPORT ---
+  @UseGuards(SessionGuard)
+  @Get("reports/cash-flow")
+  async reportsCashFlow(@Req() request: AuthenticatedRequest, @Query("fromDate") fromDate?: string, @Query("toDate") toDate?: string) {
+    requirePermission(request, "accounts.view");
+    const accounts = await this.prisma.financialAccount.findMany({
+      where: { active: true },
+      orderBy: { name: "asc" }
+    });
+
+    const whereMovement: Prisma.FinancialAccountMovementWhereInput = {
+      ...(fromDate || toDate
+        ? {
+            occurredAt: {
+              ...(fromDate ? { gte: new Date(`${fromDate}T00:00:00.000Z`) } : {}),
+              ...(toDate ? { lte: new Date(`${toDate}T23:59:59.999Z`) } : {})
+            }
+          }
+        : {})
+    };
+
+    const movements = await this.prisma.financialAccountMovement.findMany({
+      where: whereMovement
+    });
+
+    let businessMoneyIn = dec("0");
+    let businessMoneyOut = dec("0");
+    let internalTransfersTotal = dec("0");
+
+    for (const m of movements) {
+      if (m.sourceType === "AccountTransfer" || m.sourceType === "AccountTransferReversal") {
+        if (m.direction === "MONEY_IN") internalTransfersTotal = internalTransfersTotal.add(m.amount);
+      } else {
+        if (m.direction === "MONEY_IN") businessMoneyIn = businessMoneyIn.add(m.amount);
+        else businessMoneyOut = businessMoneyOut.add(m.amount);
+      }
+    }
+
+    const items = accounts.map((acc) => {
+      const accMovements = movements.filter((m) => m.accountId === acc.id);
+      const accIn = accMovements.filter((m) => m.direction === "MONEY_IN").reduce((sum, m) => sum.add(m.amount), dec("0"));
+      const accOut = accMovements.filter((m) => m.direction === "MONEY_OUT").reduce((sum, m) => sum.add(m.amount), dec("0"));
+      return {
+        id: acc.id,
+        name: acc.name,
+        type: acc.type,
+        identifier: acc.identifierMasked ?? "—",
+        moneyIn: accIn.toFixed(2),
+        moneyOut: accOut.toFixed(2),
+        netChange: accIn.sub(accOut).toFixed(2),
+        currentBalance: acc.currentBalance.toFixed(2)
+      };
+    });
+
+    const totalTrackedBalance = accounts.reduce((sum, acc) => sum.add(acc.currentBalance), dec("0")).toFixed(2);
+
+    return {
+      data: {
+        items,
+        summary: {
+          businessMoneyIn: businessMoneyIn.toFixed(2),
+          businessMoneyOut: businessMoneyOut.toFixed(2),
+          netCashFlow: businessMoneyIn.sub(businessMoneyOut).toFixed(2),
+          internalTransfers: internalTransfersTotal.toFixed(2),
+          totalTrackedBalance
+        }
+      }
+    };
+  }
+
+  @UseGuards(SessionGuard)
+  @Get("reports/cash-flow/pdf")
+  async reportsCashFlowPdf(@Req() request: AuthenticatedRequest, @Query("fromDate") fromDate: string | undefined, @Query("toDate") toDate: string | undefined, @Res() response: Response) {
+    requirePermission(request, "reports.export");
+    requirePermission(request, "accounts.view");
+    const data = await this.reportsCashFlow(request, fromDate, toDate);
+    const columns: ColumnDef[] = [
+      { header: "Akoonka", key: "name", width: 25 },
+      { header: "Nooca", key: "type", width: 15 },
+      { header: "Lacagta Soo Gashay ($)", key: "moneyIn", format: "currency", align: "right" },
+      { header: "Lacagta Baxday ($)", key: "moneyOut", format: "currency", align: "right" },
+      { header: "Kala Duwanaanshaha ($)", key: "netChange", format: "currency", align: "right" },
+      { header: "Hadhaaga Hadda ($)", key: "currentBalance", format: "currency", align: "right" }
+    ];
+    const pdfBuffer = await this.exportPdf({ title: "Warbixinta Dhaqdhaqaaqa Lacagta & Akoonnada", columns, rows: data.data.items });
+    response.type("application/pdf").send(pdfBuffer);
+  }
+
+  @UseGuards(SessionGuard)
+  @Get("reports/cash-flow/xlsx")
+  async reportsCashFlowXlsx(@Req() request: AuthenticatedRequest, @Query("fromDate") fromDate: string | undefined, @Query("toDate") toDate: string | undefined, @Res() response: Response) {
+    requirePermission(request, "reports.export");
+    requirePermission(request, "accounts.view");
+    const data = await this.reportsCashFlow(request, fromDate, toDate);
+    const columns: ColumnDef[] = [
+      { header: "Akoonka", key: "name", width: 25 },
+      { header: "Nooca", key: "type", width: 15 },
+      { header: "Lacagta Soo Gashay ($)", key: "moneyIn", format: "currency", align: "right" },
+      { header: "Lacagta Baxday ($)", key: "moneyOut", format: "currency", align: "right" },
+      { header: "Kala Duwanaanshaha ($)", key: "netChange", format: "currency", align: "right" },
+      { header: "Hadhaaga Hadda ($)", key: "currentBalance", format: "currency", align: "right" }
+    ];
+    const xlsxBuffer = await this.exportExcel({ title: "Warbixinta Dhaqdhaqaaqa Lacagta & Akoonnada", columns, rows: data.data.items });
     response.type("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet").send(xlsxBuffer);
   }
 

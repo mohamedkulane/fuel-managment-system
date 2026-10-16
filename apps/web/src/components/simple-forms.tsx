@@ -23,25 +23,25 @@ export function PaymentDialog({ customerId, customerName, open, onClose }: {cust
   const financial=useQuery({queryKey:["customer-account",customerId],queryFn:()=>api<{summary:{remainingDebt:string}}>("/customers/"+customerId+"/account"),enabled:open,staleTime:0});
   const accounts=useQuery({queryKey:["financial-accounts","selectable"],queryFn:()=>api<Array<{id:string;name:string;type:string;identifierMasked:string|null}>>("/financial-accounts/selectable"),enabled:open});
   const payable=new Decimal(financial.data?.summary.remainingDebt??"0");
-  const payment=useWorkflow<{customerId:string;amount:string;financialAccountId:string;method:string;reference:string}>("/simple/payments",()=>{setAmount("");setAccountId("");setValidation("");onClose();},{success:"Payment recorded",error:"Payment failed"});
+  const payment=useWorkflow<{customerId:string;amount:string;financialAccountId:string;reference:string}>("/simple/payments",()=>{setAmount("");setAccountId("");setValidation("");onClose();},{success:"Lacagta si guul leh ayaa loo qabtay",error:"Lacag-qabashadu way fashilantay"});
   const issue=amount?paymentError(amount,payable):null;
   const remainder=/^\d+(\.\d{1,2})?$/.test(amount)?Decimal.max(0,payable.sub(amount)):payable;
   function submit(event:FormEvent<HTMLFormElement>) {
     event.preventDefault(); if(payment.isPending||financial.isFetching||financial.isError||!financial.data)return;
     const error=paymentError(amount,payable);if(error){setValidation(error);notifyError(new Error(error),error);return;}
     setValidation("");const data=new FormData(event.currentTarget);
-    if(!accountId){setValidation("Select the financial account that received this money.");return;}
-    payment.mutate({customerId,amount,financialAccountId:accountId,method:String(data.get("method")||"CASH"),reference:String(data.get("reference")||"")});
+    if(!accountId){setValidation("Dooro akoonka lacagtu soo gashay.");return;}
+    payment.mutate({customerId,amount,financialAccountId:accountId,reference:String(data.get("reference")||"")});
   }
-  return <Modal isOpen={open} onClose={()=>{if(!payment.isPending){setAmount("");setValidation("");payment.reset();onClose();}}} title="Lacag qaado">
+  return <Modal isOpen={open} onClose={()=>{if(!payment.isPending){setAmount("");setValidation("");payment.reset();onClose();}}} title="Diiwaangeli Lacag-qabasho">
     <div className="payment-summary"><strong>Macmiil: {customerName}</strong><div className="info-pair"><span>Deynta hadda</span><b>{financial.isFetching?"Waa la soo rarayaa…":"$"+payable.toFixed(2)}</b></div><div className="info-pair"><span>Deynta ka hadhaysa</span><b>{financial.isFetching?"—":"$"+remainder.toFixed(2)}</b></div></div>
-    {financial.isError&&<ErrorState message="Balance unavailable" retry={()=>void financial.refetch()}/>}
+    {financial.isError&&<ErrorState message="Xisaabta macmiilka lama heli karo" retry={()=>void financial.refetch()}/>}
     {!financial.isFetching&&financial.data&&payable.isZero()&&<p role="status">Deyn la bixinayo ma jirto.</p>}
-    <form onSubmit={submit} noValidate><div className="form-grid"><div className="field"><FormLabel htmlFor="payment-amount">Lacagta ($)</FormLabel><input id="payment-amount" name="amount" className="input" type="number" inputMode="decimal" step="0.01" min="0.01" max={payable.toFixed(2)} required autoFocus value={amount} onChange={e=>{setAmount(e.target.value);setValidation("");}} aria-invalid={!!(issue||validation)} aria-describedby="payment-validation"/></div><div className="field"><FormLabel htmlFor="payment-account">Akoonka lacagtu soo gashay</FormLabel><select id="payment-account" className="select" required value={accountId} onChange={e=>{setAccountId(e.target.value);setValidation("");}}><option value="">Dooro akoon</option>{accounts.data?.map(row=><option key={row.id} value={row.id}>{row.name}{row.identifierMasked?` · ${row.identifierMasked}`:""}</option>)}</select></div></div>
+    <form onSubmit={submit} noValidate><div className="form-grid"><div className="field"><FormLabel htmlFor="payment-amount">Qadarka Lacagta ($) *</FormLabel><input id="payment-amount" name="amount" className="input" type="number" inputMode="decimal" step="0.01" min="0.01" max={payable.toFixed(2)} required autoFocus value={amount} onChange={e=>{setAmount(e.target.value);setValidation("");}} aria-invalid={!!(issue||validation)} aria-describedby="payment-validation"/></div><div className="field"><FormLabel htmlFor="payment-account">Akoonka lacagtu soo gashay *</FormLabel><select id="payment-account" className="select" required value={accountId} onChange={e=>{setAccountId(e.target.value);setValidation("");}}><option value="">Dooro akoonka</option>{accounts.data?.map(row=><option key={row.id} value={row.id}>{row.name}{row.identifierMasked?` · ${row.identifierMasked}`:""}</option>)}</select></div></div>
     <p id="payment-validation" className="validation-error">{validation||issue ? soError(validation || issue || "",400) : ""}</p>
-    <details className="simple-disclosure"><summary>Faahfaahin dheeraad ah</summary><div className="form-grid"><div className="field"><FormLabel htmlFor="payment-method">Habka</FormLabel><select className="select" id="payment-method" name="method"><option value="CASH">Lacag caddaan ah</option><option value="BANK_TRANSFER">Wareejin bangi</option><option value="EVC_PLUS">EVC Plus</option><option value="EDAHAB">eDahab</option><option value="OTHER">Kale</option></select></div><div className="field"><FormLabel htmlFor="payment-ref">Tixraac</FormLabel><input className="input" id="payment-ref" name="reference"/></div></div></details>
+    <details className="simple-disclosure"><summary>Xog dheeraad ah (Tixraac)</summary><div className="form-grid"><div className="field full"><FormLabel htmlFor="payment-ref">Tixraaca bixinta (Tusaale: lambarka EVC ama jeeg)</FormLabel><input className="input" id="payment-ref" name="reference" placeholder="Ikhtiyaari"/></div></div></details>
     {payment.isError&&<ErrorState message="Lacagta lama diiwaangelin. Hubi qadarka oo mar kale isku day."/>}
-    <div className="form-actions"><ActionButton className="btn" type="button" disabled={payment.isPending} onClick={onClose}>Cancel</ActionButton><SubmitButton busy={payment.isPending} disabled={financial.isFetching||financial.isError||accounts.isFetching||!financial.data||!accountId||payable.lte(0)}>Pay</SubmitButton></div></form></Modal>;
+    <div className="form-actions"><ActionButton className="btn" type="button" disabled={payment.isPending} onClick={onClose}>Ka Noqo</ActionButton><SubmitButton busy={payment.isPending} disabled={financial.isFetching||financial.isError||accounts.isFetching||!financial.data||!accountId||payable.lte(0)}>Qaado Lacagta</SubmitButton></div></form></Modal>;
 }
 
 export function ReceiveStockForm({ onSaved }: { onSaved: () => void }) {
@@ -82,7 +82,7 @@ export function ReceiveStockForm({ onSaved }: { onSaved: () => void }) {
     totalCost?: string;
     paidNow?: string;
     financialAccountId?: string;
-  }>("/simple/receipts", onSaved, { success: "Stock added", error: "Stock not added" });
+  }>("/simple/receipts", onSaved, { success: "Shidaalka si guul leh ayaa loo diiwaangeliyay", error: "Shidaalka lama diiwaangelin karin" });
 
   let liters = "0";
   let reciprocal = "";
@@ -421,7 +421,7 @@ export function ReceiveStockForm({ onSaved }: { onSaved: () => void }) {
       <Modal
         isOpen={newSupplierOpen}
         onClose={() => setNewSupplierOpen(false)}
-        title="Ku dar Keene Cusub (Add Supplier)"
+        title="Ku dar Keene Cusub"
       >
         <form onSubmit={handleCreateSupplier}>
           <div className="form-grid">
@@ -448,7 +448,7 @@ export function ReceiveStockForm({ onSaved }: { onSaved: () => void }) {
               />
             </div>
             <div className="field">
-              <FormLabel htmlFor="new-supplier-location">Goobta / Magaalada</FormLabel>
+              <FormLabel htmlFor="new-supplier-location">Goobta ama Magaalada</FormLabel>
               <input
                 id="new-supplier-location"
                 className="input"
@@ -464,10 +464,10 @@ export function ReceiveStockForm({ onSaved }: { onSaved: () => void }) {
               className="btn"
               onClick={() => setNewSupplierOpen(false)}
             >
-              Cancel
+              Ka Noqo
             </ActionButton>
             <SubmitButton busy={newSupplierPending} disabled={!newSupplierName.trim()}>
-              Save Supplier
+              Keydi Keenaha
             </SubmitButton>
           </div>
         </form>

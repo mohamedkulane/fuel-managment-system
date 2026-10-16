@@ -58,7 +58,7 @@ describe("V7.1 financial accounts, expenses, suppliers, and receipts", () => {
     expect(await db.financialAccountMovement.count({ where: { sourceType: "Payment", sourceId: payment.id, kind: "CUSTOMER_PAYMENT" } })).toBe(1);
 
     const before = await db.financialAccountMovement.count();
-    const controller = new AppController(db, customerAccounts, simple);
+    const controller = new AppController(db, customerAccounts, simple, financial);
     const buffers: Buffer[] = [];
     const response = { setHeader: () => response, send: (value: Buffer) => { buffers.push(value); return response; } };
     await controller.paymentReceiptPdf({ actor: owner } as any, payment.id, response as never);
