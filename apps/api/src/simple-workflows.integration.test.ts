@@ -9,6 +9,7 @@ import { CustomerAccountService } from "./customer-account.service.js";
 import { AppController } from "./app.controller.js";
 import type { Actor } from "./auth.js";
 import { FinancialWorkflowsService } from "./financial-workflows.service.js";
+import { PERMISSION_CODES } from "@fuel/shared";
 const db=new PrismaService(); const financial=new FinancialWorkflowsService(db); const service=new SimpleWorkflowsService(db,financial); const accounts=new CustomerAccountService(db);
 let owner:Actor,office:Actor,fuelId:string,unitId:string,customerId:string,priceId:string,accountId:string,supplierId:string;
 const key=()=>randomUUID();
@@ -18,8 +19,8 @@ async function createOrder(quantity="5",paidNow="100",discount="10") {
 }
 describe("Simple workflows preserve stock and finance",()=>{
  beforeAll(async()=>{
-  const suffix=key();const a=await db.user.create({data:{email:`simple-${suffix}@test.invalid`,displayName:"Simple owner",role:"OWNER",passwordHash:"unused"}});owner={id:a.id,email:a.email,displayName:a.displayName,role:"OWNER"};
-  const b=await db.user.create({data:{email:`simple-office-${suffix}@test.invalid`,displayName:"Simple office",role:"OFFICE_EMPLOYEE",passwordHash:"unused"}});office={id:b.id,email:b.email,displayName:b.displayName,role:"OFFICE_EMPLOYEE"};
+  const suffix=key();const a=await db.user.create({data:{email:`simple-${suffix}@test.invalid`,displayName:"Simple owner",role:"OWNER",passwordHash:"unused"}});owner={id:a.id,email:a.email,displayName:a.displayName,role:"OWNER",permissions:[...PERMISSION_CODES]};
+  const b=await db.user.create({data:{email:`simple-office-${suffix}@test.invalid`,displayName:"Simple office",role:"OFFICE_EMPLOYEE",passwordHash:"unused"}});office={id:b.id,email:b.email,displayName:b.displayName,role:"OFFICE_EMPLOYEE",permissions:[...PERMISSION_CODES]};
   const fuel=await db.fuelType.upsert({where:{code:"DIESEL"},update:{},create:{code:"DIESEL",displayName:"Naafto"}});fuelId=fuel.id;
   const unit=await db.salesUnit.create({data:{code:`SIMPLE_${suffix}`,name:"Fuusto"}});unitId=unit.id;
   const since=new Date(Date.now()-86400000);await db.fuelUnitVersion.create({data:{fuelId,salesUnitId:unitId,litersPerUnit:new Prisma.Decimal(240),effectiveFromUtc:since,createdById:owner.id}});
@@ -116,7 +117,7 @@ describe("Simple workflows preserve stock and finance",()=>{
  it("exposes only allowlisted operational fields in the delivery manifest",async()=>{
   const controller=new SimpleWorkflowsController(service,db);
   const date=new Intl.DateTimeFormat("en-CA",{timeZone:"Africa/Mogadishu",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());
-  const response=await controller.manifest(date);
+  const response=await controller.manifest({ actor: owner } as any, date);
   expect(response.data.date).toBe(date);
   for(const row of response.data.rows) expect(Object.keys(row).sort()).toEqual(["customer","fuel","location","phone","quantity"]);
   const serialized=JSON.stringify(response);

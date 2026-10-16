@@ -2,8 +2,15 @@ import { CanActivate, ExecutionContext, Inject, Injectable, UnauthorizedExceptio
 import { createHash, randomBytes } from "node:crypto";
 import type { Request } from "express";
 import { PrismaService } from "./prisma.service.js";
+import { PermissionCode, PERMISSION_CODES, STANDARD_OFFICE_PERMISSIONS } from "@fuel/shared";
 
-export type Actor = { id: string; displayName: string; email: string; role: "OWNER" | "OFFICE_EMPLOYEE" };
+export type Actor = {
+  id: string;
+  displayName: string;
+  email: string;
+  role: "OWNER" | "OFFICE_EMPLOYEE";
+  permissions: PermissionCode[];
+};
 export type AuthenticatedRequest = Request & { actor?: Actor };
 
 export function readCookie(request: Request, name: string): string | undefined {
@@ -23,9 +30,25 @@ export class SessionGuard implements CanActivate {
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
     const token = readCookie(request, "fuel_sid");
     if (!token) throw new UnauthorizedException("Authentication required");
-    const session = await this.prisma.session.findFirst({ where: { tokenHash: hashToken(token), revokedAt: null, expiresAt: { gt: new Date() } }, include: { user: true } });
+    const session = await this.prisma.session.findFirst({
+      where: { tokenHash: hashToken(token), revokedAt: null, expiresAt: { gt: new Date() } },
+      include: { user: { include: { permissions: true } } }
+    });
     if (!session?.user.isActive) throw new UnauthorizedException("Session expired");
-    request.actor = { id: session.user.id, displayName: session.user.displayName, email: session.user.email, role: session.user.role };
+
+    const permissions: PermissionCode[] = session.user.role === "OWNER"
+      ? [...PERMISSION_CODES]
+      : session.user.permissions.length > 0
+        ? session.user.permissions.map((p) => p.permission as PermissionCode)
+        : [...STANDARD_OFFICE_PERMISSIONS];
+
+    request.actor = {
+      id: session.user.id,
+      displayName: session.user.displayName,
+      email: session.user.email,
+      role: session.user.role,
+      permissions
+    };
     return true;
   }
 }
@@ -39,4 +62,18 @@ export function requireOwner(request: AuthenticatedRequest): Actor {
   const actor = requireActor(request);
   if (actor.role !== "OWNER") throw new ForbiddenException("Owner permission required");
   return actor;
+}
+
+export function requirePermission(request: AuthenticatedRequest, permission: PermissionCode): Actor {
+  const actor = requireActor(request);
+  if (actor.role === "OWNER") return actor;
+  if (!actor.permissions || !actor.permissions.includes(permission)) {
+    throw new ForbiddenException(`Ogolaansho uma haysatid hawshan (${permission})`);
+  }
+  return actor;
+}
+
+export function hasPermission(actor: Actor, permission: PermissionCode): boolean {
+  if (actor.role === "OWNER") return true;
+  return Boolean(actor.permissions && actor.permissions.includes(permission));
 }

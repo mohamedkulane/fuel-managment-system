@@ -8,6 +8,7 @@ import { SimpleWorkflowsService } from "./simple-workflows.service.js";
 import { CustomerAccountService } from "./customer-account.service.js";
 import { AppController } from "./app.controller.js";
 import type { Actor } from "./auth.js";
+import { PERMISSION_CODES } from "@fuel/shared";
 
 const db = new PrismaService();
 const financial = new FinancialWorkflowsService(db);
@@ -20,7 +21,7 @@ describe("V7.1 financial accounts, expenses, suppliers, and receipts", () => {
   beforeAll(async () => {
     const suffix = key();
     const user = await db.user.create({ data: { email: `v71-${suffix}@test.invalid`, displayName: "V7.1 Owner", role: "OWNER", passwordHash: "unused" } });
-    owner = { id: user.id, email: user.email, displayName: user.displayName, role: "OWNER" };
+    owner = { id: user.id, email: user.email, displayName: user.displayName, role: "OWNER", permissions: [...PERMISSION_CODES] };
     const fuel = await db.fuelType.upsert({ where: { code: "PETROL" }, update: {}, create: { code: "PETROL", displayName: "Basiin" } }); fuelId = fuel.id;
     const unit = await db.salesUnit.create({ data: { code: `V71_${suffix}`, name: "Fuusto" } }); unitId = unit.id;
     const since = new Date(Date.now() - 86400000);
@@ -41,7 +42,7 @@ describe("V7.1 financial accounts, expenses, suppliers, and receipts", () => {
 
   it("tracks a supplier purchase, Paid Now, and later FIFO supplier debt payment", async () => {
     const receipt = await simple.receipt(owner, key(), { fuelId, quantity: "5", date: "2026-10-15", totalCost: "500", supplierId, paidNow: "100", financialAccountId: accountId }) as { id: string };
-    const purchase = await db.supplierPurchase.findUniqueOrThrow({ where: { receiptId: receipt.id } });
+    const purchase = await db.supplierPurchase.findFirstOrThrow({ where: { receiptId: receipt.id } });
     expect(purchase.balanceDue.toString()).toBe("400");
     await financial.supplierPayment(owner, key(), supplierId, { financialAccountId: accountId, amount: "150", paymentDate: "2026-10-15" });
     const updated = await db.supplierPurchase.findUniqueOrThrow({ where: { id: purchase.id } });
@@ -60,8 +61,8 @@ describe("V7.1 financial accounts, expenses, suppliers, and receipts", () => {
     const controller = new AppController(db, customerAccounts, simple);
     const buffers: Buffer[] = [];
     const response = { setHeader: () => response, send: (value: Buffer) => { buffers.push(value); return response; } };
-    await controller.paymentReceiptPdf(payment.id, response as never);
-    await controller.paymentReceiptPdf(payment.id, response as never);
+    await controller.paymentReceiptPdf({ actor: owner } as any, payment.id, response as never);
+    await controller.paymentReceiptPdf({ actor: owner } as any, payment.id, response as never);
     expect(buffers).toHaveLength(2);
     expect(buffers.every((buffer) => buffer.subarray(0, 4).toString() === "%PDF")).toBe(true);
     expect(await db.financialAccountMovement.count()).toBe(before);

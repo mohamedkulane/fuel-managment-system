@@ -2,14 +2,14 @@ import { BadRequestException, ConflictException, ForbiddenException, Inject, Inj
 import { createHash, randomUUID } from "node:crypto";
 import { Prisma } from "@fuel/database";
 import { PrismaService } from "./prisma.service.js";
-import type { Actor } from "./auth.js";
+import { type Actor, hasPermission } from "./auth.js";
 import { FinancialWorkflowsService } from "./financial-workflows.service.js";
 
 type Tx = Prisma.TransactionClient;
 export type SimpleOrderInput = { customerId: string; fuelId: string; salesUnitId: string; quantity: string; expectedPriceId: string; address: string; discount?: string; paidNow?: string; financialAccountId?: string; paymentMethod?: "CASH" | "BANK_TRANSFER" | "EVC_PLUS" | "EDAHAB" | "OTHER"; paymentReference?: string; notes?: string };
 export type SimpleReceiptInput = { fuelId: string; quantity: string; date: string; supplier?: string; supplierId?: string; notes?: string; unitCost?: string; totalCost?: string; paidNow?: string; financialAccountId?: string };
 export type SimplePaymentInput = { customerId: string; amount: string; financialAccountId?: string; method?: "CASH" | "BANK_TRANSFER" | "EVC_PLUS" | "EDAHAB" | "OTHER"; reference?: string; notes?: string; paymentDate?: string };
-export type SimpleDeliveryInput = { orderId: string; lines: { orderLineId: string; acceptedUnits: string; remaining?: "RETURNED" | "IN_TRANSIT"; reason?: string }[] };
+export type SimpleDeliveryInput = { orderId: string; lines: { orderLineId: string; acceptedUnits: string; remaining?: "RETURNED" | "IN_TRANSIT"; closeRemainder?: boolean; reason?: string; amendmentReason?: string }[] };
 const d = (v: string) => new Prisma.Decimal(v);
 const no = (prefix: string) => `${prefix}-${Date.now()}-${randomUUID().slice(0,8)}`;
 function amount(value: unknown, field: string, zero = false) {
@@ -187,78 +187,506 @@ export class SimpleWorkflowsService {
   }
 
   delivery(actor: Actor, key: string | undefined, input: SimpleDeliveryInput) {
-    return this.execute(actor,key,"delivery",input,async tx => {
-      const order = await tx.salesOrder.findUnique({where:{id:required(input.orderId,"Order")},include:{lines:{include:{dispatchLines:{include:{dispatch:true,confirmations:true}}}}}});
-      if(!order) throw new NotFoundException("Order not found");
-      if(!["CONFIRMED","SCHEDULED","IN_PROGRESS","PARTIALLY_FULFILLED"].includes(order.status)) throw new BadRequestException("Order is not awaiting delivery");
-      if(!Array.isArray(input.lines) || !input.lines.length || new Set(input.lines.map(l=>l.orderLineId)).size !== input.lines.length) throw new BadRequestException("Select distinct order lines");
-      const invoiceIds:string[]=[];
-      const requestedTotal = order.lines.reduce((sum,line)=>sum.add(line.requestedUnits),d("0"));
-      for(const entry of input.lines) {
-        const line = order.lines.find(l=>l.id===entry.orderLineId);
-        if(!line || !line.unitPriceSnapshot || !line.litersPerUnitSnapshot) throw new BadRequestException("Confirmed order line required");
-        const accepted = amount(entry.acceptedUnits,"Accepted fuusto",true);
-        if(!accepted.isInteger()) throw new BadRequestException("Enter whole fuusto");
-        const posted = line.dispatchLines.filter(dl=>["POSTED","PARTIALLY_RECONCILED","RECONCILED"].includes(dl.dispatch.status));
-        const acceptedBefore = posted.flatMap(dl=>dl.confirmations).reduce((sum,c)=>sum.add(c.acceptedUnits),d("0"));
-        const remainingOrder = line.requestedUnits.sub(acceptedBefore);
-        if(remainingOrder.lte(0) || accepted.gt(remainingOrder)) throw new BadRequestException("Accepted quantity exceeds remaining order");
-        const active = posted.filter(dl=>dl.dispatchedLiters.sub(dl.confirmations.reduce((sum,c)=>sum.add(c.acceptedLiters).add(c.physicalReturnedLiters),d("0"))).gt(0));
-        if(active.length>1) throw new BadRequestException("Multiple active deliveries: open the existing delivery details");
-        let source = active[0];
-        let available = source ? source.dispatchedLiters.sub(source.confirmations.reduce((sum,c)=>sum.add(c.acceptedLiters).add(c.physicalReturnedLiters),d("0"))).div(source.litersPerUnitSnapshot) : remainingOrder;
-        if(accepted.gt(available)) throw new BadRequestException("Accepted quantity exceeds this delivery");
-        const remaining = available.sub(accepted);
-        if(remaining.gt(0) && !["RETURNED","IN_TRANSIT"].includes(entry.remaining ?? "")) throw new BadRequestException("Choose whether remaining fuel returned or is still in transit");
-        if(!source) {
-          if(line.dispatchLines.some(dl=>dl.dispatch.status==="PREPARED")) throw new BadRequestException("A prepared delivery already exists; open its details to avoid duplicate dispatch");
-          const liters = available.mul(line.litersPerUnitSnapshot);
-          const moved = await tx.stockBalance.updateMany({where:{fuelId:line.fuelId,location:"WAREHOUSE",balanceLiters:{gte:liters}},data:{balanceLiters:{decrement:liters},version:{increment:1}}});
-          if(moved.count!==1) throw new BadRequestException("Kaydka shidaalka kuma filna (Insufficient stock)");
-          await tx.stockBalance.upsert({where:{fuelId_location:{fuelId:line.fuelId,location:"IN_TRANSIT"}},create:{fuelId:line.fuelId,location:"IN_TRANSIT",balanceLiters:liters},update:{balanceLiters:{increment:liters},version:{increment:1}}});
-          const dispatch = await tx.dispatch.create({data:{dispatchNo:no("DP"),status:"POSTED",dispatchedAt:new Date(),postedAt:new Date(),postedById:actor.id,idempotencyKey:`${key}:${line.id}`,lines:{create:{orderLineId:line.id,dispatchedUnits:available,dispatchedLiters:liters,litersPerUnitSnapshot:line.litersPerUnitSnapshot}}},include:{lines:{include:{dispatch:true,confirmations:true}}}});
-          source=dispatch.lines[0]!;
-          for(const location of ["WAREHOUSE","IN_TRANSIT"] as const) await tx.inventoryMovement.create({data:{fuelId:line.fuelId,location,signedDeltaLiters:location==="WAREHOUSE"?liters.neg():liters,eventType:"DISPATCH",sourceType:"DispatchLine",sourceId:dispatch.id,sourceLineId:source.id,createdById:actor.id}});
-          await this.audit(tx,actor,"Dispatch",dispatch.id,"POSTED");
-        }
-        const acceptedLiters = accepted.mul(source.litersPerUnitSnapshot);
-        const returnedLiters = entry.remaining==="RETURNED" ? remaining.mul(source.litersPerUnitSnapshot) : d("0");
-        const confirmation = await tx.deliveryConfirmation.create({data:{confirmationNo:no("DC"),dispatchId:source.dispatchId,confirmedAt:new Date(),recordedById:actor.id,idempotencyKey:`${key}:${line.id}`,lines:{create:{dispatchLineId:source.id,acceptedUnits:accepted,acceptedLiters,physicalReturnedLiters:returnedLiters,commercialDisposition:returnedLiters.gt(0)?"BACKORDER_REMAINDER":"NONE",discrepancyReason:entry.reason,billingSourceKey:`simple:${key}:${line.id}`}}},include:{lines:true}});
-        const confirmed=confirmation.lines[0]!; const transitOut=acceptedLiters.add(returnedLiters);
-        if(transitOut.gt(0)) {
-          const changed=await tx.stockBalance.updateMany({where:{fuelId:line.fuelId,location:"IN_TRANSIT",balanceLiters:{gte:transitOut}},data:{balanceLiters:{decrement:transitOut},version:{increment:1}}});
-          if(changed.count!==1) throw new BadRequestException("Insufficient fuel in transit");
-          if(acceptedLiters.gt(0)) await tx.inventoryMovement.create({data:{fuelId:line.fuelId,location:"IN_TRANSIT",signedDeltaLiters:acceptedLiters.neg(),eventType:"ACCEPTED",sourceType:"DeliveryConfirmationLine",sourceId:confirmation.id,sourceLineId:confirmed.id,createdById:actor.id}});
-          if(returnedLiters.gt(0)) {
-            await tx.stockBalance.update({where:{fuelId_location:{fuelId:line.fuelId,location:"WAREHOUSE"}},data:{balanceLiters:{increment:returnedLiters},version:{increment:1}}});
-            for(const location of ["WAREHOUSE","IN_TRANSIT"] as const) await tx.inventoryMovement.create({data:{fuelId:line.fuelId,location,signedDeltaLiters:location==="WAREHOUSE"?returnedLiters:returnedLiters.neg(),eventType:"RETURN",sourceType:"DeliveryConfirmationLine",sourceId:confirmation.id,sourceLineId:confirmed.id,createdById:actor.id}});
+    return this.execute(actor, key, "delivery", input, async tx => {
+      const order = await tx.salesOrder.findUnique({
+        where: { id: required(input.orderId, "Order") },
+        include: { lines: { include: { dispatchLines: { include: { dispatch: true, confirmations: true } } } } }
+      });
+      if (!order) throw new NotFoundException("Order not found");
+      if (!["CONFIRMED", "SCHEDULED", "IN_PROGRESS", "PARTIALLY_FULFILLED"].includes(order.status)) {
+        throw new BadRequestException("Order is not awaiting delivery");
+      }
+      if (!Array.isArray(input.lines) || !input.lines.length || new Set(input.lines.map(l => l.orderLineId)).size !== input.lines.length) {
+        throw new BadRequestException("Select distinct order lines");
+      }
+      const invoiceIds: string[] = [];
+      const requestedBasis = order.lines.reduce((sum, line) => sum.add(line.requestedUnits).add(line.amendedUnits), d("0"));
+
+      for (const entry of input.lines) {
+        const line = order.lines.find(l => l.id === entry.orderLineId);
+        if (!line || !line.unitPriceSnapshot || !line.litersPerUnitSnapshot) throw new BadRequestException("Confirmed order line required");
+        const accepted = amount(entry.acceptedUnits, "Accepted fuusto", true);
+        if (!accepted.isInteger()) throw new BadRequestException("Enter whole fuusto");
+
+        const posted = line.dispatchLines.filter(dl => ["POSTED", "PARTIALLY_RECONCILED", "RECONCILED"].includes(dl.dispatch.status));
+        const acceptedBefore = posted.flatMap(dl => dl.confirmations).reduce((sum, c) => sum.add(c.acceptedUnits), d("0"));
+        const effectiveOrdered = line.requestedUnits.add(line.amendedUnits).sub(line.cancelledUnits);
+        const remainingOrder = Prisma.Decimal.max(d("0"), effectiveOrdered.sub(acceptedBefore));
+
+        // Excess check (ORD-01)
+        if (accepted.gt(remainingOrder)) {
+          if (actor.role !== "OWNER" && !hasPermission(actor, "orders.delivery.overage_approve")) {
+            throw new ForbiddenException("Ansixinta milkiilaha ayaa loo baahan yahay si loo kordhiyo tirada dalabka (Owner approval required for excess delivery quantity)");
           }
         }
-        const allDispatchLines=await tx.dispatchLine.findMany({where:{dispatchId:source.dispatchId},include:{confirmations:true}});
-        const hasTransit=allDispatchLines.some(dl=>dl.dispatchedLiters.gt(dl.confirmations.reduce((sum,c)=>sum.add(c.acceptedLiters).add(c.physicalReturnedLiters),d("0"))));
-        await tx.dispatch.update({where:{id:source.dispatchId},data:{status:hasTransit?"PARTIALLY_RECONCILED":"RECONCILED"}});
-        await this.audit(tx,actor,"DeliveryConfirmation",confirmation.id,"POSTED");
-        if(accepted.gt(0)) {
-          const previous=await tx.invoice.aggregate({where:{lines:{some:{orderLine:{orderId:order.id}}}},_sum:{discountAmount:true}});
-          const remainingDiscount=Prisma.Decimal.max(0,order.fixedDiscountAmount.sub(previous._sum.discountAmount ?? d("0")));
-          const subtotal=accepted.mul(line.unitPriceSnapshot).toDecimalPlaces(4);
-          const discount=Prisma.Decimal.min(subtotal,remainingDiscount,order.fixedDiscountAmount.mul(accepted).div(requestedTotal).toDecimalPlaces(4));
-          const total=subtotal.sub(discount);
-          const invoice=await tx.invoice.create({data:{invoiceNo:no("INV"),customerId:order.customerId,deliveryConfirmationLineId:confirmed.id,billingSourceKey:confirmed.billingSourceKey,issueDate:new Date(),status:total.isZero()?"PAID":"UNPAID",subtotal,discountAmount:discount,taxAmount:d("0"),totalAmount:total,paidAmount:d("0"),balanceDue:total,currencyCode:line.currencyCode,createdById:actor.id,lines:{create:{orderLineId:line.id,fuelId:line.fuelId,salesUnitId:line.salesUnitId,acceptedUnits:accepted,acceptedLiters,unitPriceSnapshot:line.unitPriceSnapshot,litersPerUnitSnapshot:line.litersPerUnitSnapshot,lineTotal:subtotal}}}});
-          await this.ledger(tx,order.customerId,"INVOICE",invoice.invoiceNo,invoice.id,total);
-          const credits=await tx.payment.findMany({where:{orderId:order.id,customerId:order.customerId,status:"POSTED",unappliedAmount:{gt:0}},orderBy:[{paymentDate:"asc"},{id:"asc"}]});
-          for(const credit of credits) await this.allocate(tx,actor,credit.id,invoice.id);
-          await this.audit(tx,actor,"Invoice",invoice.id,"POSTED"); invoiceIds.push(invoice.id);
+
+        const active = posted.filter(dl => dl.dispatchedLiters.sub(dl.confirmations.reduce((sum, c) => sum.add(c.acceptedLiters).add(c.physicalReturnedLiters), d("0"))).gt(0));
+        if (active.length > 1) throw new BadRequestException("Multiple active deliveries: open the existing delivery details");
+        let source = active[0];
+
+        // If source dispatch exists: check in-transit available
+        if (source) {
+          const inTransitAvailable = source.dispatchedLiters.sub(source.confirmations.reduce((sum, c) => sum.add(c.acceptedLiters).add(c.physicalReturnedLiters), d("0"))).div(source.litersPerUnitSnapshot);
+          if (accepted.gt(inTransitAvailable)) {
+            const extraUnits = accepted.sub(inTransitAvailable);
+            const extraLiters = extraUnits.mul(source.litersPerUnitSnapshot);
+            const moved = await tx.stockBalance.updateMany({
+              where: { fuelId: line.fuelId, location: "WAREHOUSE", balanceLiters: { gte: extraLiters } },
+              data: { balanceLiters: { decrement: extraLiters }, version: { increment: 1 } }
+            });
+            if (moved.count !== 1) throw new BadRequestException("Kaydka shidaalka kuma filna fuustada dheeraadka ah (Insufficient stock in warehouse for excess delivery)");
+            await tx.stockBalance.upsert({
+              where: { fuelId_location: { fuelId: line.fuelId, location: "IN_TRANSIT" } },
+              create: { fuelId: line.fuelId, location: "IN_TRANSIT", balanceLiters: extraLiters },
+              update: { balanceLiters: { increment: extraLiters }, version: { increment: 1 } }
+            });
+            await tx.dispatchLine.update({
+              where: { id: source.id },
+              data: { dispatchedUnits: { increment: extraUnits }, dispatchedLiters: { increment: extraLiters } }
+            });
+            for (const location of ["WAREHOUSE", "IN_TRANSIT"] as const) {
+              await tx.inventoryMovement.create({
+                data: {
+                  fuelId: line.fuelId,
+                  location,
+                  signedDeltaLiters: location === "WAREHOUSE" ? extraLiters.neg() : extraLiters,
+                  eventType: "DISPATCH",
+                  sourceType: "DispatchLine",
+                  sourceId: source.dispatchId,
+                  sourceLineId: source.id,
+                  createdById: actor.id
+                }
+              });
+            }
+          }
+        } else {
+          // No prior dispatch: check if user provided disposition for partial
+          if (line.dispatchLines.some(dl => dl.dispatch.status === "PREPARED")) {
+            throw new BadRequestException("A prepared delivery already exists; open its details to avoid duplicate dispatch");
+          }
+          if (accepted.lt(remainingOrder) && !entry.closeRemainder && !["RETURNED", "IN_TRANSIT"].includes(entry.remaining ?? "")) {
+            throw new BadRequestException("Dooro waxa ku dhacay shidaalka haray (Select what happened to the remaining fuel)");
+          }
+          const unitsToDispatch = ["RETURNED", "IN_TRANSIT"].includes(entry.remaining ?? "") ? remainingOrder : accepted;
+          if (unitsToDispatch.gt(0)) {
+            const liters = unitsToDispatch.mul(line.litersPerUnitSnapshot);
+            const moved = await tx.stockBalance.updateMany({
+              where: { fuelId: line.fuelId, location: "WAREHOUSE", balanceLiters: { gte: liters } },
+              data: { balanceLiters: { decrement: liters }, version: { increment: 1 } }
+            });
+            if (moved.count !== 1) throw new BadRequestException("Kaydka shidaalka kuma filna (Insufficient stock in warehouse)");
+            await tx.stockBalance.upsert({
+              where: { fuelId_location: { fuelId: line.fuelId, location: "IN_TRANSIT" } },
+              create: { fuelId: line.fuelId, location: "IN_TRANSIT", balanceLiters: liters },
+              update: { balanceLiters: { increment: liters }, version: { increment: 1 } }
+            });
+            const dispatch = await tx.dispatch.create({
+              data: {
+                dispatchNo: no("DP"),
+                status: "POSTED",
+                dispatchedAt: new Date(),
+                postedAt: new Date(),
+                postedById: actor.id,
+                idempotencyKey: `${key}:${line.id}`,
+                lines: {
+                  create: {
+                    orderLineId: line.id,
+                    dispatchedUnits: unitsToDispatch,
+                    dispatchedLiters: liters,
+                    litersPerUnitSnapshot: line.litersPerUnitSnapshot
+                  }
+                }
+              },
+              include: { lines: { include: { dispatch: true, confirmations: true } } }
+            });
+            source = dispatch.lines[0]!;
+            for (const location of ["WAREHOUSE", "IN_TRANSIT"] as const) {
+              await tx.inventoryMovement.create({
+                data: {
+                  fuelId: line.fuelId,
+                  location,
+                  signedDeltaLiters: location === "WAREHOUSE" ? liters.neg() : liters,
+                  eventType: "DISPATCH",
+                  sourceType: "DispatchLine",
+                  sourceId: dispatch.id,
+                  sourceLineId: source.id,
+                  createdById: actor.id
+                }
+              });
+            }
+            await this.audit(tx, actor, "Dispatch", dispatch.id, "POSTED");
+          }
+        }
+
+        // If excess was confirmed: update line's amendedUnits
+        if (accepted.gt(remainingOrder)) {
+          const excess = accepted.sub(remainingOrder);
+          await tx.salesOrderLine.update({
+            where: { id: line.id },
+            data: {
+              amendedUnits: { increment: excess },
+              amendmentApprovedById: actor.id,
+              amendmentApprovedAt: new Date(),
+              amendmentReason: entry.amendmentReason?.trim() || entry.reason?.trim() || "Delivery overage approved"
+            }
+          });
+          await tx.orderEvent.create({
+            data: {
+              orderId: order.id,
+              lineId: line.id,
+              kind: "AMENDED",
+              newValues: { excessUnits: excess.toFixed(3), totalAccepted: accepted.toFixed(3) },
+              actorId: actor.id,
+              reason: entry.amendmentReason?.trim() || entry.reason?.trim() || "Delivery overage approved"
+            }
+          });
+        }
+
+        // If user is closing remainder with less (ORD-02)
+        if (accepted.lt(remainingOrder) && entry.closeRemainder) {
+          const unfulfilled = remainingOrder.sub(accepted);
+          await tx.salesOrderLine.update({
+            where: { id: line.id },
+            data: { cancelledUnits: { increment: unfulfilled } }
+          });
+          await tx.orderEvent.create({
+            data: {
+              orderId: order.id,
+              lineId: line.id,
+              kind: "REMAINDER_CANCELLED",
+              newValues: { cancelledUnits: unfulfilled.toFixed(3) },
+              actorId: actor.id,
+              reason: entry.reason?.trim() || "Remainder cancelled upon partial delivery"
+            }
+          });
+        }
+
+        // If a source dispatch was active, calculate leftover in the truck
+        let returnedLiters = d("0");
+        if (source) {
+          const currentDispatchedUnits = (await tx.dispatchLine.findUniqueOrThrow({ where: { id: source.id }, include: { confirmations: true } }));
+          const settledLiters = currentDispatchedUnits.confirmations.reduce((sum, c) => sum.add(c.acceptedLiters).add(c.physicalReturnedLiters), d("0"));
+          const inTruckUnits = currentDispatchedUnits.dispatchedLiters.sub(settledLiters).div(source.litersPerUnitSnapshot);
+          const leftoverInTruck = inTruckUnits.sub(accepted);
+          if (leftoverInTruck.gt(0)) {
+            if (!["RETURNED", "IN_TRANSIT"].includes(entry.remaining ?? "")) {
+              throw new BadRequestException("Dooro in shidaalka haray uu bakhaarka ku soo noqday mise uu weli jidka ku jiro (Choose whether remaining fuel returned or is still in transit)");
+            }
+            if (entry.remaining === "RETURNED") {
+              returnedLiters = leftoverInTruck.mul(source.litersPerUnitSnapshot);
+            }
+          }
+        }
+
+        const acceptedLiters = source ? accepted.mul(source.litersPerUnitSnapshot) : accepted.mul(line.litersPerUnitSnapshot);
+        const disposition = entry.closeRemainder ? "CANCEL_REMAINDER" : returnedLiters.gt(0) ? "BACKORDER_REMAINDER" : "NONE";
+
+        if (source) {
+          const confirmation = await tx.deliveryConfirmation.create({
+            data: {
+              confirmationNo: no("DC"),
+              dispatchId: source.dispatchId,
+              confirmedAt: new Date(),
+              recordedById: actor.id,
+              idempotencyKey: `${key}:${line.id}`,
+              lines: {
+                create: {
+                  dispatchLineId: source.id,
+                  acceptedUnits: accepted,
+                  acceptedLiters,
+                  physicalReturnedLiters: returnedLiters,
+                  commercialDisposition: disposition,
+                  discrepancyReason: entry.reason,
+                  billingSourceKey: `simple:${key}:${line.id}`
+                }
+              }
+            },
+            include: { lines: true }
+          });
+          const confirmed = confirmation.lines[0]!;
+          const transitOut = acceptedLiters.add(returnedLiters);
+          if (transitOut.gt(0)) {
+            const changed = await tx.stockBalance.updateMany({
+              where: { fuelId: line.fuelId, location: "IN_TRANSIT", balanceLiters: { gte: transitOut } },
+              data: { balanceLiters: { decrement: transitOut }, version: { increment: 1 } }
+            });
+            if (changed.count !== 1) throw new BadRequestException("Insufficient fuel in transit");
+            if (acceptedLiters.gt(0)) {
+              await tx.inventoryMovement.create({
+                data: {
+                  fuelId: line.fuelId,
+                  location: "IN_TRANSIT",
+                  signedDeltaLiters: acceptedLiters.neg(),
+                  eventType: "ACCEPTED",
+                  sourceType: "DeliveryConfirmationLine",
+                  sourceId: confirmation.id,
+                  sourceLineId: confirmed.id,
+                  createdById: actor.id
+                }
+              });
+            }
+            if (returnedLiters.gt(0)) {
+              await tx.stockBalance.update({
+                where: { fuelId_location: { fuelId: line.fuelId, location: "WAREHOUSE" } },
+                data: { balanceLiters: { increment: returnedLiters }, version: { increment: 1 } }
+              });
+              for (const loc of ["WAREHOUSE", "IN_TRANSIT"] as const) {
+                await tx.inventoryMovement.create({
+                  data: {
+                    fuelId: line.fuelId,
+                    location: loc,
+                    signedDeltaLiters: loc === "WAREHOUSE" ? returnedLiters : returnedLiters.neg(),
+                    eventType: "RETURN",
+                    sourceType: "DeliveryConfirmationLine",
+                    sourceId: confirmation.id,
+                    sourceLineId: confirmed.id,
+                    createdById: actor.id
+                  }
+                });
+              }
+            }
+          }
+
+          const allDispatchLines = await tx.dispatchLine.findMany({ where: { dispatchId: source.dispatchId }, include: { confirmations: true } });
+          const hasTransit = allDispatchLines.some(dl => dl.dispatchedLiters.gt(dl.confirmations.reduce((sum, c) => sum.add(c.acceptedLiters).add(c.physicalReturnedLiters), d("0"))));
+          await tx.dispatch.update({ where: { id: source.dispatchId }, data: { status: hasTransit ? "PARTIALLY_RECONCILED" : "RECONCILED" } });
+          await this.audit(tx, actor, "DeliveryConfirmation", confirmation.id, "POSTED");
+
+          if (accepted.gt(0)) {
+            const previous = await tx.invoice.aggregate({ where: { lines: { some: { orderLine: { orderId: order.id } } } }, _sum: { discountAmount: true } });
+            const remainingDiscount = Prisma.Decimal.max(0, order.fixedDiscountAmount.sub(previous._sum.discountAmount ?? d("0")));
+            const subtotal = accepted.mul(line.unitPriceSnapshot).toDecimalPlaces(4);
+            const discount = Prisma.Decimal.min(
+              subtotal,
+              remainingDiscount,
+              order.fixedDiscountAmount.mul(accepted).div(requestedBasis.isZero() ? d("1") : requestedBasis).toDecimalPlaces(4)
+            );
+            const total = subtotal.sub(discount);
+            const invoice = await tx.invoice.create({
+              data: {
+                invoiceNo: no("INV"),
+                customerId: order.customerId,
+                deliveryConfirmationLineId: confirmed.id,
+                billingSourceKey: confirmed.billingSourceKey,
+                issueDate: new Date(),
+                status: total.isZero() ? "PAID" : "UNPAID",
+                subtotal,
+                discountAmount: discount,
+                taxAmount: d("0"),
+                totalAmount: total,
+                paidAmount: d("0"),
+                balanceDue: total,
+                currencyCode: line.currencyCode,
+                createdById: actor.id,
+                lines: {
+                  create: {
+                    orderLineId: line.id,
+                    fuelId: line.fuelId,
+                    salesUnitId: line.salesUnitId,
+                    acceptedUnits: accepted,
+                    acceptedLiters,
+                    unitPriceSnapshot: line.unitPriceSnapshot,
+                    litersPerUnitSnapshot: line.litersPerUnitSnapshot,
+                    lineTotal: subtotal
+                  }
+                }
+              }
+            });
+            await this.ledger(tx, order.customerId, "INVOICE", invoice.invoiceNo, invoice.id, total);
+            const credits = await tx.payment.findMany({ where: { orderId: order.id, customerId: order.customerId, status: "POSTED", unappliedAmount: { gt: 0 } }, orderBy: [{ paymentDate: "asc" }, { id: "asc" }] });
+            for (const credit of credits) await this.allocate(tx, actor, credit.id, invoice.id);
+            await this.audit(tx, actor, "Invoice", invoice.id, "POSTED");
+            invoiceIds.push(invoice.id);
+          }
         }
       }
-      const lines=await tx.salesOrderLine.findMany({where:{orderId:order.id},include:{dispatchLines:{include:{confirmations:true}}}});
-      const counts=lines.map(line=>line.dispatchLines.flatMap(dl=>dl.confirmations).reduce((sum,c)=>sum.add(c.acceptedUnits),d("0")));
-      const status=lines.every((line,i)=>counts[i]!.gte(line.requestedUnits))?"FULFILLED":counts.some(v=>v.gt(0))?"PARTIALLY_FULFILLED":"IN_PROGRESS";
-      await tx.salesOrder.update({where:{id:order.id},data:{status}});
-      await tx.orderEvent.create({data:{orderId:order.id,kind:"DELIVERY_RECONCILED",newValues:{status},actorId:actor.id}});
-      return {id:order.id,status,invoiceIds};
+
+      // Re-evaluate order status
+      const updatedLines = await tx.salesOrderLine.findMany({
+        where: { orderId: order.id },
+        include: { dispatchLines: { include: { confirmations: true } } }
+      });
+      const allFulfilled = updatedLines.every(l => {
+        const netOrdered = l.requestedUnits.add(l.amendedUnits).sub(l.cancelledUnits);
+        const totalAccepted = l.dispatchLines.flatMap(dl => dl.confirmations).reduce((sum, c) => sum.add(c.acceptedUnits), d("0"));
+        return totalAccepted.gte(netOrdered);
+      });
+      const anyAcceptedOrCancelled = updatedLines.some(l => {
+        const totalAccepted = l.dispatchLines.flatMap(dl => dl.confirmations).reduce((sum, c) => sum.add(c.acceptedUnits), d("0"));
+        return totalAccepted.gt(0) || l.cancelledUnits.gt(0);
+      });
+      const status = allFulfilled ? "FULFILLED" : anyAcceptedOrCancelled ? "PARTIALLY_FULFILLED" : "IN_PROGRESS";
+      await tx.salesOrder.update({ where: { id: order.id }, data: { status } });
+      await tx.orderEvent.create({ data: { orderId: order.id, kind: "DELIVERY_RECONCILED", newValues: { status }, actorId: actor.id } });
+      return { id: order.id, status, invoiceIds };
     });
   }
+
+  async cancelOrder(actor: Actor, key: string | undefined, orderId: string, reasonInput: string | undefined) {
+    if (actor.role !== "OWNER" && !hasPermission(actor, "orders.cancel")) {
+      throw new ForbiddenException("Ogolaansho uma haysatid inaad joojiso dalabka (Permission denied to cancel order)");
+    }
+    const reason = required(reasonInput, "Sababta (Reason)");
+    return this.execute(actor, key, "order-cancel", { orderId, reason }, async tx => {
+      const order = await tx.salesOrder.findUnique({
+        where: { id: orderId },
+        include: {
+          lines: {
+            include: {
+              dispatchLines: {
+                include: { dispatch: true, confirmations: true }
+              }
+            }
+          },
+          payments: true
+        }
+      });
+      if (!order) throw new NotFoundException("Order not found");
+      if (order.status === "CANCELLED") {
+        return { id: order.id, status: "CANCELLED", replay: true };
+      }
+      if (order.status === "FULFILLED") {
+        throw new BadRequestException("Dalabkan waa la dhammaystiray, lama baabi'in karo (Completed order cannot be cancelled)");
+      }
+      if (order.status === "PARTIALLY_FULFILLED") {
+        throw new BadRequestException("Dalabkan qeyb ahaan waa la geeyey. Isticmaal 'Jooji inta Harsan' si aad u joojiso inta aan la gaarsiin (Use Cancel Remainder for partially fulfilled orders)");
+      }
+
+      // Check if any dispatches have unreturned fuel in transit
+      for (const line of order.lines) {
+        for (const dl of line.dispatchLines) {
+          if (["POSTED", "PARTIALLY_RECONCILED"].includes(dl.dispatch.status)) {
+            const settled = dl.confirmations.reduce((sum, c) => sum.add(c.acceptedLiters).add(c.physicalReturnedLiters), d("0"));
+            if (dl.dispatchedLiters.gt(settled)) {
+              throw new BadRequestException("Dalabkan shidaal ayaa jidka ugu jira. Marka hore soo celi shidaalka jidka ku jira (Fuel is currently in transit. Reconcile or return in-transit fuel before cancelling).");
+            }
+          }
+        }
+      }
+
+      // Check if any posted invoices exist
+      const invoiceCount = await tx.invoice.count({
+        where: { lines: { some: { orderLine: { orderId: order.id } } } }
+      });
+      if (invoiceCount > 0) {
+        throw new BadRequestException("Dalabkan waxaa ku xiran qaansheegyo la soo saaray. Lama baabi'in karo (Order has posted invoices).");
+      }
+
+      // Any prepared dispatches: delete them
+      const preparedDispatches = await tx.dispatch.findMany({
+        where: { status: "PREPARED", lines: { some: { orderLine: { orderId: order.id } } } }
+      });
+      for (const disp of preparedDispatches) {
+        await tx.dispatchLine.deleteMany({ where: { dispatchId: disp.id } });
+        await tx.dispatch.delete({ where: { id: disp.id } });
+      }
+
+      // Update order status to CANCELLED
+      const now = new Date();
+      await tx.salesOrder.update({
+        where: { id: order.id },
+        data: {
+          status: "CANCELLED",
+          cancellationReason: reason,
+          cancelledById: actor.id,
+          cancelledAt: now
+        }
+      });
+
+      await tx.orderEvent.create({
+        data: {
+          orderId: order.id,
+          kind: "CANCELLED",
+          newValues: { status: "CANCELLED", reason },
+          actorId: actor.id,
+          reason
+        }
+      });
+
+      await this.audit(tx, actor, "SalesOrder", order.id, "CANCELLED");
+      return { id: order.id, status: "CANCELLED", replay: false };
+    });
+  }
+
+  async cancelRemainder(actor: Actor, key: string | undefined, orderId: string, reasonInput: string | undefined) {
+    if (actor.role !== "OWNER" && !hasPermission(actor, "orders.cancel")) {
+      throw new ForbiddenException("Ogolaansho uma haysatid inaad joojiso inta harsan (Permission denied to cancel remainder)");
+    }
+    const reason = required(reasonInput, "Sababta (Reason)");
+    return this.execute(actor, key, "order-cancel-remainder", { orderId, reason }, async tx => {
+      const order = await tx.salesOrder.findUnique({
+        where: { id: orderId },
+        include: {
+          lines: {
+            include: {
+              dispatchLines: {
+                include: { dispatch: true, confirmations: true }
+              }
+            }
+          }
+        }
+      });
+      if (!order) throw new NotFoundException("Order not found");
+      if (["FULFILLED", "CANCELLED"].includes(order.status)) {
+        throw new BadRequestException(`Cannot cancel remainder for order in status ${order.status}`);
+      }
+
+      // Check if any in-transit fuel is pending
+      for (const line of order.lines) {
+        for (const dl of line.dispatchLines) {
+          if (["POSTED", "PARTIALLY_RECONCILED"].includes(dl.dispatch.status)) {
+            const settled = dl.confirmations.reduce((sum, c) => sum.add(c.acceptedLiters).add(c.physicalReturnedLiters), d("0"));
+            if (dl.dispatchedLiters.gt(settled)) {
+              throw new BadRequestException("Shidaal ayaa weli jidka ku jira. Marka hore soo celi shidaalka (Fuel is in transit. Reconcile delivery before cancelling remainder).");
+            }
+          }
+        }
+      }
+
+      let totalCancelledUnits = d("0");
+      for (const line of order.lines) {
+        const accepted = line.dispatchLines.flatMap(dl => dl.confirmations).reduce((sum, c) => sum.add(c.acceptedUnits), d("0"));
+        const netOrdered = line.requestedUnits.add(line.amendedUnits).sub(line.cancelledUnits);
+        const unfulfilled = Prisma.Decimal.max(d("0"), netOrdered.sub(accepted));
+        if (unfulfilled.gt(0)) {
+          await tx.salesOrderLine.update({
+            where: { id: line.id },
+            data: { cancelledUnits: { increment: unfulfilled } }
+          });
+          totalCancelledUnits = totalCancelledUnits.add(unfulfilled);
+          await tx.orderEvent.create({
+            data: {
+              orderId: order.id,
+              lineId: line.id,
+              kind: "REMAINDER_CANCELLED",
+              newValues: { cancelledUnits: unfulfilled.toFixed(3) },
+              actorId: actor.id,
+              reason
+            }
+          });
+        }
+      }
+
+      await tx.salesOrder.update({
+        where: { id: order.id },
+        data: { status: "FULFILLED" }
+      });
+
+      await tx.orderEvent.create({
+        data: {
+          orderId: order.id,
+          kind: "ORDER_CLOSED_WITH_LESS",
+          newValues: { status: "FULFILLED", totalCancelledUnits: totalCancelledUnits.toFixed(3) },
+          actorId: actor.id,
+          reason
+        }
+      });
+
+      await this.audit(tx, actor, "SalesOrder", order.id, "REMAINDER_CANCELLED");
+      return { id: order.id, status: "FULFILLED", totalCancelledUnits: totalCancelledUnits.toFixed(3), replay: false };
+    });
+  }
+
 
   order(actor: Actor, key: string | undefined, input: SimpleOrderInput) {
     return this.execute(actor,key,"order",input,async tx => {

@@ -7,6 +7,7 @@ import { Badge, Card, CardHead, Empty, ErrorState, LoadingState, Modal, PageHead
 import { api, type Actor } from "../../lib/api";
 import { dateTime, formatRole } from "../../lib/format";
 import { notifyError, notifySuccess } from "../../lib/toast";
+import { UserPermissionsModal } from "../../components/user-permissions-modal";
 
 type UserRole = "OWNER" | "OFFICE_EMPLOYEE";
 type User = {
@@ -26,6 +27,7 @@ export default function SettingsPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [editing, setEditing] = useState<User | null>(null);
   const [deactivating, setDeactivating] = useState<User | null>(null);
+  const [permissionsUser, setPermissionsUser] = useState<User | null>(null);
   const me = useQuery({ queryKey: ["me"], queryFn: () => api<Actor>("/auth/me") });
   const owner = me.data?.role === "OWNER";
   const users = useQuery({ queryKey: ["users"], queryFn: () => api<User[]>("/users"), enabled: owner, retry: false });
@@ -176,6 +178,7 @@ export default function SettingsPage() {
                       <td data-label="Galitaankii">{user.lastLoginAt ? dateTime(user.lastLoginAt) : "Weli ma gelin"}</td>
                       <td data-label="">
                         <div className="actions" style={{ justifyContent: "flex-end" }}>
+                          <ActionButton className="btn small secondary" onClick={() => setPermissionsUser(user)}>Ogolaanshaha</ActionButton>
                           <ActionButton className="btn small" onClick={() => setEditing(user)}>Edit</ActionButton>
                           {user.isActive ? (
                             user.id !== me.data?.id && <ActionButton className="btn small danger" onClick={() => setDeactivating(user)}>Deactivate</ActionButton>
@@ -237,6 +240,13 @@ export default function SettingsPage() {
           </div>
         )}
       </Modal>
+      <UserPermissionsModal
+        isOpen={Boolean(permissionsUser) && owner}
+        onClose={() => setPermissionsUser(null)}
+        userId={permissionsUser?.id ?? null}
+        userName={permissionsUser?.displayName ?? ""}
+        userRole={permissionsUser?.role ?? "OFFICE_EMPLOYEE"}
+      />
     </main>
   );
 }

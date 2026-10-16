@@ -1,11 +1,11 @@
 import { statementBounds, statementRows } from "./customer-statement.js";
-import { Body, ConflictException, Controller, Delete, Get, Headers, Inject, Param, Patch, Post, Query, Req, Res, UseGuards, BadRequestException, ForbiddenException, NotFoundException } from "@nestjs/common";
+import { Body, ConflictException, Controller, Delete, Get, Headers, Inject, Param, Patch, Post, Put, Query, Req, Res, UseGuards, BadRequestException, ForbiddenException, NotFoundException } from "@nestjs/common";
 import type { Response } from "express";
 import argon2 from "argon2";
 import PDFDocument from "pdfkit";
 import { Prisma, PrismaClient } from "@fuel/database";
-import { deliveryManifestLineSchema } from "@fuel/shared";
-import { AuthenticatedRequest, hashToken, newSessionToken, requireActor, requireOwner, SessionGuard } from "./auth.js";
+import { deliveryManifestLineSchema, PermissionCode, PERMISSION_CODES, STANDARD_OFFICE_PERMISSIONS } from "@fuel/shared";
+import { AuthenticatedRequest, hashToken, hasPermission, newSessionToken, requireActor, requireOwner, requirePermission, SessionGuard } from "./auth.js";
 import { PrismaService } from "./prisma.service.js";
 import { exportToPdf, exportToExcel, ColumnDef } from "./reports.exporter.js";
 import { compactPaymentReference, createCustomerStatementPdf } from "./customer-statement.pdf.js";
@@ -92,6 +92,13 @@ export class AppController {
   me(@Req() request: AuthenticatedRequest) { return { data: requireActor(request) }; }
 
   @UseGuards(SessionGuard)
+  @Get("auth/me/permissions")
+  myPermissions(@Req() request: AuthenticatedRequest) {
+    const actor = requireActor(request);
+    return { data: { role: actor.role, permissions: actor.permissions } };
+  }
+
+  @UseGuards(SessionGuard)
   @Get("fuels")
   async fuels() { return { data: await this.prisma.fuelType.findMany({ where: { active: true }, orderBy: { code: "asc" } }) }; }
 
@@ -101,7 +108,8 @@ export class AppController {
 
   @UseGuards(SessionGuard)
   @Get("stock/balances")
-  async balances() {
+  async balances(@Req() request: AuthenticatedRequest) {
+    requirePermission(request, "stock.view");
     const rows = await this.prisma.stockBalance.findMany({ include: { fuel: true }, orderBy: [{ fuel: { code: "asc" } }, { location: "asc" }] });
     return {
       data: rows.map((row) => ({
@@ -117,12 +125,14 @@ export class AppController {
   @UseGuards(SessionGuard)
   @Get("stock/movements")
   async stockMovements(
+    @Req() request: AuthenticatedRequest,
     @Query("fuelId") fuelId?: string,
     @Query("location") location?: "WAREHOUSE" | "IN_TRANSIT",
     @Query("eventType") eventType?: "RECEIPT" | "DISPATCH" | "ACCEPTED" | "RETURN" | "ADJUSTMENT" | "REVERSAL",
     @Query("page") pageQuery?: string,
     @Query("limit") limitQuery?: string
   ) {
+    requirePermission(request, "stock.view");
     const page = Math.max(1, parseInt(pageQuery ?? "1", 10) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(limitQuery ?? "50", 10) || 50));
     const skip = (page - 1) * limit;
@@ -169,7 +179,7 @@ export class AppController {
   @UseGuards(SessionGuard)
   @Post("stock/adjustments")
   async adjustStock(@Req() request: AuthenticatedRequest, @Body() body: { fuelId?: string; signedDeltaLiters?: string; reason?: string }) {
-    const actor = requireOwner(request);
+    const actor = requirePermission(request, "stock.adjust");
     if (!body.fuelId || !body.signedDeltaLiters || !body.reason?.trim()) throw new BadRequestException("fuelId, signedDeltaLiters and reason are required");
     const delta = dec(body.signedDeltaLiters);
     if (delta.eq(0)) throw new BadRequestException("signedDeltaLiters cannot be zero");
@@ -227,7 +237,8 @@ export class AppController {
 
   @UseGuards(SessionGuard)
   @Get("prices/current")
-  async currentPrice(@Query("fuelId") fuelId?: string, @Query("unitId") unitId?: string) {
+  async currentPrice(@Req() request: AuthenticatedRequest, @Query("fuelId") fuelId?: string, @Query("unitId") unitId?: string) {
+    requirePermission(request, "prices.view");
     if (!fuelId || !unitId) throw new BadRequestException("fuelId and unitId are required");
     const row = await this.prisma.priceVersion.findFirst({ where: { fuelId, salesUnitId: unitId, effectiveFromUtc: { lte: new Date() }, OR: [{ effectiveToUtc: null }, { effectiveToUtc: { gt: new Date() } }] }, orderBy: { effectiveFromUtc: "desc" } });
     return { data: row ? { id: row.id, unitPrice: row.unitPrice.toFixed(4), currencyCode: row.currencyCode, effectiveFromUtc: row.effectiveFromUtc } : null };
@@ -235,7 +246,8 @@ export class AppController {
 
   @UseGuards(SessionGuard)
   @Get("prices/history")
-  async priceHistory() {
+  async priceHistory(@Req() request: AuthenticatedRequest) {
+    requirePermission(request, "prices.view");
     const rows = await this.prisma.priceVersion.findMany({
       include: { fuel: true, salesUnit: true, createdBy: { select: { displayName: true } } },
       orderBy: { effectiveFromUtc: "desc" }
@@ -252,7 +264,7 @@ export class AppController {
   @UseGuards(SessionGuard)
   @Post("prices")
   async createPrice(@Req() request: AuthenticatedRequest, @Body() body: { fuelId?: string; salesUnitId?: string; unitPrice?: string; effectiveFromUtc?: string; reason?: string }) {
-    const actor = requireOwner(request);
+    const actor = requirePermission(request, "prices.update");
     if (!body.fuelId || !body.salesUnitId || !body.unitPrice || !body.effectiveFromUtc) throw new BadRequestException("fuelId, salesUnitId, unitPrice and effectiveFromUtc are required");
     const price = positive(body.unitPrice, "unitPrice"); const effective = new Date(body.effectiveFromUtc); if (Number.isNaN(effective.getTime())) throw new BadRequestException("Invalid effectiveFromUtc");
     const overlap = await this.prisma.priceVersion.findFirst({
@@ -274,8 +286,9 @@ export class AppController {
   @UseGuards(SessionGuard)
   @Get(["stock/receipts", "tanker-receipts"])
   async receipts(@Req() request: AuthenticatedRequest) {
+    requirePermission(request, "stock.view");
     const rows = await this.prisma.tankerReceipt.findMany({ include: { lines: { include: { fuel: true } } }, orderBy: { arrivedAt: "desc" } });
-    const isOwner = request.actor?.role === "OWNER";
+    const canSeeCost = hasPermission(requireActor(request), "stock.purchase_cost.view");
     return {
       data: rows.map((row) => ({
         ...row,
@@ -289,8 +302,8 @@ export class AppController {
             litersPerFuustoSnapshot: line.litersPerFuustoSnapshot?.toFixed(6) ?? "240.000000",
             actualLiters: line.actualLiters.toFixed(3),
             expectedLiters: line.expectedLiters?.toFixed(3) ?? null,
-            unitPurchaseCost: isOwner ? line.unitPurchaseCost?.toFixed(4) ?? null : undefined,
-            totalPurchaseCost: isOwner ? totalCost?.toFixed(4) ?? null : undefined
+            unitPurchaseCost: canSeeCost ? line.unitPurchaseCost?.toFixed(4) ?? null : undefined,
+            totalPurchaseCost: canSeeCost ? totalCost?.toFixed(4) ?? null : undefined
           };
         })
       }))
@@ -300,9 +313,10 @@ export class AppController {
   @UseGuards(SessionGuard)
   @Get(["stock/receipts/:id", "tanker-receipts/:id"])
   async receipt(@Req() request: AuthenticatedRequest, @Param("id") id: string) {
+    requirePermission(request, "stock.view");
     const row = await this.prisma.tankerReceipt.findUnique({ where: { id }, include: { lines: { include: { fuel: true } }, createdBy: true, postedBy: true } });
     if (!row) throw new NotFoundException("Stock receipt not found");
-    const isOwner = request.actor?.role === "OWNER";
+    const canSeeCost = hasPermission(requireActor(request), "stock.purchase_cost.view");
     return {
       data: {
         ...row,
@@ -316,8 +330,8 @@ export class AppController {
             litersPerFuustoSnapshot: line.litersPerFuustoSnapshot?.toFixed(6) ?? "240.000000",
             actualLiters: line.actualLiters.toFixed(3),
             expectedLiters: line.expectedLiters?.toFixed(3) ?? null,
-            unitPurchaseCost: isOwner ? line.unitPurchaseCost?.toFixed(4) ?? null : undefined,
-            totalPurchaseCost: isOwner ? totalCost?.toFixed(4) ?? null : undefined
+            unitPurchaseCost: canSeeCost ? line.unitPurchaseCost?.toFixed(4) ?? null : undefined,
+            totalPurchaseCost: canSeeCost ? totalCost?.toFixed(4) ?? null : undefined
           };
         })
       }
@@ -346,10 +360,11 @@ export class AppController {
       }>;
     }
   ) {
-    const actor = requireActor(request);
+    const actor = requirePermission(request, "stock.receive");
     const arrival = body.purchaseDate || body.arrivedAt;
     if (!arrival || !body.lines?.length) throw new BadRequestException("arrivedAt/purchaseDate and at least one line are required");
 
+    const canRecordCost = hasPermission(actor, "stock.purchase_cost.view");
     const lines = body.lines.map((line) => {
       if (!line.fuelId) throw new BadRequestException("Each receipt line needs fuelId");
       if (!line.quantityFuusto && !line.actualLiters) throw new BadRequestException("Each line requires quantityFuusto or actualLiters");
@@ -371,7 +386,7 @@ export class AppController {
       let unitPurchaseCostDec: Prisma.Decimal | undefined;
       let totalPurchaseCostDec: Prisma.Decimal | undefined;
 
-      if (actor.role === "OWNER") {
+      if (canRecordCost) {
         if (line.unitPurchaseCost && line.unitPurchaseCost.trim() !== "") {
           unitPurchaseCostDec = positive(line.unitPurchaseCost, "unitPurchaseCost");
           totalPurchaseCostDec = line.totalPurchaseCost && line.totalPurchaseCost.trim() !== "" ? positive(line.totalPurchaseCost, "totalPurchaseCost") : unitPurchaseCostDec.mul(quantityFuustoDec);
@@ -409,7 +424,7 @@ export class AppController {
   @UseGuards(SessionGuard)
   @Post(["stock/receipts/:id/post", "tanker-receipts/:id/post"])
   async postReceipt(@Req() request: AuthenticatedRequest, @Param("id") id: string, @Headers("idempotency-key") headerKey?: string) {
-    const actor = requireActor(request);
+    const actor = requirePermission(request, "stock.receive");
     const key = requireIdempotencyKey(headerKey);
     const row = await this.prisma.tankerReceipt.findUnique({ where: { id }, include: { lines: true } });
     if (!row) throw new NotFoundException("Stock receipt not found");
@@ -450,17 +465,26 @@ export class AppController {
   @UseGuards(SessionGuard)
   @Get("customers")
   async customers(
+    @Req() request: AuthenticatedRequest,
     @Query("search") search?: string,
     @Query("status") status?: "ACTIVE" | "HOLD" | "INACTIVE",
+    @Query("archived") archived?: string,
     @Query("page") pageQuery?: string,
     @Query("limit") limitQuery?: string
   ) {
+    requirePermission(request, "customers.view");
     const page = Math.max(1, parseInt(pageQuery ?? "1", 10) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(limitQuery ?? "50", 10) || 50));
     const skip = (page - 1) * limit;
 
     const where: Prisma.CustomerWhereInput = {
-      ...(status ? { status } : {}),
+      ...(status
+        ? { status }
+        : archived === "true"
+        ? { status: "INACTIVE" }
+        : archived === "all"
+        ? {}
+        : { status: { in: ["ACTIVE", "HOLD"] } }),
       ...(search?.trim()
         ? {
             OR: [
@@ -500,7 +524,7 @@ export class AppController {
   @UseGuards(SessionGuard)
   @Post("customers")
   async createCustomer(@Req() request: AuthenticatedRequest, @Body() body: { name?: string; primaryPhone?: string; address?: string; district?: string; city?: string; notes?: string }) {
-    const actor = requireActor(request);
+    const actor = requirePermission(request, "customers.create");
     if (!body.name?.trim()) throw new BadRequestException("name is required");
     const row = await this.prisma.customer.create({
       data: {
@@ -528,12 +552,17 @@ export class AppController {
 
   @UseGuards(SessionGuard)
   @Get("customers/:id")
-  async customer(@Param("id") id: string) { const row = await this.prisma.customer.findUnique({ where: { id }, include: { addresses: true, orders: { include: { lines: { include: { fuel: true } } }, orderBy: { orderDate: "desc" } } } }); if (!row) throw new NotFoundException("Customer not found"); return { data: row }; }
+  async customer(@Req() request: AuthenticatedRequest, @Param("id") id: string) {
+    requirePermission(request, "customers.view");
+    const row = await this.prisma.customer.findUnique({ where: { id }, include: { addresses: true, orders: { include: { lines: { include: { fuel: true } } }, orderBy: { orderDate: "desc" } } } });
+    if (!row) throw new NotFoundException("Customer not found");
+    return { data: row };
+  }
 
   @UseGuards(SessionGuard)
   @Patch("customers/:id")
   async updateCustomer(@Req() request: AuthenticatedRequest, @Param("id") id: string, @Body() body: { name?: string; primaryPhone?: string; status?: "ACTIVE" | "HOLD" | "INACTIVE"; notes?: string; address?: string }) {
-    const actor = requireActor(request);
+    const actor = requirePermission(request, "customers.update");
     const existing = await this.prisma.customer.findUnique({ where: { id }, include: { addresses: true } });
     if (!existing) throw new NotFoundException("Customer not found");
     const row = await this.prisma.$transaction(async (tx) => {
@@ -571,6 +600,99 @@ export class AppController {
   }
 
   @UseGuards(SessionGuard)
+  @Post("customers/:id/archive")
+  async archiveCustomer(
+    @Req() request: AuthenticatedRequest,
+    @Param("id") id: string,
+    @Body() body?: { reason?: string }
+  ) {
+    const actor = requirePermission(request, "customers.archive");
+    const customer = await this.prisma.customer.findUnique({ where: { id } });
+    if (!customer) throw new NotFoundException("Customer not found");
+    if (customer.status === "INACTIVE" && customer.archivedAt) {
+      return { data: { id: customer.id, status: "INACTIVE", archived: true, replay: true } };
+    }
+
+    const openDebt = await this.prisma.invoice.aggregate({
+      where: { customerId: id, status: { in: ["UNPAID", "PARTIALLY_PAID"] } },
+      _sum: { balanceDue: true }
+    });
+    const debtAmount = openDebt._sum.balanceDue ?? dec("0");
+
+    const openOrders = await this.prisma.salesOrder.count({
+      where: { customerId: id, status: { in: ["CONFIRMED", "SCHEDULED", "IN_PROGRESS", "PARTIALLY_FULFILLED"] } }
+    });
+
+    const reason = body?.reason?.trim() || (debtAmount.gt(0) ? "Archived with outstanding balance" : "Archived customer");
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const row = await tx.customer.update({
+        where: { id },
+        data: {
+          status: "INACTIVE",
+          archivedAt: new Date(),
+          archivedById: actor.id,
+          archiveReason: reason
+        }
+      });
+      await tx.auditEvent.create({
+        data: {
+          actorId: actor.id,
+          entityType: "Customer",
+          entityId: id,
+          action: "ARCHIVED",
+          reason,
+          beforeRedacted: { status: customer.status, debt: debtAmount.toFixed(2), openOrders },
+          afterRedacted: { status: "INACTIVE" }
+        }
+      });
+      return row;
+    });
+
+    return { data: updated };
+  }
+
+  @UseGuards(SessionGuard)
+  @Post("customers/:id/restore")
+  async restoreCustomer(
+    @Req() request: AuthenticatedRequest,
+    @Param("id") id: string
+  ) {
+    const actor = requirePermission(request, "customers.restore");
+    const customer = await this.prisma.customer.findUnique({ where: { id } });
+    if (!customer) throw new NotFoundException("Customer not found");
+    if (customer.status === "ACTIVE") {
+      return { data: { id: customer.id, status: "ACTIVE", replay: true } };
+    }
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const row = await tx.customer.update({
+        where: { id },
+        data: {
+          status: "ACTIVE",
+          archivedAt: null,
+          archivedById: null,
+          archiveReason: null
+        }
+      });
+      await tx.auditEvent.create({
+        data: {
+          actorId: actor.id,
+          entityType: "Customer",
+          entityId: id,
+          action: "RESTORED",
+          beforeRedacted: { status: customer.status },
+          afterRedacted: { status: "ACTIVE" }
+        }
+      });
+      return row;
+    });
+
+    return { data: updated };
+  }
+
+
+  @UseGuards(SessionGuard)
   @Post("orders")
   async createOrder(
     @Req() request: AuthenticatedRequest,
@@ -584,7 +706,7 @@ export class AppController {
       lines?: Array<{ fuelId?: string; salesUnitId?: string; requestedUnits?: string }>;
     }
   ) {
-    const actor = requireActor(request);
+    const actor = requirePermission(request, "orders.create");
     if (!body.customerId || !body.addressSnapshot || !body.lines?.length) {
       throw new BadRequestException("customerId, addressSnapshot and lines are required");
     }
@@ -648,6 +770,7 @@ export class AppController {
   @UseGuards(SessionGuard)
   @Get("orders")
   async orders(
+    @Req() request: AuthenticatedRequest,
     @Query("search") search?: string,
     @Query("status") status?: string,
     @Query("customerId") customerId?: string,
@@ -655,6 +778,7 @@ export class AppController {
     @Query("limit") limitQuery?: string,
     @Query("date") date?: string
   ) {
+    requirePermission(request, "orders.view");
     const page = Math.max(1, parseInt(pageQuery ?? "1", 10) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(limitQuery ?? "50", 10) || 50));
     const skip = (page - 1) * limit;
@@ -699,6 +823,8 @@ export class AppController {
             ...line,
             invoiceLines: undefined,
             requestedUnits: line.requestedUnits.toFixed(3),
+            amendedUnits: line.amendedUnits.toFixed(3),
+            cancelledUnits: line.cancelledUnits.toFixed(3),
             requestedLitersSnapshot: jsonDecimal(line.requestedLitersSnapshot),
             litersPerUnitSnapshot: jsonDecimal(line.litersPerUnitSnapshot),
             unitPriceSnapshot: jsonDecimal(line.unitPriceSnapshot)
@@ -714,7 +840,8 @@ export class AppController {
 
   @UseGuards(SessionGuard)
   @Get("orders/:id/invoice-pdf")
-  async orderInvoicePdf(@Param("id") id: string, @Query("download") download: string | undefined, @Res() response: Response) {
+  async orderInvoicePdf(@Req() request: AuthenticatedRequest, @Param("id") id: string, @Query("download") download: string | undefined, @Res() response: Response) {
+    requirePermission(request, "orders.invoice.view");
     const order = await this.prisma.salesOrder.findUnique({
       where: { id },
       include: {
@@ -792,7 +919,8 @@ export class AppController {
 
   @UseGuards(SessionGuard)
   @Get("orders/:id")
-  async order(@Param("id") id: string) {
+  async order(@Req() request: AuthenticatedRequest, @Param("id") id: string) {
+    requirePermission(request, "orders.view");
     const row = await this.prisma.salesOrder.findUnique({
       where: { id },
       include: {
@@ -824,6 +952,8 @@ export class AppController {
         return {
           ...line,
           requestedUnits: line.requestedUnits.toFixed(3),
+          amendedUnits: line.amendedUnits.toFixed(3),
+          cancelledUnits: line.cancelledUnits.toFixed(3),
           requestedLitersSnapshot: jsonDecimal(line.requestedLitersSnapshot),
           litersPerUnitSnapshot: jsonDecimal(line.litersPerUnitSnapshot),
           unitPriceSnapshot: jsonDecimal(line.unitPriceSnapshot),
@@ -948,7 +1078,7 @@ export class AppController {
   @UseGuards(SessionGuard)
   @Post("orders/:id/confirm")
   async confirmOrder(@Req() request: AuthenticatedRequest, @Param("id") id: string, @Headers("idempotency-key") headerKey?: string) {
-    const actor = requireActor(request);
+    const actor = requirePermission(request, "orders.create");
     const key = requireIdempotencyKey(headerKey);
     const now = new Date();
     const row = await this.prisma.salesOrder.findUnique({ where: { id }, include: { lines: true } });
@@ -1049,66 +1179,65 @@ export class AppController {
 
   @UseGuards(SessionGuard)
   @Post("orders/:id/cancel")
-  async cancelOrder(@Req() request: AuthenticatedRequest, @Param("id") id: string, @Body() body: { reason?: string }) {
-    const actor = requireActor(request);
-    const row = await this.prisma.salesOrder.findUnique({ where: { id } });
-    if (!row) throw new NotFoundException("Order not found");
-    if (["FULFILLED", "CANCELLED"].includes(row.status)) {
-      throw new BadRequestException(`Cannot cancel order in status ${row.status}`);
-    }
-    const updated = await this.prisma.$transaction(async (tx) => {
-      const saved = await tx.salesOrder.update({
-        where: { id },
-        data: { status: "CANCELLED" }
-      });
-      await tx.orderEvent.create({
-        data: {
-          orderId: id,
-          kind: "CANCELLED",
-          newValues: { status: "CANCELLED" },
-          actorId: actor.id,
-          reason: body.reason
-        }
-      });
-      await tx.auditEvent.create({
-        data: {
-          actorId: actor.id,
-          entityType: "SalesOrder",
-          entityId: id,
-          action: "CANCELLED",
-          reason: body.reason
-        }
-      });
-      return saved;
-    });
-    return { data: updated };
+  async cancelOrder(
+    @Req() request: AuthenticatedRequest,
+    @Param("id") id: string,
+    @Headers("idempotency-key") headerKey?: string,
+    @Body() body?: { reason?: string }
+  ) {
+    const actor = requirePermission(request, "orders.cancel");
+    const key = headerKey || (request.headers["idempotency-key"] as string) || `cancel:${id}:${Date.now()}`;
+    const result = await this.simpleWorkflows.cancelOrder(actor, key, id, body?.reason);
+    return { data: result };
   }
 
   @UseGuards(SessionGuard)
+  @Post("orders/:id/cancel-remainder")
+  async cancelRemainder(
+    @Req() request: AuthenticatedRequest,
+    @Param("id") id: string,
+    @Headers("idempotency-key") headerKey?: string,
+    @Body() body?: { reason?: string }
+  ) {
+    const actor = requirePermission(request, "orders.cancel");
+    const key = headerKey || (request.headers["idempotency-key"] as string) || `cancel-rem:${id}:${Date.now()}`;
+    const result = await this.simpleWorkflows.cancelRemainder(actor, key, id, body?.reason);
+    return { data: result };
+  }
+
+
+  @UseGuards(SessionGuard)
   @Get("delivery-sheets")
-  async sheets() {
+  async sheets(@Req() request: AuthenticatedRequest) {
+    requirePermission(request, "orders.view");
     const rows = await this.prisma.deliverySheet.findMany({ include: { lines: true }, orderBy: [{ serviceDate: "desc" }, { createdAt: "desc" }], take: 100 });
     return { data: rows.map((row) => ({ id: row.id, sheetNo: row.sheetNo, serviceDate: row.serviceDate.toISOString().slice(0, 10), status: row.status, lines: row.lines.map((line) => ({ scheduledUnits: line.scheduledUnits.toFixed(3), displayCustomerNameSnapshot: line.displayCustomerNameSnapshot, fuelLabelSnapshot: line.fuelLabelSnapshot })) })) };
   }
 
   @UseGuards(SessionGuard)
   @Get("delivery-sheets/:id")
-  async sheet(@Param("id") id: string) { const row = await this.prisma.deliverySheet.findUnique({ where: { id }, include: { lines: { include: { orderLine: { include: { order: { include: { customer: true } }, fuel: true } } } }, dispatches: { include: { lines: true } } } }); if (!row) throw new NotFoundException("Delivery sheet not found"); return { data: { ...row, serviceDate: row.serviceDate.toISOString().slice(0, 10), lines: row.lines.map((line) => ({ ...line, scheduledUnits: line.scheduledUnits.toFixed(3) })), dispatches: row.dispatches.map((dispatch) => ({ ...dispatch, lines: dispatch.lines.map((line) => ({ ...line, dispatchedUnits: line.dispatchedUnits.toFixed(3), dispatchedLiters: line.dispatchedLiters.toFixed(3), litersPerUnitSnapshot: line.litersPerUnitSnapshot.toFixed(6) })) })) } };
+  async sheet(@Req() request: AuthenticatedRequest, @Param("id") id: string) {
+    requirePermission(request, "orders.view");
+    const row = await this.prisma.deliverySheet.findUnique({ where: { id }, include: { lines: { include: { orderLine: { include: { order: { include: { customer: true } }, fuel: true } } } }, dispatches: { include: { lines: true } } } }); if (!row) throw new NotFoundException("Delivery sheet not found"); return { data: { ...row, serviceDate: row.serviceDate.toISOString().slice(0, 10), lines: row.lines.map((line) => ({ ...line, scheduledUnits: line.scheduledUnits.toFixed(3) })), dispatches: row.dispatches.map((dispatch) => ({ ...dispatch, lines: dispatch.lines.map((line) => ({ ...line, dispatchedUnits: line.dispatchedUnits.toFixed(3), dispatchedLiters: line.dispatchedLiters.toFixed(3), litersPerUnitSnapshot: line.litersPerUnitSnapshot.toFixed(6) })) })) } };
   }
 
   @UseGuards(SessionGuard)
   @Post("delivery-sheets")
   async createSheet(@Req() request: AuthenticatedRequest, @Body() body: { serviceDate?: string; orderLineIds?: string[]; instructions?: Record<string, string> }) {
-    const actor = requireActor(request); if (!body.serviceDate || !body.orderLineIds?.length) throw new BadRequestException("serviceDate and orderLineIds are required"); const lines = await this.prisma.salesOrderLine.findMany({ where: { id: { in: body.orderLineIds }, order: { status: { in: ["CONFIRMED", "SCHEDULED", "IN_PROGRESS", "PARTIALLY_FULFILLED"] } } }, include: { order: { include: { customer: true } }, fuel: true } }); if (lines.length !== body.orderLineIds.length) throw new BadRequestException("One or more order lines are not eligible"); const row = await this.prisma.deliverySheet.create({ data: { sheetNo: documentNo("DS"), serviceDate: localDate(body.serviceDate), createdById: actor.id, lines: { create: lines.map((line) => ({ orderLineId: line.id, scheduledUnits: line.requestedUnits, orderNoSnapshot: line.order.orderNo, displayCustomerNameSnapshot: line.order.customer.name, phoneSnapshot: line.order.customer.primaryPhone, addressSnapshot: line.order.addressSnapshot, fuelLabelSnapshot: line.fuel.displayName, instructions: body.instructions?.[line.id] })) } }, include: { lines: true } }); await this.prisma.salesOrder.updateMany({ where: { id: { in: lines.map((line) => line.orderId) }, status: "CONFIRMED" }, data: { status: "SCHEDULED" } }); return { data: row };
+    const actor = requirePermission(request, "orders.create"); if (!body.serviceDate || !body.orderLineIds?.length) throw new BadRequestException("serviceDate and orderLineIds are required"); const lines = await this.prisma.salesOrderLine.findMany({ where: { id: { in: body.orderLineIds }, order: { status: { in: ["CONFIRMED", "SCHEDULED", "IN_PROGRESS", "PARTIALLY_FULFILLED"] } } }, include: { order: { include: { customer: true } }, fuel: true } }); if (lines.length !== body.orderLineIds.length) throw new BadRequestException("One or more order lines are not eligible"); const row = await this.prisma.deliverySheet.create({ data: { sheetNo: documentNo("DS"), serviceDate: localDate(body.serviceDate), createdById: actor.id, lines: { create: lines.map((line) => ({ orderLineId: line.id, scheduledUnits: line.requestedUnits, orderNoSnapshot: line.order.orderNo, displayCustomerNameSnapshot: line.order.customer.name, phoneSnapshot: line.order.customer.primaryPhone, addressSnapshot: line.order.addressSnapshot, fuelLabelSnapshot: line.fuel.displayName, instructions: body.instructions?.[line.id] })) } }, include: { lines: true } }); await this.prisma.salesOrder.updateMany({ where: { id: { in: lines.map((line) => line.orderId) }, status: "CONFIRMED" }, data: { status: "SCHEDULED" } }); return { data: row };
   }
 
   @UseGuards(SessionGuard)
   @Get("delivery-sheets/:id/manifest")
-  async manifest(@Param("id") id: string) { const row = await this.prisma.deliverySheet.findUnique({ where: { id }, include: { lines: true } }); if (!row) throw new NotFoundException("Delivery sheet not found"); const lines = row.lines.map((line) => deliveryManifestLineSchema.parse({ orderNo: line.orderNoSnapshot, customerName: line.displayCustomerNameSnapshot, phone: line.phoneSnapshot, address: line.addressSnapshot, fuel: line.fuelLabelSnapshot.startsWith("Diesel") ? "DIESEL" : "PETROL", scheduledUnits: line.scheduledUnits.toFixed(3), instructions: line.instructions })); return { data: { sheetNo: row.sheetNo, serviceDate: row.serviceDate.toISOString().slice(0, 10), lines } }; }
+  async manifest(@Req() request: AuthenticatedRequest, @Param("id") id: string) {
+    requirePermission(request, "orders.view");
+    const row = await this.prisma.deliverySheet.findUnique({ where: { id }, include: { lines: true } }); if (!row) throw new NotFoundException("Delivery sheet not found"); const lines = row.lines.map((line) => deliveryManifestLineSchema.parse({ orderNo: line.orderNoSnapshot, customerName: line.displayCustomerNameSnapshot, phone: line.phoneSnapshot, address: line.addressSnapshot, fuel: line.fuelLabelSnapshot.startsWith("Diesel") ? "DIESEL" : "PETROL", scheduledUnits: line.scheduledUnits.toFixed(3), instructions: line.instructions })); return { data: { sheetNo: row.sheetNo, serviceDate: row.serviceDate.toISOString().slice(0, 10), lines } };
+  }
 
   @UseGuards(SessionGuard)
   @Get("delivery-sheets/:id/pdf")
-  async manifestPdf(@Param("id") id: string, @Res() response: Response) {
+  async manifestPdf(@Req() request: AuthenticatedRequest, @Param("id") id: string, @Res() response: Response) {
+    requirePermission(request, "orders.view");
     const row = await this.prisma.deliverySheet.findUnique({ where: { id }, include: { lines: true } });
     if (!row) throw new NotFoundException("Delivery sheet not found");
     const branding = await this.documentBranding();
@@ -1129,15 +1258,20 @@ export class AppController {
 
   @UseGuards(SessionGuard)
   @Post("dispatches")
-  async createDispatch(@Req() request: AuthenticatedRequest, @Headers("idempotency-key") headerKey: string | undefined, @Body() body: { deliverySheetId?: string; lines?: Array<{ orderLineId?: string; dispatchedUnits?: string }> }) { const actor = requireActor(request); const key = requireIdempotencyKey(headerKey); const replay = await this.prisma.dispatch.findUnique({ where: { idempotencyKey: key }, include: { lines: true } }); if (replay) return { data: { ...replay, replay: true } }; if (!body.lines?.length) throw new BadRequestException("lines are required"); const orderLines = await this.prisma.salesOrderLine.findMany({ where: { id: { in: body.lines.map((line) => line.orderLineId).filter((id): id is string => Boolean(id)) } } }); const byId = new Map(orderLines.map((line) => [line.id, line])); const lines = body.lines.map((line) => { const source = line.orderLineId ? byId.get(line.orderLineId) : undefined; if (!source || !line.dispatchedUnits || !source.litersPerUnitSnapshot) throw new BadRequestException("Dispatch lines must reference confirmed order lines"); const units = positive(line.dispatchedUnits, "dispatchedUnits"); return { orderLineId: source.id, dispatchedUnits: units, dispatchedLiters: units.mul(source.litersPerUnitSnapshot), litersPerUnitSnapshot: source.litersPerUnitSnapshot, fuelId: source.fuelId }; }); const row = await this.prisma.dispatch.create({ data: { dispatchNo: documentNo("DP"), deliverySheetId: body.deliverySheetId, lines: { create: lines.map(({ fuelId: _fuelId, ...line }) => line) }, postedById: actor.id, idempotencyKey: key }, include: { lines: true } }); return { data: row }; }
+  async createDispatch(@Req() request: AuthenticatedRequest, @Headers("idempotency-key") headerKey: string | undefined, @Body() body: { deliverySheetId?: string; lines?: Array<{ orderLineId?: string; dispatchedUnits?: string }> }) { const actor = requirePermission(request, "orders.create"); const key = requireIdempotencyKey(headerKey); const replay = await this.prisma.dispatch.findUnique({ where: { idempotencyKey: key }, include: { lines: true } }); if (replay) return { data: { ...replay, replay: true } }; if (!body.lines?.length) throw new BadRequestException("lines are required"); const orderLines = await this.prisma.salesOrderLine.findMany({ where: { id: { in: body.lines.map((line) => line.orderLineId).filter((id): id is string => Boolean(id)) } } }); const byId = new Map(orderLines.map((line) => [line.id, line])); const lines = body.lines.map((line) => { const source = line.orderLineId ? byId.get(line.orderLineId) : undefined; if (!source || !line.dispatchedUnits || !source.litersPerUnitSnapshot) throw new BadRequestException("Dispatch lines must reference confirmed order lines"); const units = positive(line.dispatchedUnits, "dispatchedUnits"); return { orderLineId: source.id, dispatchedUnits: units, dispatchedLiters: units.mul(source.litersPerUnitSnapshot), litersPerUnitSnapshot: source.litersPerUnitSnapshot, fuelId: source.fuelId }; }); const row = await this.prisma.dispatch.create({ data: { dispatchNo: documentNo("DP"), deliverySheetId: body.deliverySheetId, lines: { create: lines.map(({ fuelId: _fuelId, ...line }) => line) }, postedById: actor.id, idempotencyKey: key }, include: { lines: true } }); return { data: row }; }
 
   @UseGuards(SessionGuard)
   @Get("dispatches")
-  async dispatches() { const rows = await this.prisma.dispatch.findMany({ include: { deliverySheet: true, lines: true }, orderBy: { dispatchNo: "desc" }, take: 100 }); return { data: rows.map((row) => ({ ...row, lines: row.lines.map((line) => ({ ...line, dispatchedUnits: line.dispatchedUnits.toFixed(3), dispatchedLiters: line.dispatchedLiters.toFixed(3) })) })) }; }
+  async dispatches(@Req() request: AuthenticatedRequest) {
+    requirePermission(request, "orders.view");
+    const rows = await this.prisma.dispatch.findMany({ include: { deliverySheet: true, lines: true }, orderBy: { dispatchNo: "desc" }, take: 100 }); return { data: rows.map((row) => ({ ...row, lines: row.lines.map((line) => ({ ...line, dispatchedUnits: line.dispatchedUnits.toFixed(3), dispatchedLiters: line.dispatchedLiters.toFixed(3) })) })) };
+  }
 
   @UseGuards(SessionGuard)
   @Get("dispatches/:id")
-  async dispatch(@Param("id") id: string) { const row = await this.prisma.dispatch.findUnique({ where: { id }, include: { deliverySheet: true, lines: { include: { orderLine: { include: { order: { include: { customer: true } }, fuel: true } }, confirmations: true } }, confirmations: { include: { lines: true } } } }); if (!row) throw new NotFoundException("Dispatch not found"); return { data: { ...row, lines: row.lines.map((line) => ({ ...line, dispatchedUnits: line.dispatchedUnits.toFixed(3), dispatchedLiters: line.dispatchedLiters.toFixed(3), litersPerUnitSnapshot: line.litersPerUnitSnapshot.toFixed(6), confirmations: line.confirmations.map((item) => ({ ...item, acceptedUnits: item.acceptedUnits.toFixed(3), acceptedLiters: item.acceptedLiters.toFixed(3), physicalReturnedLiters: item.physicalReturnedLiters.toFixed(3) })) })) } };
+  async dispatch(@Req() request: AuthenticatedRequest, @Param("id") id: string) {
+    requirePermission(request, "orders.view");
+    const row = await this.prisma.dispatch.findUnique({ where: { id }, include: { deliverySheet: true, lines: { include: { orderLine: { include: { order: { include: { customer: true } }, fuel: true } }, confirmations: true } }, confirmations: { include: { lines: true } } } }); if (!row) throw new NotFoundException("Dispatch not found"); return { data: { ...row, lines: row.lines.map((line) => ({ ...line, dispatchedUnits: line.dispatchedUnits.toFixed(3), dispatchedLiters: line.dispatchedLiters.toFixed(3), litersPerUnitSnapshot: line.litersPerUnitSnapshot.toFixed(6), confirmations: line.confirmations.map((item) => ({ ...item, acceptedUnits: item.acceptedUnits.toFixed(3), acceptedLiters: item.acceptedLiters.toFixed(3), physicalReturnedLiters: item.physicalReturnedLiters.toFixed(3) })) })) } };
   }
 
   @UseGuards(SessionGuard)
@@ -1241,9 +1375,71 @@ export class AppController {
   }
 
   @UseGuards(SessionGuard)
+  @Get("users/:id/permissions")
+  async getUserPermissions(@Req() request: AuthenticatedRequest, @Param("id") id: string) {
+    requirePermission(request, "permissions.manage");
+    const user = await this.prisma.user.findUnique({
+      where: { id },
+      include: { permissions: true }
+    });
+    if (!user) throw new NotFoundException("User not found");
+    const granted = user.role === "OWNER"
+      ? [...PERMISSION_CODES]
+      : user.permissions.length > 0
+        ? user.permissions.map((p) => p.permission)
+        : [...STANDARD_OFFICE_PERMISSIONS];
+    return { data: { userId: user.id, role: user.role, permissions: granted } };
+  }
+
+  @UseGuards(SessionGuard)
+  @Put("users/:id/permissions")
+  async updateUserPermissions(
+    @Req() request: AuthenticatedRequest,
+    @Param("id") id: string,
+    @Body() body: { permissions?: string[] }
+  ) {
+    const actor = requirePermission(request, "permissions.manage");
+    if (!Array.isArray(body?.permissions)) {
+      throw new BadRequestException("permissions array is required");
+    }
+    const user = await this.prisma.user.findUnique({ where: { id } });
+    if (!user) throw new NotFoundException("User not found");
+    if (user.role === "OWNER") {
+      throw new BadRequestException("Milkiiluhu had iyo jeer wuxuu leeyahay dhammaan ogolaanshooyinka (Owner always has full permissions)");
+    }
+
+    const validCodes = new Set<string>(PERMISSION_CODES);
+    const sanitized = [...new Set(body.permissions.filter((p) => validCodes.has(p)))];
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.userPermission.deleteMany({ where: { userId: id } });
+      if (sanitized.length > 0) {
+        await tx.userPermission.createMany({
+          data: sanitized.map((perm) => ({
+            userId: id,
+            permission: perm,
+            grantedById: actor.id
+          }))
+        });
+      }
+      await tx.auditEvent.create({
+        data: {
+          actorId: actor.id,
+          entityType: "UserPermission",
+          entityId: id,
+          action: "PERMISSIONS_UPDATED",
+          afterRedacted: { permissions: sanitized }
+        }
+      });
+    });
+
+    return { data: { userId: id, permissions: sanitized } };
+  }
+
+  @UseGuards(SessionGuard)
   @Get("settings/document-branding")
   async getDocumentBranding(@Req() request: AuthenticatedRequest) {
-    requireActor(request);
+    requirePermission(request, "settings.view");
     const settings = await this.prisma.documentBranding.findUnique({ where: { id: "global" } });
     return { data: { companyName: settings?.companyName ?? "FuelDesk", logoUrl: settings?.logoUrl ?? "", footerText: settings?.footerText ?? "" } };
   }
@@ -1254,7 +1450,7 @@ export class AppController {
     @Req() request: AuthenticatedRequest,
     @Body() body: { companyName?: string; logoUrl?: string | null; footerText?: string | null }
   ) {
-    const actor = requireOwner(request);
+    const actor = requirePermission(request, "settings.manage");
     const companyName = body.companyName?.trim();
     if (!companyName || companyName.length > 120 || /[\u0000-\u001f]/.test(companyName)) {
       throw new BadRequestException("Company name is required and must be 120 characters or fewer");
@@ -1302,7 +1498,7 @@ export class AppController {
 
   @UseGuards(SessionGuard)
   @Post("dispatches/:id/post")
-  async postDispatch(@Req() request: AuthenticatedRequest, @Param("id") id: string, @Headers("idempotency-key") headerKey?: string) { const actor = requireActor(request); const key = requireIdempotencyKey(headerKey); const row = await this.prisma.dispatch.findUnique({ where: { id }, include: { lines: { include: { orderLine: true } } } }); if (!row) throw new NotFoundException("Dispatch not found"); if (row.status === "POSTED" || row.status === "PARTIALLY_RECONCILED" || row.status === "RECONCILED") return { data: { id, status: row.status, replay: true } }; await this.prisma.$transaction(async (tx) => { const claimed = await tx.dispatch.updateMany({ where: { id, status: "PREPARED" }, data: { status: "POSTED", postedAt: new Date(), postedById: actor.id, postIdempotencyKey: key } }); if (claimed.count !== 1) throw new BadRequestException("Dispatch was already posted"); for (const line of row.lines) { const changed = await tx.stockBalance.updateMany({ where: { fuelId: line.orderLine.fuelId, location: "WAREHOUSE", balanceLiters: { gte: line.dispatchedLiters } }, data: { balanceLiters: { decrement: line.dispatchedLiters }, version: { increment: 1 } } }); if (changed.count !== 1) throw new BadRequestException(`Insufficient warehouse stock for ${line.orderLine.fuelId}`); await tx.stockBalance.update({ where: { fuelId_location: { fuelId: line.orderLine.fuelId, location: "IN_TRANSIT" } }, data: { balanceLiters: { increment: line.dispatchedLiters }, version: { increment: 1 } } }); await tx.inventoryMovement.create({ data: { fuelId: line.orderLine.fuelId, location: "WAREHOUSE", signedDeltaLiters: line.dispatchedLiters.neg(), eventType: "DISPATCH", sourceType: "DispatchLine", sourceId: row.id, sourceLineId: line.id, createdById: actor.id } }); await tx.inventoryMovement.create({ data: { fuelId: line.orderLine.fuelId, location: "IN_TRANSIT", signedDeltaLiters: line.dispatchedLiters, eventType: "DISPATCH", sourceType: "DispatchLine", sourceId: row.id, sourceLineId: line.id, createdById: actor.id } }); } const orderIds = [...new Set(row.lines.map((line) => line.orderLine.orderId))]; await tx.salesOrder.updateMany({ where: { id: { in: orderIds }, status: { in: ["SCHEDULED", "CONFIRMED"] } }, data: { status: "IN_PROGRESS" } }); if (row.deliverySheetId) await tx.deliverySheet.update({ where: { id: row.deliverySheetId }, data: { status: "DISPATCHED" } }); await tx.auditEvent.create({ data: { actorId: actor.id, entityType: "Dispatch", entityId: id, action: "POSTED" } }); }); return { data: { id, status: "POSTED" } }; }
+  async postDispatch(@Req() request: AuthenticatedRequest, @Param("id") id: string, @Headers("idempotency-key") headerKey?: string) { const actor = requirePermission(request, "orders.delivery.confirm"); const key = requireIdempotencyKey(headerKey); const row = await this.prisma.dispatch.findUnique({ where: { id }, include: { lines: { include: { orderLine: true } } } }); if (!row) throw new NotFoundException("Dispatch not found"); if (row.status === "POSTED" || row.status === "PARTIALLY_RECONCILED" || row.status === "RECONCILED") return { data: { id, status: row.status, replay: true } }; await this.prisma.$transaction(async (tx) => { const claimed = await tx.dispatch.updateMany({ where: { id, status: "PREPARED" }, data: { status: "POSTED", postedAt: new Date(), postedById: actor.id, postIdempotencyKey: key } }); if (claimed.count !== 1) throw new BadRequestException("Dispatch was already posted"); for (const line of row.lines) { const changed = await tx.stockBalance.updateMany({ where: { fuelId: line.orderLine.fuelId, location: "WAREHOUSE", balanceLiters: { gte: line.dispatchedLiters } }, data: { balanceLiters: { decrement: line.dispatchedLiters }, version: { increment: 1 } } }); if (changed.count !== 1) throw new BadRequestException(`Insufficient warehouse stock for ${line.orderLine.fuelId}`); await tx.stockBalance.update({ where: { fuelId_location: { fuelId: line.orderLine.fuelId, location: "IN_TRANSIT" } }, data: { balanceLiters: { increment: line.dispatchedLiters }, version: { increment: 1 } } }); await tx.inventoryMovement.create({ data: { fuelId: line.orderLine.fuelId, location: "WAREHOUSE", signedDeltaLiters: line.dispatchedLiters.neg(), eventType: "DISPATCH", sourceType: "DispatchLine", sourceId: row.id, sourceLineId: line.id, createdById: actor.id } }); await tx.inventoryMovement.create({ data: { fuelId: line.orderLine.fuelId, location: "IN_TRANSIT", signedDeltaLiters: line.dispatchedLiters, eventType: "DISPATCH", sourceType: "DispatchLine", sourceId: row.id, sourceLineId: line.id, createdById: actor.id } }); } const orderIds = [...new Set(row.lines.map((line) => line.orderLine.orderId))]; await tx.salesOrder.updateMany({ where: { id: { in: orderIds }, status: { in: ["SCHEDULED", "CONFIRMED"] } }, data: { status: "IN_PROGRESS" } }); if (row.deliverySheetId) await tx.deliverySheet.update({ where: { id: row.deliverySheetId }, data: { status: "DISPATCHED" } }); await tx.auditEvent.create({ data: { actorId: actor.id, entityType: "Dispatch", entityId: id, action: "POSTED" } }); }); return { data: { id, status: "POSTED" } }; }
 
   @UseGuards(SessionGuard)
   @Post("dispatches/:id/reconcile")
@@ -1320,7 +1516,7 @@ export class AppController {
       }>;
     }
   ) {
-    const actor = requireActor(request);
+    const actor = requirePermission(request, "orders.delivery.confirm");
     const key = requireIdempotencyKey(headerKey);
     const replay = await this.prisma.deliveryConfirmation.findUnique({ where: { idempotencyKey: key }, include: { lines: true } });
     if (replay) return { data: { ...replay, replay: true } };
@@ -1406,7 +1602,8 @@ export class AppController {
 
   @UseGuards(SessionGuard)
   @Get("invoices/unbilled")
-  async unbilledDeliveries() {
+  async unbilledDeliveries(@Req() request: AuthenticatedRequest) {
+    requirePermission(request, "orders.invoice.view");
     const lines = await this.prisma.deliveryConfirmationLine.findMany({
       where: { invoice: null, acceptedUnits: { gt: new Prisma.Decimal("0") } },
       include: {
@@ -1446,7 +1643,7 @@ export class AppController {
     @Req() request: AuthenticatedRequest,
     @Body() body: { deliveryConfirmationLineId?: string; dispatchId?: string; dueDate?: string; notes?: string }
   ) {
-    const actor = requireActor(request);
+    const actor = requirePermission(request, "orders.invoice.view");
     let targetLineIds: string[] = [];
     if (body.deliveryConfirmationLineId) {
       targetLineIds = [body.deliveryConfirmationLineId];
@@ -1610,12 +1807,14 @@ export class AppController {
   @UseGuards(SessionGuard)
   @Get("invoices")
   async invoices(
+    @Req() request: AuthenticatedRequest,
     @Query("search") search?: string,
     @Query("status") status?: string,
     @Query("customerId") customerId?: string,
     @Query("page") pageQuery?: string,
     @Query("limit") limitQuery?: string
   ) {
+    requirePermission(request, "orders.invoice.view");
     const page = Math.max(1, parseInt(pageQuery ?? "1", 10) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(limitQuery ?? "50", 10) || 50));
     const skip = (page - 1) * limit;
@@ -1673,7 +1872,8 @@ export class AppController {
 
   @UseGuards(SessionGuard)
   @Get("invoices/:id")
-  async invoice(@Param("id") id: string) {
+  async invoice(@Req() request: AuthenticatedRequest, @Param("id") id: string) {
+    requirePermission(request, "orders.invoice.view");
     const inv = await this.prisma.invoice.findUnique({
       where: { id },
       include: {
@@ -1717,7 +1917,8 @@ export class AppController {
 
   @UseGuards(SessionGuard)
   @Get("invoices/:id/pdf")
-  async invoicePdf(@Param("id") id: string, @Res() response: Response) {
+  async invoicePdf(@Req() request: AuthenticatedRequest, @Param("id") id: string, @Res() response: Response) {
+    requirePermission(request, "orders.invoice.view");
     const inv = await this.prisma.invoice.findUnique({
       where: { id },
       include: { customer: { include: { addresses: true } }, lines: { include: { fuel: true, salesUnit: true } } }
@@ -1845,7 +2046,7 @@ export class AppController {
       allocations?: Array<{ invoiceId?: string; amount?: string }>;
     }
   ) {
-    const actor = requireActor(request);
+    const actor = requirePermission(request, "payments.record");
     if (body.allocations?.length) throw new BadRequestException("Payments are assigned automatically to the oldest debt");
     if (!body.customerId || !body.amount) throw new BadRequestException("Customer and amount are required");
     const result = await this.simpleWorkflows.payment(actor, headerKey, {
@@ -1883,12 +2084,14 @@ export class AppController {
   @UseGuards(SessionGuard)
   @Get("payments")
   async payments(
+    @Req() request: AuthenticatedRequest,
     @Query("search") search?: string,
     @Query("customerId") customerId?: string,
     @Query("paymentMethod") paymentMethod?: string,
     @Query("page") pageQuery?: string,
     @Query("limit") limitQuery?: string
   ) {
+    requirePermission(request, "payments.view");
     const page = Math.max(1, parseInt(pageQuery ?? "1", 10) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(limitQuery ?? "50", 10) || 50));
     const skip = (page - 1) * limit;
@@ -1942,7 +2145,8 @@ export class AppController {
 
   @UseGuards(SessionGuard)
   @Get("payments/:id")
-  async payment(@Param("id") id: string) {
+  async payment(@Req() request: AuthenticatedRequest, @Param("id") id: string) {
+    requirePermission(request, "payments.view");
     const p = await this.prisma.payment.findUnique({
       where: { id },
       include: {
@@ -1978,7 +2182,8 @@ export class AppController {
 
   @UseGuards(SessionGuard)
   @Get("payments/:id/receipt-pdf")
-  async paymentReceiptPdf(@Param("id") id: string, @Res() response: Response) {
+  async paymentReceiptPdf(@Req() request: AuthenticatedRequest, @Param("id") id: string, @Res() response: Response) {
+    requirePermission(request, "payments.receipt.view");
     const p = await this.prisma.payment.findUnique({
       where: { id },
       include: { customer: true, recordedBy: true, financialAccount: true, order: { include: { payments: { where: { status: "POSTED" } } } }, allocations: { include: { invoice: true } } }
@@ -2000,11 +2205,13 @@ export class AppController {
     @Headers("idempotency-key") headerKey: string | undefined,
     @Body() body: { reason?: string }
   ) {
-    return { data: await this.simpleWorkflows.reversePayment(requireOwner(request), headerKey, id, body.reason) };
+    const actor = requirePermission(request, "payments.reverse");
+    return { data: await this.simpleWorkflows.reversePayment(actor, headerKey, id, body?.reason) };
   }
   @UseGuards(SessionGuard)
   @Get("financial/debts")
-  async accountsReceivableSummary() {
+  async accountsReceivableSummary(@Req() request?: AuthenticatedRequest) {
+    if (request) requirePermission(request, "accounts.view");
     const customers = await this.prisma.customer.findMany({
       where: { status: { in: ["ACTIVE", "HOLD"] } },
       include: {
@@ -2086,16 +2293,19 @@ export class AppController {
   @UseGuards(SessionGuard)
   @Get("customers/:id/account")
   async customerAccount(
+    @Req() request: AuthenticatedRequest,
     @Param("id") id: string,
     @Query("fromDate") fromDate?: string,
     @Query("toDate") toDate?: string
   ) {
+    requirePermission(request, "customers.view");
     return { data: await this.customerAccounts.read(id, fromDate, toDate) };
   }
 
   @UseGuards(SessionGuard)
   @Get("customers/:id/financial")
-  async customerFinancialSummary(@Param("id") id: string) {
+  async customerFinancialSummary(@Req() request: AuthenticatedRequest, @Param("id") id: string) {
+    requirePermission(request, "accounts.view");
     const account = await this.customerAccounts.read(id);
 
     return {
@@ -2117,7 +2327,8 @@ export class AppController {
 
   @UseGuards(SessionGuard)
   @Get("customers/:id/statement")
-  async customerStatement(@Param("id") id: string, @Query("fromDate") fromDate?: string, @Query("toDate") toDate?: string) {
+  async customerStatement(@Req() request: AuthenticatedRequest, @Param("id") id: string, @Query("fromDate") fromDate?: string, @Query("toDate") toDate?: string) {
+    requirePermission(request, "reports.financial.view");
     const cust = await this.prisma.customer.findUnique({ where: { id } });
     if (!cust) throw new NotFoundException("Customer not found");
 
@@ -2131,7 +2342,9 @@ export class AppController {
 
   @UseGuards(SessionGuard)
   @Get("customers/:id/statement/pdf")
-  async customerStatementPdf(@Param("id") id: string, @Res() response: Response, @Query("fromDate") fromDate?: string, @Query("toDate") toDate?: string) {
+  async customerStatementPdf(@Req() request: AuthenticatedRequest, @Param("id") id: string, @Res() response: Response, @Query("fromDate") fromDate?: string, @Query("toDate") toDate?: string) {
+    requirePermission(request, "reports.export");
+    requirePermission(request, "reports.financial.view");
     const account = await this.customerAccounts.read(id, fromDate, toDate);
     const { start, end } = statementBounds(fromDate, toDate);
     const dateFormatter = new Intl.DateTimeFormat("en-GB", { timeZone: "Africa/Mogadishu", day: "2-digit", month: "short", year: "numeric" });
@@ -2184,7 +2397,8 @@ export class AppController {
 
   @UseGuards(SessionGuard)
   @Get("dashboard/overview")
-  async dashboardOverview() {
+  async dashboardOverview(@Req() request: AuthenticatedRequest) {
+    requirePermission(request, "dashboard.view");
     const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Mogadishu", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
     const dayStart = new Date(`${today}T00:00:00+03:00`);
     const dayEnd = new Date(dayStart.getTime() + 86400000);
@@ -2237,7 +2451,8 @@ export class AppController {
 
   @UseGuards(SessionGuard)
   @Get("dashboard/analytics")
-  async dashboardAnalytics(@Query("fromDate") fromDate?: string, @Query("toDate") toDate?: string) {
+  async dashboardAnalytics(@Req() request: AuthenticatedRequest, @Query("fromDate") fromDate?: string, @Query("toDate") toDate?: string) {
+    requirePermission(request, "dashboard.view");
     const start = fromDate ? new Date(`${fromDate}T00:00:00.000Z`) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const end = toDate ? new Date(`${toDate}T23:59:59.999Z`) : new Date();
 
@@ -2323,14 +2538,17 @@ export class AppController {
 
   @UseGuards(SessionGuard)
   @Get("reports/customers")
-  async reportsCustomers(@Query("search") search?: string) {
+  async reportsCustomers(@Req() request: AuthenticatedRequest, @Query("search") search?: string) {
+    requirePermission(request, "reports.financial.view");
     const res = await this.accountsReceivableSummary();
     return res;
   }
 
   @UseGuards(SessionGuard)
   @Get("reports/customers/pdf")
-  async reportsCustomersPdf(@Res() response: Response) {
+  async reportsCustomersPdf(@Req() request: AuthenticatedRequest, @Res() response: Response) {
+    requirePermission(request, "reports.export");
+    requirePermission(request, "reports.financial.view");
     const data = await this.accountsReceivableSummary();
     const columns: ColumnDef[] = [
       { header: "Code", key: "code", width: 12 },
@@ -2354,7 +2572,9 @@ export class AppController {
 
   @UseGuards(SessionGuard)
   @Get("reports/customers/xlsx")
-  async reportsCustomersXlsx(@Res() response: Response) {
+  async reportsCustomersXlsx(@Req() request: AuthenticatedRequest, @Res() response: Response) {
+    requirePermission(request, "reports.export");
+    requirePermission(request, "reports.financial.view");
     const data = await this.accountsReceivableSummary();
     const columns: ColumnDef[] = [
       { header: "Code", key: "code", width: 12 },
@@ -2378,13 +2598,16 @@ export class AppController {
 
   @UseGuards(SessionGuard)
   @Get("reports/debts")
-  async reportsDebts() {
+  async reportsDebts(@Req() request: AuthenticatedRequest) {
+    requirePermission(request, "reports.financial.view");
     return this.accountsReceivableSummary();
   }
 
   @UseGuards(SessionGuard)
   @Get("reports/debts/pdf")
-  async reportsDebtsPdf(@Res() response: Response) {
+  async reportsDebtsPdf(@Req() request: AuthenticatedRequest, @Res() response: Response) {
+    requirePermission(request, "reports.export");
+    requirePermission(request, "reports.financial.view");
     const data = await this.accountsReceivableSummary();
     const rows = data.data.customers.map((c) => ({
       code: c.code,
@@ -2414,7 +2637,9 @@ export class AppController {
 
   @UseGuards(SessionGuard)
   @Get("reports/debts/xlsx")
-  async reportsDebtsXlsx(@Res() response: Response) {
+  async reportsDebtsXlsx(@Req() request: AuthenticatedRequest, @Res() response: Response) {
+    requirePermission(request, "reports.export");
+    requirePermission(request, "reports.financial.view");
     const data = await this.accountsReceivableSummary();
     const rows = data.data.customers.map((c) => ({
       code: c.code,
@@ -2444,23 +2669,28 @@ export class AppController {
 
   @UseGuards(SessionGuard)
   @Get("reports/statement")
-  async reportsStatement(@Query("customerId") customerId?: string, @Query("fromDate") fromDate?: string, @Query("toDate") toDate?: string) {
+  async reportsStatement(@Req() request: AuthenticatedRequest, @Query("customerId") customerId?: string, @Query("fromDate") fromDate?: string, @Query("toDate") toDate?: string) {
+    requirePermission(request, "reports.financial.view");
     if (!customerId) throw new BadRequestException("customerId parameter is required for statement report");
-    return this.customerStatement(customerId, fromDate, toDate);
+    return this.customerStatement(request, customerId, fromDate, toDate);
   }
 
   @UseGuards(SessionGuard)
   @Get("reports/statement/pdf")
-  async reportsStatementPdf(@Query("customerId") customerId: string, @Res() response: Response) {
+  async reportsStatementPdf(@Req() request: AuthenticatedRequest, @Query("customerId") customerId: string, @Res() response: Response) {
+    requirePermission(request, "reports.export");
+    requirePermission(request, "reports.financial.view");
     if (!customerId) throw new BadRequestException("customerId is required");
-    return this.customerStatementPdf(customerId, response);
+    return this.customerStatementPdf(request, customerId, response);
   }
 
   @UseGuards(SessionGuard)
   @Get("reports/statement/xlsx")
-  async reportsStatementXlsx(@Query("customerId") customerId: string, @Res() response: Response) {
+  async reportsStatementXlsx(@Req() request: AuthenticatedRequest, @Query("customerId") customerId: string, @Res() response: Response) {
+    requirePermission(request, "reports.export");
+    requirePermission(request, "reports.financial.view");
     if (!customerId) throw new BadRequestException("customerId is required");
-    const data = await this.customerStatement(customerId);
+    const data = await this.customerStatement(request, customerId);
     const columns: ColumnDef[] = [
       { header: "Date", key: "occurredAt", width: 18 },
       { header: "Entry Type", key: "entryType", width: 15 },
@@ -2484,7 +2714,8 @@ export class AppController {
 
   @UseGuards(SessionGuard)
   @Get("reports/sales")
-  async reportsSales(@Query("fromDate") fromDate?: string, @Query("toDate") toDate?: string, @Query("customerId") customerId?: string) {
+  async reportsSales(@Req() request: AuthenticatedRequest, @Query("fromDate") fromDate?: string, @Query("toDate") toDate?: string, @Query("customerId") customerId?: string) {
+    requirePermission(request, "reports.view");
     const start = fromDate ? new Date(`${fromDate}T00:00:00.000Z`) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const end = toDate ? new Date(`${toDate}T23:59:59.999Z`) : new Date();
 
@@ -2517,8 +2748,10 @@ export class AppController {
 
   @UseGuards(SessionGuard)
   @Get("reports/sales/pdf")
-  async reportsSalesPdf(@Query("fromDate") fromDate: string | undefined, @Query("toDate") toDate: string | undefined, @Query("customerId") customerId: string | undefined, @Res() response: Response) {
-    const data = await this.reportsSales(fromDate, toDate, customerId);
+  async reportsSalesPdf(@Req() request: AuthenticatedRequest, @Query("fromDate") fromDate: string | undefined, @Query("toDate") toDate: string | undefined, @Query("customerId") customerId: string | undefined, @Res() response: Response) {
+    requirePermission(request, "reports.export");
+    requirePermission(request, "reports.view");
+    const data = await this.reportsSales(request, fromDate, toDate, customerId);
     const columns: ColumnDef[] = [
       { header: "Order No", key: "orderNo", width: 14 },
       { header: "Date", key: "orderDate", width: 12 },
@@ -2535,8 +2768,10 @@ export class AppController {
 
   @UseGuards(SessionGuard)
   @Get("reports/sales/xlsx")
-  async reportsSalesXlsx(@Query("fromDate") fromDate: string | undefined, @Query("toDate") toDate: string | undefined, @Query("customerId") customerId: string | undefined, @Res() response: Response) {
-    const data = await this.reportsSales(fromDate, toDate, customerId);
+  async reportsSalesXlsx(@Req() request: AuthenticatedRequest, @Query("fromDate") fromDate: string | undefined, @Query("toDate") toDate: string | undefined, @Query("customerId") customerId: string | undefined, @Res() response: Response) {
+    requirePermission(request, "reports.export");
+    requirePermission(request, "reports.view");
+    const data = await this.reportsSales(request, fromDate, toDate, customerId);
     const columns: ColumnDef[] = [
       { header: "Order No", key: "orderNo", width: 14 },
       { header: "Date", key: "orderDate", width: 12 },
@@ -2553,7 +2788,8 @@ export class AppController {
 
   @UseGuards(SessionGuard)
   @Get("reports/collections")
-  async reportsCollections(@Query("fromDate") fromDate?: string, @Query("toDate") toDate?: string, @Query("customerId") customerId?: string) {
+  async reportsCollections(@Req() request: AuthenticatedRequest, @Query("fromDate") fromDate?: string, @Query("toDate") toDate?: string, @Query("customerId") customerId?: string) {
+    requirePermission(request, "reports.financial.view");
     const start = fromDate ? new Date(`${fromDate}T00:00:00.000Z`) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const end = toDate ? new Date(`${toDate}T23:59:59.999Z`) : new Date();
 
@@ -2585,8 +2821,10 @@ export class AppController {
 
   @UseGuards(SessionGuard)
   @Get("reports/collections/pdf")
-  async reportsCollectionsPdf(@Query("fromDate") fromDate: string | undefined, @Query("toDate") toDate: string | undefined, @Query("customerId") customerId: string | undefined, @Res() response: Response) {
-    const data = await this.reportsCollections(fromDate, toDate, customerId);
+  async reportsCollectionsPdf(@Req() request: AuthenticatedRequest, @Query("fromDate") fromDate: string | undefined, @Query("toDate") toDate: string | undefined, @Query("customerId") customerId: string | undefined, @Res() response: Response) {
+    requirePermission(request, "reports.export");
+    requirePermission(request, "reports.financial.view");
+    const data = await this.reportsCollections(request, fromDate, toDate, customerId);
     const columns: ColumnDef[] = [
       { header: "Date", key: "paymentDate", width: 12 },
       { header: "Customer", key: "customerName", width: 22 },
@@ -2601,8 +2839,10 @@ export class AppController {
 
   @UseGuards(SessionGuard)
   @Get("reports/collections/xlsx")
-  async reportsCollectionsXlsx(@Query("fromDate") fromDate: string | undefined, @Query("toDate") toDate: string | undefined, @Query("customerId") customerId: string | undefined, @Res() response: Response) {
-    const data = await this.reportsCollections(fromDate, toDate, customerId);
+  async reportsCollectionsXlsx(@Req() request: AuthenticatedRequest, @Query("fromDate") fromDate: string | undefined, @Query("toDate") toDate: string | undefined, @Query("customerId") customerId: string | undefined, @Res() response: Response) {
+    requirePermission(request, "reports.export");
+    requirePermission(request, "reports.financial.view");
+    const data = await this.reportsCollections(request, fromDate, toDate, customerId);
     const columns: ColumnDef[] = [
       { header: "Date", key: "paymentDate", width: 12 },
       { header: "Customer", key: "customerName", width: 22 },
@@ -2617,7 +2857,8 @@ export class AppController {
 
   @UseGuards(SessionGuard)
   @Get("reports/inventory")
-  async reportsInventory(@Query("fuelId") fuelId?: string) {
+  async reportsInventory(@Req() request: AuthenticatedRequest, @Query("fuelId") fuelId?: string) {
+    requirePermission(request, "reports.view");
     const balances = await this.prisma.stockBalance.findMany({
       where: fuelId ? { fuelId } : undefined,
       include: { fuel: true },
@@ -2634,8 +2875,10 @@ export class AppController {
 
   @UseGuards(SessionGuard)
   @Get("reports/inventory/pdf")
-  async reportsInventoryPdf(@Res() response: Response) {
-    const data = await this.reportsInventory();
+  async reportsInventoryPdf(@Req() request: AuthenticatedRequest, @Res() response: Response) {
+    requirePermission(request, "reports.export");
+    requirePermission(request, "reports.view");
+    const data = await this.reportsInventory(request);
     const columns: ColumnDef[] = [
       { header: "Fuel Code", key: "fuelCode", width: 15 },
       { header: "Fuel Name", key: "fuelName", width: 25 },
@@ -2648,8 +2891,10 @@ export class AppController {
 
   @UseGuards(SessionGuard)
   @Get("reports/inventory/xlsx")
-  async reportsInventoryXlsx(@Res() response: Response) {
-    const data = await this.reportsInventory();
+  async reportsInventoryXlsx(@Req() request: AuthenticatedRequest, @Res() response: Response) {
+    requirePermission(request, "reports.export");
+    requirePermission(request, "reports.view");
+    const data = await this.reportsInventory(request);
     const columns: ColumnDef[] = [
       { header: "Fuel Code", key: "fuelCode", width: 15 },
       { header: "Fuel Name", key: "fuelName", width: 25 },
@@ -2663,7 +2908,8 @@ export class AppController {
   @UseGuards(SessionGuard)
   @Get(["reports/stock-receipts", "reports/tanker-receipts"])
   async reportsStockReceipts(@Req() request: AuthenticatedRequest, @Query("fromDate") fromDate?: string, @Query("toDate") toDate?: string) {
-    const isOwner = request.actor?.role === "OWNER";
+    requirePermission(request, "reports.view");
+    const canSeeCost = hasPermission(requireActor(request), "stock.purchase_cost.view");
     const start = fromDate ? new Date(`${fromDate}T00:00:00.000Z`) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const end = toDate ? new Date(`${toDate}T23:59:59.999Z`) : new Date();
 
@@ -2683,8 +2929,8 @@ export class AppController {
         quantityFuusto: (l.quantityFuusto ?? l.actualLiters.div(240)).toFixed(3),
         litersPerFuusto: (l.litersPerFuustoSnapshot ?? dec("240")).toFixed(3),
         actualLiters: l.actualLiters.toFixed(3),
-        unitPurchaseCost: isOwner ? jsonDecimal(l.unitPurchaseCost) : undefined,
-        totalPurchaseCost: isOwner ? (l.totalPurchaseCost ? l.totalPurchaseCost.toFixed(4) : (l.unitPurchaseCost ? (l.quantityFuusto ? l.quantityFuusto.mul(l.unitPurchaseCost) : l.actualLiters.div(240).mul(l.unitPurchaseCost)).toFixed(4) : null)) : undefined
+        unitPurchaseCost: canSeeCost ? jsonDecimal(l.unitPurchaseCost) : undefined,
+        totalPurchaseCost: canSeeCost ? (l.totalPurchaseCost ? l.totalPurchaseCost.toFixed(4) : (l.unitPurchaseCost ? (l.quantityFuusto ? l.quantityFuusto.mul(l.unitPurchaseCost) : l.actualLiters.div(240).mul(l.unitPurchaseCost)).toFixed(4) : null)) : undefined
       }))
     );
 
@@ -2694,7 +2940,9 @@ export class AppController {
   @UseGuards(SessionGuard)
   @Get(["reports/stock-receipts/pdf", "reports/tanker-receipts/pdf"])
   async reportsStockReceiptsPdf(@Req() request: AuthenticatedRequest, @Query("fromDate") fromDate: string | undefined, @Query("toDate") toDate: string | undefined, @Res() response: Response) {
-    const isOwner = request.actor?.role === "OWNER";
+    requirePermission(request, "reports.export");
+    requirePermission(request, "reports.view");
+    const canSeeCost = hasPermission(requireActor(request), "stock.purchase_cost.view");
     const data = await this.reportsStockReceipts(request, fromDate, toDate);
     const columns: ColumnDef[] = [
       { header: "Receipt No", key: "receiptNo", width: 14 },
@@ -2703,7 +2951,7 @@ export class AppController {
       { header: "Fuel", key: "fuelName", width: 14 },
       { header: "Quantity (Fuusto)", key: "quantityFuusto", format: "decimal", align: "right" },
       { header: "Liters", key: "actualLiters", format: "decimal", align: "right" },
-      ...(isOwner
+      ...(canSeeCost
         ? [
             { header: "Cost/Fuusto ($)", key: "unitPurchaseCost", format: "currency" as const, align: "right" as const },
             { header: "Total Cost ($)", key: "totalPurchaseCost", format: "currency" as const, align: "right" as const }
@@ -2718,7 +2966,9 @@ export class AppController {
   @UseGuards(SessionGuard)
   @Get(["reports/stock-receipts/xlsx", "reports/tanker-receipts/xlsx"])
   async reportsStockReceiptsXlsx(@Req() request: AuthenticatedRequest, @Query("fromDate") fromDate: string | undefined, @Query("toDate") toDate: string | undefined, @Res() response: Response) {
-    const isOwner = request.actor?.role === "OWNER";
+    requirePermission(request, "reports.export");
+    requirePermission(request, "reports.view");
+    const canSeeCost = hasPermission(requireActor(request), "stock.purchase_cost.view");
     const data = await this.reportsStockReceipts(request, fromDate, toDate);
     const columns: ColumnDef[] = [
       { header: "Receipt No", key: "receiptNo", width: 14 },
@@ -2727,7 +2977,7 @@ export class AppController {
       { header: "Fuel", key: "fuelName", width: 14 },
       { header: "Quantity (Fuusto)", key: "quantityFuusto", format: "decimal", align: "right" },
       { header: "Liters", key: "actualLiters", format: "decimal", align: "right" },
-      ...(isOwner
+      ...(canSeeCost
         ? [
             { header: "Cost/Fuusto ($)", key: "unitPurchaseCost", format: "currency" as const, align: "right" as const },
             { header: "Total Cost ($)", key: "totalPurchaseCost", format: "currency" as const, align: "right" as const }
@@ -2741,7 +2991,8 @@ export class AppController {
 
   @UseGuards(SessionGuard)
   @Get("reports/deliveries")
-  async reportsDeliveries(@Query("fromDate") fromDate?: string, @Query("toDate") toDate?: string) {
+  async reportsDeliveries(@Req() request: AuthenticatedRequest, @Query("fromDate") fromDate?: string, @Query("toDate") toDate?: string) {
+    requirePermission(request, "reports.view");
     const start = fromDate ? new Date(`${fromDate}T00:00:00.000Z`) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const end = toDate ? new Date(`${toDate}T23:59:59.999Z`) : new Date();
 
@@ -2784,8 +3035,10 @@ export class AppController {
 
   @UseGuards(SessionGuard)
   @Get("reports/deliveries/pdf")
-  async reportsDeliveriesPdf(@Query("fromDate") fromDate: string | undefined, @Query("toDate") toDate: string | undefined, @Res() response: Response) {
-    const data = await this.reportsDeliveries(fromDate, toDate);
+  async reportsDeliveriesPdf(@Req() request: AuthenticatedRequest, @Query("fromDate") fromDate: string | undefined, @Query("toDate") toDate: string | undefined, @Res() response: Response) {
+    requirePermission(request, "reports.export");
+    requirePermission(request, "reports.view");
+    const data = await this.reportsDeliveries(request, fromDate, toDate);
     const columns: ColumnDef[] = [
       { header: "Dispatch No", key: "dispatchNo", width: 14 },
       { header: "Service Date", key: "serviceDate", width: 12 },
@@ -2802,8 +3055,10 @@ export class AppController {
 
   @UseGuards(SessionGuard)
   @Get("reports/deliveries/xlsx")
-  async reportsDeliveriesXlsx(@Query("fromDate") fromDate: string | undefined, @Query("toDate") toDate: string | undefined, @Res() response: Response) {
-    const data = await this.reportsDeliveries(fromDate, toDate);
+  async reportsDeliveriesXlsx(@Req() request: AuthenticatedRequest, @Query("fromDate") fromDate: string | undefined, @Query("toDate") toDate: string | undefined, @Res() response: Response) {
+    requirePermission(request, "reports.export");
+    requirePermission(request, "reports.view");
+    const data = await this.reportsDeliveries(request, fromDate, toDate);
     const columns: ColumnDef[] = [
       { header: "Dispatch No", key: "dispatchNo", width: 14 },
       { header: "Service Date", key: "serviceDate", width: 12 },
@@ -2820,7 +3075,8 @@ export class AppController {
 
   @UseGuards(SessionGuard)
   @Get("reports/invoices")
-  async reportsInvoices(@Query("fromDate") fromDate?: string, @Query("toDate") toDate?: string, @Query("customerId") customerId?: string, @Query("status") status?: string) {
+  async reportsInvoices(@Req() request: AuthenticatedRequest, @Query("fromDate") fromDate?: string, @Query("toDate") toDate?: string, @Query("customerId") customerId?: string, @Query("status") status?: string) {
+    requirePermission(request, "reports.financial.view");
     const start = fromDate ? new Date(`${fromDate}T00:00:00.000Z`) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const end = toDate ? new Date(`${toDate}T23:59:59.999Z`) : new Date();
 
@@ -2850,8 +3106,10 @@ export class AppController {
 
   @UseGuards(SessionGuard)
   @Get("reports/invoices/pdf")
-  async reportsInvoicesPdf(@Query("fromDate") fromDate: string | undefined, @Query("toDate") toDate: string | undefined, @Query("customerId") customerId: string | undefined, @Query("status") status: string | undefined, @Res() response: Response) {
-    const data = await this.reportsInvoices(fromDate, toDate, customerId, status);
+  async reportsInvoicesPdf(@Req() request: AuthenticatedRequest, @Query("fromDate") fromDate: string | undefined, @Query("toDate") toDate: string | undefined, @Query("customerId") customerId: string | undefined, @Query("status") status: string | undefined, @Res() response: Response) {
+    requirePermission(request, "reports.export");
+    requirePermission(request, "reports.financial.view");
+    const data = await this.reportsInvoices(request, fromDate, toDate, customerId, status);
     const columns: ColumnDef[] = [
       { header: "Invoice No", key: "invoiceNo", width: 14 },
       { header: "Issue Date", key: "issueDate", width: 12 },
@@ -2868,8 +3126,10 @@ export class AppController {
 
   @UseGuards(SessionGuard)
   @Get("reports/invoices/xlsx")
-  async reportsInvoicesXlsx(@Query("fromDate") fromDate: string | undefined, @Query("toDate") toDate: string | undefined, @Query("customerId") customerId: string | undefined, @Query("status") status: string | undefined, @Res() response: Response) {
-    const data = await this.reportsInvoices(fromDate, toDate, customerId, status);
+  async reportsInvoicesXlsx(@Req() request: AuthenticatedRequest, @Query("fromDate") fromDate: string | undefined, @Query("toDate") toDate: string | undefined, @Query("customerId") customerId: string | undefined, @Query("status") status: string | undefined, @Res() response: Response) {
+    requirePermission(request, "reports.export");
+    requirePermission(request, "reports.financial.view");
+    const data = await this.reportsInvoices(request, fromDate, toDate, customerId, status);
     const columns: ColumnDef[] = [
       { header: "Invoice No", key: "invoiceNo", width: 14 },
       { header: "Issue Date", key: "issueDate", width: 12 },
@@ -2887,7 +3147,7 @@ export class AppController {
   @UseGuards(SessionGuard)
   @Get("reports/profitability")
   async reportsProfitability(@Req() request: AuthenticatedRequest, @Query("fromDate") fromDate?: string, @Query("toDate") toDate?: string) {
-    requireOwner(request);
+    requirePermission(request, "reports.profit.view");
     const start = fromDate ? new Date(`${fromDate}T00:00:00.000Z`) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const end = toDate ? new Date(`${toDate}T23:59:59.999Z`) : new Date();
 
@@ -2941,7 +3201,8 @@ export class AppController {
   @UseGuards(SessionGuard)
   @Get("reports/profitability/pdf")
   async reportsProfitabilityPdf(@Req() request: AuthenticatedRequest, @Query("fromDate") fromDate: string | undefined, @Query("toDate") toDate: string | undefined, @Res() response: Response) {
-    requireOwner(request);
+    requirePermission(request, "reports.export");
+    requirePermission(request, "reports.profit.view");
     const data = await this.reportsProfitability(request, fromDate, toDate);
     const rows = [
       { metric: "Confirmed Invoiced Revenue", amount: data.data.revenue.confirmedInvoicedRevenue, count: data.data.revenue.invoiceCount },
@@ -2959,7 +3220,8 @@ export class AppController {
   @UseGuards(SessionGuard)
   @Get("reports/profitability/xlsx")
   async reportsProfitabilityXlsx(@Req() request: AuthenticatedRequest, @Query("fromDate") fromDate: string | undefined, @Query("toDate") toDate: string | undefined, @Res() response: Response) {
-    requireOwner(request);
+    requirePermission(request, "reports.export");
+    requirePermission(request, "reports.profit.view");
     const data = await this.reportsProfitability(request, fromDate, toDate);
     const rows = [
       { metric: "Confirmed Invoiced Revenue", amount: data.data.revenue.confirmedInvoicedRevenue, count: data.data.revenue.invoiceCount },
@@ -2988,7 +3250,7 @@ export class AppController {
     @Query("page") pageQuery?: string,
     @Query("limit") limitQuery?: string
   ) {
-    requireOwner(request);
+    requirePermission(request, "audit.view");
     const page = Math.max(1, parseInt(pageQuery ?? "1", 10) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(limitQuery ?? "50", 10) || 50));
     const skip = (page - 1) * limit;
@@ -3039,7 +3301,8 @@ export class AppController {
     @Query("toDate") toDate: string | undefined,
     @Res() response: Response
   ) {
-    requireOwner(request);
+    requirePermission(request, "reports.export");
+    requirePermission(request, "audit.view");
     const data = await this.audits(request, entityType, action, undefined, fromDate, toDate, "1", "500");
     const rows = data.data.items.map((a) => ({
       createdAt: a.createdAt.toISOString().slice(0, 19).replace("T", " "),
@@ -3071,7 +3334,8 @@ export class AppController {
     @Query("toDate") toDate: string | undefined,
     @Res() response: Response
   ) {
-    requireOwner(request);
+    requirePermission(request, "reports.export");
+    requirePermission(request, "audit.view");
     const data = await this.audits(request, entityType, action, undefined, fromDate, toDate, "1", "500");
     const rows = data.data.items.map((a) => ({
       createdAt: a.createdAt.toISOString().slice(0, 19).replace("T", " "),

@@ -9,6 +9,7 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
+    "@fuel/shared": "workspace:*",
     "@tanstack/react-query": "5.87.1",
     "decimal.js": "10.6.0",
     "lucide-react": "1.53.0",

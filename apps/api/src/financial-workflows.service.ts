@@ -40,6 +40,14 @@ export class FinancialWorkflowsService {
     if (actor.role !== "OWNER") throw new ForbiddenException("Owner permission required");
   }
 
+  private accountMethod(type: string, value?: string) {
+    if (type === "CASH") return "CASH" as const;
+    if (type === "BANK") return "BANK_TRANSFER" as const;
+    if (type === "OTHER") return "OTHER" as const;
+    if (value === "EVC_PLUS" || value === "EDAHAB" || value === "SOMNET") return value;
+    throw new BadRequestException("Dooro adeegga lacagta: EVC Plus, E-Dahab ama Somnet.");
+  }
+
   private async execute(actor: Actor, key: string | undefined, kind: string, input: object, work: (tx: Tx) => Promise<Prisma.InputJsonObject>) {
     if (!key || key.length < 12 || key.length > 180) throw new BadRequestException("Idempotency-Key is required");
     const hash = createHash("sha256").update(JSON.stringify(input)).digest("hex");
@@ -65,17 +73,33 @@ export class FinancialWorkflowsService {
 
   async postMovement(tx: Tx, actor: Actor, input: { accountId: string; direction: Direction; kind: Kind; amount: Prisma.Decimal; occurredAt: Date; sourceType: string; sourceId: string; referenceNo: string; description?: string; reversalOfId?: string }) {
     const account = await tx.financialAccount.findUnique({ where: { id: input.accountId } });
-    if (!account || !account.active) throw new BadRequestException("Select an active financial account");
+    const correction = ["CUSTOMER_PAYMENT_REVERSAL", "SUPPLIER_PAYMENT_REVERSAL", "EXPENSE_REVERSAL"].includes(input.kind) || input.sourceType === "AccountTransferReversal";
+    if (correction) this.owner(actor);
+    if (!account || (!account.active && !correction)) throw new BadRequestException("Select an active financial account");
+    if (!input.amount.isFinite() || input.amount.lte(0)) throw new BadRequestException("Amount must be positive");
+    if (input.reversalOfId) {
+      const original = await tx.financialAccountMovement.findUnique({ where: { id: input.reversalOfId } });
+      if (!original || original.accountId !== account.id || !original.amount.eq(input.amount) || original.direction === input.direction) throw new BadRequestException("Invalid correcting movement");
+    }
     if (actor.role === "OFFICE_EMPLOYEE" && !account.allowOfficePayments) throw new ForbiddenException("This account is not available for office payments");
     const existing = await tx.financialAccountMovement.findUnique({ where: { accountId_sourceType_sourceId_kind: { accountId: account.id, sourceType: input.sourceType, sourceId: input.sourceId, kind: input.kind } } });
     if (existing) return existing;
     const next = input.direction === "MONEY_IN" ? account.currentBalance.add(input.amount) : account.currentBalance.sub(input.amount);
-    if (input.direction === "MONEY_OUT") {
+    if (input.direction === "MONEY_OUT" && !correction) {
       if (account.overdraftPolicy === "UNSET") throw new BadRequestException("Owner must set this account's negative-balance policy first");
       if (account.overdraftPolicy === "BLOCK_NEGATIVE" && next.lt(0)) throw new BadRequestException("Account balance is too low for this payment");
     }
     await tx.financialAccount.update({ where: { id: account.id }, data: { currentBalance: next } });
+    await tx.auditEvent.create({ data: { actorId: actor.id, entityType: "FinancialAccount", entityId: account.id, action: correction && next.lt(0) ? "CORRECTION_NEGATIVE_BALANCE" : "MOVEMENT_POSTED", reason: input.description, afterRedacted: { sourceType: input.sourceType, sourceId: input.sourceId, balance: next.toFixed(4) } } });
     return tx.financialAccountMovement.create({ data: { accountId: account.id, occurredAt: input.occurredAt, direction: input.direction, kind: input.kind, amount: input.amount, balanceAfter: next, sourceType: input.sourceType, sourceId: input.sourceId, referenceNo: input.referenceNo, description: input.description, createdById: actor.id, reversalOfId: input.reversalOfId } });
+  }
+
+  async paymentMethod(tx: Tx, accountId: string) {
+    const account = await tx.financialAccount.findUnique({ where: { id: accountId } });
+    if (!account || !account.active) throw new BadRequestException("Select an active financial account");
+    const method = account.paymentMethod ?? (account.type === "CASH" ? "CASH" : account.type === "BANK" ? "BANK_TRANSFER" : account.type === "OTHER" ? "OTHER" : null);
+    if (!method) throw new BadRequestException("Milkiiluhu ha doorto adeegga lacagta ee akoonkan marka hore.");
+    return method;
   }
 
   async selectableAccounts(actor: Actor) {
@@ -96,15 +120,17 @@ export class FinancialWorkflowsService {
     return rows.map((row) => ({ id: row.id, code: row.code, name: row.name, type: row.type, identifierMasked: row.identifierMasked, currencyCode: row.currencyCode, openingBalance: row.openingBalance.toFixed(4), openingBalanceAsOf: row.openingBalanceAsOf.toISOString(), currentBalance: row.currentBalance.toFixed(4), overdraftPolicy: row.overdraftPolicy, allowOfficePayments: row.allowOfficePayments, active: row.active, movementCount: row._count.movements }));
   }
 
-  createAccount(actor: Actor, key: string | undefined, input: { name?: string; type?: string; identifierMasked?: string; openingBalance?: string; openingBalanceAsOf?: string; overdraftPolicy?: string; allowOfficePayments?: boolean; notes?: string }) {
+  createAccount(actor: Actor, key: string | undefined, input: { name?: string; type?: string; paymentMethod?: string; identifierMasked?: string; openingBalance?: string; openingBalanceAsOf?: string; overdraftPolicy?: string; allowOfficePayments?: boolean; notes?: string }) {
     this.owner(actor);
     return this.execute(actor, key, "financial-account-create", input, async (tx) => {
       const name = text(input.name, "Account name", 120);
       if (!input.type || !["CASH", "MOBILE_MONEY", "BANK", "OTHER"].includes(input.type)) throw new BadRequestException("Select an account type");
-      if (!input.overdraftPolicy || !["BLOCK_NEGATIVE", "ALLOW_NEGATIVE"].includes(input.overdraftPolicy)) throw new BadRequestException("Choose the negative-balance policy");
+      const policy = input.overdraftPolicy ?? "BLOCK_NEGATIVE";
+      if (!["BLOCK_NEGATIVE", "ALLOW_NEGATIVE"].includes(policy)) throw new BadRequestException("Choose the negative-balance policy");
+      const method = this.accountMethod(input.type, input.paymentMethod);
       const opening = money(input.openingBalance ?? "", "Opening balance", true);
       if (opening.lt(0) && input.overdraftPolicy !== "ALLOW_NEGATIVE") throw new BadRequestException("A negative opening balance requires Allow negative balance");
-      const account = await tx.financialAccount.create({ data: { code: documentNo("ACC"), name, type: input.type as "CASH" | "MOBILE_MONEY" | "BANK" | "OTHER", identifierMasked: optionalText(input.identifierMasked, 120), openingBalance: opening, openingBalanceAsOf: dateValue(input.openingBalanceAsOf, "Opening balance date"), currentBalance: opening, overdraftPolicy: input.overdraftPolicy as "BLOCK_NEGATIVE" | "ALLOW_NEGATIVE", allowOfficePayments: input.allowOfficePayments !== false, notes: optionalText(input.notes), createdById: actor.id } });
+      const account = await tx.financialAccount.create({ data: { code: documentNo("ACC"), name, type: input.type as "CASH" | "MOBILE_MONEY" | "BANK" | "OTHER", paymentMethod: method, identifierMasked: optionalText(input.identifierMasked, 120), openingBalance: opening, openingBalanceAsOf: input.openingBalanceAsOf ? dateValue(input.openingBalanceAsOf, "Opening balance date") : new Date(), currentBalance: opening, overdraftPolicy: policy as "BLOCK_NEGATIVE" | "ALLOW_NEGATIVE", allowOfficePayments: input.allowOfficePayments !== false, notes: optionalText(input.notes), createdById: actor.id } });
       await tx.financialAccountMovement.create({ data: { accountId: account.id, occurredAt: account.openingBalanceAsOf, direction: opening.lt(0) ? "MONEY_OUT" : "MONEY_IN", kind: "OPENING_BALANCE", amount: opening.abs(), balanceAfter: opening, sourceType: "FinancialAccount", sourceId: account.id, referenceNo: account.code, description: "Owner-entered opening balance", createdById: actor.id } });
       await tx.auditEvent.create({ data: { actorId: actor.id, entityType: "FinancialAccount", entityId: account.id, action: "CREATED" } });
       return { id: account.id };
@@ -118,10 +144,29 @@ export class FinancialWorkflowsService {
     return { id: row.id, name: row.name, currentBalance: row.currentBalance.toFixed(4), movements: row.movements.map((m) => ({ id: m.id, occurredAt: m.occurredAt.toISOString(), direction: m.direction, kind: m.kind, amount: m.amount.toFixed(4), balanceAfter: m.balanceAfter.toFixed(4), referenceNo: m.referenceNo, description: m.description, sourceType: m.sourceType, sourceId: m.sourceId })) };
   }
 
-  updateAccount(actor: Actor, id: string, input: { name?: string; identifierMasked?: string; overdraftPolicy?: string; allowOfficePayments?: boolean; active?: boolean }) {
+  async updateAccount(actor: Actor, id: string, input: { name?: string; paymentMethod?: string; identifierMasked?: string; overdraftPolicy?: string; allowOfficePayments?: boolean; active?: boolean }) {
     this.owner(actor);
     if (input.overdraftPolicy !== undefined && !["BLOCK_NEGATIVE", "ALLOW_NEGATIVE"].includes(input.overdraftPolicy)) throw new BadRequestException("Choose a valid negative-balance policy");
-    return this.db.financialAccount.update({ where: { id }, data: { ...(input.name === undefined ? {} : { name: text(input.name, "Account name", 120) }), ...(input.identifierMasked === undefined ? {} : { identifierMasked: optionalText(input.identifierMasked, 120) }), ...(input.overdraftPolicy === undefined ? {} : { overdraftPolicy: input.overdraftPolicy as "BLOCK_NEGATIVE" | "ALLOW_NEGATIVE" }), ...(input.allowOfficePayments === undefined ? {} : { allowOfficePayments: input.allowOfficePayments }), ...(input.active === undefined ? {} : { active: input.active }) } });
+    return this.db.$transaction(async tx => {
+      const before = await tx.financialAccount.findUniqueOrThrow({ where: { id } });
+      const row = await tx.financialAccount.update({ where: { id }, data: { ...(input.name === undefined ? {} : { name: text(input.name, "Account name", 120) }), ...(input.paymentMethod === undefined ? {} : { paymentMethod: this.accountMethod(before.type, input.paymentMethod) }), ...(input.identifierMasked === undefined ? {} : { identifierMasked: optionalText(input.identifierMasked, 120) }), ...(input.overdraftPolicy === undefined ? {} : { overdraftPolicy: input.overdraftPolicy as "BLOCK_NEGATIVE" | "ALLOW_NEGATIVE" }), ...(input.allowOfficePayments === undefined ? {} : { allowOfficePayments: input.allowOfficePayments }), ...(input.active === undefined ? {} : { active: input.active }) } });
+      await tx.auditEvent.create({ data: { actorId: actor.id, entityType: "FinancialAccount", entityId: id, action: "UPDATED", beforeRedacted: { name: before.name, active: before.active, overdraftPolicy: before.overdraftPolicy, allowOfficePayments: before.allowOfficePayments }, afterRedacted: { name: row.name, active: row.active, overdraftPolicy: row.overdraftPolicy, allowOfficePayments: row.allowOfficePayments } } });
+      return { id: row.id };
+    });
+  }
+
+  reverseTransfer(actor: Actor, key: string | undefined, id: string, reasonInput: unknown) {
+    this.owner(actor); const reason = text(reasonInput, "Reason");
+    return this.execute(actor, key, "transfer-reversal", { id, reason }, async tx => {
+      const row = await tx.accountTransfer.findUnique({ where: { id } });
+      if (!row) throw new NotFoundException("Transfer not found");
+      if (row.status === "REVERSED") return { id, status: "REVERSED", replay: true };
+      const originals = await tx.financialAccountMovement.findMany({ where: { sourceType: "AccountTransfer", sourceId: id } });
+      if (originals.length !== 2) throw new ConflictException("Wareejintan waxay u baahan tahay dib-u-eegis.");
+      await tx.accountTransfer.update({ where: { id }, data: { status: "REVERSED", reversalReason: reason, reversedById: actor.id, reversedAt: new Date() } });
+      for (const original of originals) await this.postMovement(tx, actor, { accountId: original.accountId, direction: original.direction === "MONEY_IN" ? "MONEY_OUT" : "MONEY_IN", kind: "ADJUSTMENT", amount: original.amount, occurredAt: new Date(), sourceType: "AccountTransferReversal", sourceId: id, referenceNo: row.transferNo, description: reason, reversalOfId: original.id });
+      return { id, status: "REVERSED" };
+    });
   }
 
   transfer(actor: Actor, key: string | undefined, input: { fromAccountId?: string; toAccountId?: string; amount?: string; transferDate?: string; reference?: string; notes?: string }) {

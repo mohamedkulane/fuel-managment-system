@@ -3,7 +3,7 @@ import { soError } from "./so";
 export const apiBase = envUrl
   ? (envUrl.endsWith("/api/v1") ? envUrl : `${envUrl}/api/v1`)
   : "http://localhost:4000/api/v1";
-export type Actor = { id: string; displayName: string; email: string; role: "OWNER" | "OFFICE_EMPLOYEE" };
+export type Actor = { id: string; displayName: string; email: string; role: "OWNER" | "OFFICE_EMPLOYEE"; permissions: string[] };
 
 export type PaginatedResponse<T> = {
   items: T[];

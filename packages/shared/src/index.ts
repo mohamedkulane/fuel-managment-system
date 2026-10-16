@@ -94,3 +94,5 @@ export const reverseInvoiceSchema = z.object({
 });
 export type ReverseInvoiceDto = z.infer<typeof reverseInvoiceSchema>;
 
+export * from "./permissions.js";
+
