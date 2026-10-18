@@ -138,39 +138,7 @@ export default function CustomersPage() {
         }
       />
 
-      {/* Tab toggle: Active vs Archived */}
-      <div className="flex gap-2 border-b pb-2 mb-4">
-        <button
-          type="button"
-          className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
-            activeTab === "ACTIVE"
-              ? "bg-primary text-primary-foreground"
-              : "bg-muted text-muted-foreground hover:bg-muted/80"
-          }`}
-          onClick={() => {
-            setActiveTab("ACTIVE");
-            setStatus("");
-            setPage(1);
-          }}
-        >
-          Firfircoon
-        </button>
-        <button
-          type="button"
-          className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
-            activeTab === "ARCHIVED"
-              ? "bg-primary text-primary-foreground"
-              : "bg-muted text-muted-foreground hover:bg-muted/80"
-          }`}
-          onClick={() => {
-            setActiveTab("ARCHIVED");
-            setStatus("");
-            setPage(1);
-          }}
-        >
-          La Kaydiyay
-        </button>
-      </div>
+
 
       {/* Modal: New Customer */}
       <Modal isOpen={showModal} onClose={() => setShowModal(false)} title="Diiwaangeli Macmiil Cusub">
@@ -268,6 +236,36 @@ export default function CustomersPage() {
         <CardHead
           title={activeTab === "ACTIVE" ? "Macaamiisha Firfircoon" : "Macaamiisha La Kaydiyay"}
           description="Ka raadi magaca macmiilka, koodhka, ama telefoonka"
+          action={
+            <div className="tabs" style={{ margin: 0 }}>
+              <button
+                type="button"
+                className={`tab ${activeTab === "ACTIVE" ? "active" : ""}`}
+                style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+                onClick={() => {
+                  setActiveTab("ACTIVE");
+                  setStatus("");
+                  setPage(1);
+                }}
+              >
+                <Users size={14} aria-hidden="true" />
+                Firfircoon
+              </button>
+              <button
+                type="button"
+                className={`tab ${activeTab === "ARCHIVED" ? "active" : ""}`}
+                style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+                onClick={() => {
+                  setActiveTab("ARCHIVED");
+                  setStatus("");
+                  setPage(1);
+                }}
+              >
+                <Archive size={14} aria-hidden="true" />
+                La Kaydiyay
+              </button>
+            </div>
+          }
         />
         <div className="toolbar customers-toolbar">
           <div className="customer-filters">
