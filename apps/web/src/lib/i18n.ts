@@ -6,54 +6,177 @@ import { so } from "./so";
  */
 
 export const statusTranslations: Record<string, string> = {
+  // Order Statuses (Strict canonical mapping)
   DRAFT: "Qabyo",
-  CONFIRMED: "La Xaqiijiyey",
-  SCHEDULED: "La Qorsheeyey",
-  IN_PROGRESS: "Wuu Socdaa",
-  PARTIALLY_FULFILLED: "Qayb Ayaa La Geeyey",
-  FULFILLED: "Waa La Geeyey",
-  COMPLETED: "Waa La Dhammeeyey",
-  CANCELLED: "Waa La Joojiyey",
-  UNPAID: "Lama Bixin",
-  PARTIALLY_PAID: "Qayb Ayaa La Bixiyey",
-  PAID: "La Bixiyey",
-  REVERSED: "Waa Laga Noqday",
-  PREPARED: "La Diyaariyey",
-  PRINTED: "La Daabacay",
-  DISPATCHED: "La Diray",
-  PARTIALLY_RECONCILED: "Qayb Ayaa La Heshiisiyey",
-  RECONCILED: "La Heshiisiyey",
+  CONFIRMED: "La xaqiijiyey",
+  SCHEDULED: "Gaarsiin la qorsheeyey",
+  IN_PROGRESS: "Gaarsiintu wey socotaa",
+  PARTIALLY_FULFILLED: "Qayb ahaan la geeyey",
+  FULFILLED: "La geeyey",
+  CANCELLED: "La joojiyey",
+
+  // Invoices & Debt
+  UNPAID: "Lama bixin",
+  PARTIALLY_PAID: "Qayb ayaa la bixiyey",
+  PAID: "La bixiyey",
+  REVERSED: "Waa laga noqday",
+  POSTED: "La diiwaangeliyey",
+  PENDING: "Sugaya",
+  PARTIAL: "Qayb ayaa la bixiyey",
+  COMPLETED: "La geeyey",
+  DELIVERED: "La geeyey",
+
+  // Delivery & Dispatch
+  PREPARED: "La diyaariyey",
+  PRINTED: "La daabacay",
+  DISPATCHED: "La diray",
+  PARTIALLY_RECONCILED: "Qayb ayaa la heshiisiyey",
+  RECONCILED: "La heshiisiyey",
+
+  // Customers & Suppliers
   ACTIVE: "Shaqaynaya",
   INACTIVE: "Aan shaqaynayn",
-  HOLD: "La Hakiyey",
-  POSTED: "La Diiwaangeliyey",
-  PENDING: "Sugaya",
-  PARTIAL: "Qayb Ayaa La Bixiyey",
-  OUTSIDE: "Ka Baxsan Akoonnada",
-  OUTSIDE_NOT_TRACKED: "Ka Baxsan Akoonnada",
-  NOT_TRACKED: "Lama Diiwaangelin",
-  NEEDS_REVIEW: "Hubin Ayuu U Baahan Yahay",
-  MONEY_IN: "Lacag Soo Gashay",
-  MONEY_OUT: "Lacag Baxday",
+  HOLD: "La hakiyey",
+  ARCHIVED: "La kaydiyay",
+
+  // Financial & Movement Types
+  OPEN: "Furan",
+  OUTSIDE: "Ka baxsan akoonnada",
+  OUTSIDE_NOT_TRACKED: "Ka baxsan akoonnada",
+  NOT_TRACKED: "Lama diiwaangelin",
+  NEEDS_REVIEW: "Hubin ayuu u baahan yahay",
+  MONEY_IN: "Lacag soo gashay",
+  MONEY_OUT: "Lacag baxday",
   TRANSFER: "Wareejin",
   CORRECTION: "Sixid",
-  CASH: "Lacag Caddaan ah",
-  MOBILE_MONEY: "Lacagta Moobaylka",
+  CASH: "Lacag caddaan ah",
+  MOBILE_MONEY: "Lacagta moobaylka",
   BANK: "Bangi",
   OTHER: "Kale",
   BLOCK_NEGATIVE: "Ha oggolaan haraag taban",
   ALLOW_NEGATIVE: "Oggolow haraag taban",
-  OPENING_BALANCE: "Haraaga Bilowga",
-  CUSTOMER_PAYMENT: "Lacag Macmiil",
-  CUSTOMER_PAYMENT_REVERSAL: "Ka Noqosho Lacag Macmiil",
-  SUPPLIER_PAYMENT: "Lacag-bixin Keene",
-  SUPPLIER_PAYMENT_REVERSAL: "Ka Noqosho Lacag Keene",
+  OPENING_BALANCE: "Haraaga bilowga",
+  CUSTOMER_PAYMENT: "Lacag macmiil",
+  CUSTOMER_PAYMENT_REVERSAL: "Ka noqosho lacag macmiil",
+  CUSTOMER_REFUND: "Lacag-celin macmiil",
+  SUPPLIER_PAYMENT: "Lacag-bixin keene",
+  SUPPLIER_PAYMENT_REVERSAL: "Ka noqosho lacag keene",
   EXPENSE: "Kharash",
-  EXPENSE_REVERSAL: "Ka Noqosho Kharash",
-  TRANSFER_IN: "Wareejin Soo Gashay",
-  TRANSFER_OUT: "Wareejin Baxday",
-  ADJUSTMENT: "Sixid"
+  EXPENSE_REVERSAL: "Ka noqosho kharash",
+  TRANSFER_IN: "Wareejin soo gashay",
+  TRANSFER_OUT: "Wareejin baxday",
+  ADJUSTMENT: "Sixid",
+  CREDIT_KEPT: "Credit la xafiday",
+  REFUNDED: "La celiyay"
 };
+
+export type BadgeTone = "ok" | "warn" | "info" | "danger" | "neutral";
+
+/**
+ * Returns the standard badge tone corresponding to order status:
+ * - FULFILLED -> "ok" (Green)
+ * - CONFIRMED / SCHEDULED / IN_PROGRESS -> "info" (Blue/Teal)
+ * - PARTIALLY_FULFILLED -> "warn" (Amber/Yellow)
+ * - CANCELLED -> "danger" (Red)
+ * - DRAFT -> "neutral" (Neutral/Grey)
+ */
+export function orderStatusTone(status: string | null | undefined): BadgeTone {
+  if (!status) return "neutral";
+  const upper = status.trim().toUpperCase();
+  switch (upper) {
+    case "FULFILLED":
+    case "LA GEEYEY":
+    case "COMPLETED":
+    case "DELIVERED":
+    case "PAID":
+    case "LA BIXIYEY":
+    case "POSTED":
+    case "LA DIIWAANGELIYEY":
+    case "RECONCILED":
+    case "LA HESHIISIYEY":
+    case "ACTIVE":
+    case "SHAQAYNAYA":
+      return "ok";
+
+    case "CONFIRMED":
+    case "LA XAQIIJIYEY":
+    case "SCHEDULED":
+    case "GAARSIIN LA QORSHEEYEY":
+    case "IN_PROGRESS":
+    case "GAARSIINTU WEY SOCOTAA":
+    case "DISPATCHED":
+    case "LA DIRAY":
+    case "PRINTED":
+    case "LA DAABACAY":
+      return "info";
+
+    case "DRAFT":
+    case "QABYO":
+      return "neutral";
+
+    case "PARTIALLY_FULFILLED":
+    case "QAYB AHAAN LA GEEYEY":
+    case "PARTIALLY_PAID":
+    case "QAYB AYAA LA BIXIYEY":
+    case "PARTIALLY_RECONCILED":
+    case "QAYB AYAA LA HESHIISIYEY":
+    case "HOLD":
+    case "LA HAKIYEY":
+    case "PENDING":
+    case "SUGAYA":
+    case "OPEN":
+    case "FURAN":
+    case "NEEDS_REVIEW":
+    case "HUBIN AYUU U BAAHAN YAHAY":
+      return "warn";
+
+    case "CANCELLED":
+    case "LA JOOJIYEY":
+    case "REVERSED":
+    case "WAA LAGA NOQDAY":
+      return "danger";
+
+    case "INACTIVE":
+    case "AAN SHAQAYNAYN":
+    case "ARCHIVED":
+    case "LA KAYDIYAY":
+    default:
+      return "neutral";
+  }
+}
+
+export function formatStatus(status: string | null | undefined): string {
+  if (!status) return "—";
+  const trimmed = status.trim();
+  if (!trimmed) return "—";
+
+  // 1. Direct or upper-cased key match in canonical status dictionary
+  const upper = trimmed.toUpperCase();
+  if (statusTranslations[upper]) {
+    return statusTranslations[upper];
+  }
+
+  // 2. Idempotency check: if the input is ALREADY a valid Somali translation
+  const knownTranslations = Object.values(statusTranslations);
+  const foundTranslation = knownTranslations.find(
+    (val) => val.toLowerCase() === trimmed.toLowerCase()
+  );
+  if (foundTranslation) {
+    return foundTranslation;
+  }
+
+  // 3. Fallback to general Somali translation dictionary
+  const dictMatch = so(trimmed);
+  if (dictMatch && dictMatch.toLowerCase() !== trimmed.toLowerCase()) {
+    return dictMatch;
+  }
+
+  // 4. Humanize unknown status values rather than returning generic placeholders
+  return trimmed
+    .replace(/[_-]+/g, " ")
+    .toLowerCase()
+    .replace(/^\w/, (c) => c.toUpperCase());
+}
 
 export const roleTranslations: Record<string, string> = {
   OWNER: "Milkiilaha",
@@ -64,12 +187,6 @@ export const fuelTranslations: Record<string, string> = {
   DIESEL: "Naafto",
   PETROL: "Basiin"
 };
-
-export function formatStatus(status: string | null | undefined): string {
-  if (!status) return "—";
-  const translated = statusTranslations[status] ?? so(status);
-  return translated === status ? "Xaalad kale" : translated;
-}
 
 export function formatRole(role: string | null | undefined): string {
   if (!role) return "—";

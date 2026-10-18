@@ -10,7 +10,7 @@ import { PdfButton } from "./pdf-button";
 import { PaymentDialog } from "./simple-forms";
 import { Badge, Card, CardHead, Empty, ErrorState, LoadingState, MetricCard, Modal, PageHeader, SubmitButton } from "./ui";
 import { api, ApiError, mutationKey, type Actor } from "../lib/api";
-import { businessDate, dateTime, decimal, formatFuel, formatStatus } from "../lib/format";
+import { businessDate, dateTime, decimal, formatFuel, formatStatus, orderStatusTone } from "../lib/format";
 import { notifyError, notifySuccess } from "../lib/toast";
 import { so } from "../lib/so";
 
@@ -26,7 +26,7 @@ type Account = {
 };
 
 const isPositive = (value: string | undefined) => new Decimal(value ?? "0").gt(0);
-const statusTone = (status: string) => status === "REVERSED" || status === "CANCELLED" ? "danger" : status === "FULFILLED" || status === "PAID" ? "ok" : status === "DRAFT" ? "warn" : "info";
+const statusTone = (status: string) => orderStatusTone(status);
 
 function OrderCards({ orders, compact = false }: { orders: AccountOrder[]; compact?: boolean }) {
   if (!orders.length) return <Empty>Ma jiraan dalabyo la helay.</Empty>;

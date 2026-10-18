@@ -6,7 +6,7 @@ import { OrderInvoicePreview } from "../../../components/order-invoice-preview";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import Decimal from "decimal.js";
 import { ShoppingBag, Boxes, Truck, AlertCircle, Ban } from "lucide-react";
-import { dateTime, sum, decimal, formatStatus, formatFuel, fuustoQuantity } from "../../../lib/format";
+import { dateTime, sum, decimal, formatStatus, formatFuel, fuustoQuantity, orderStatusTone } from "../../../lib/format";
 import { useParams } from "next/navigation";
 
 import { useQuery } from "@tanstack/react-query";
@@ -378,7 +378,7 @@ export default function OrderPage() {
 
           <div className="notice" style={{ marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <div>
-              Xaaladda: <Badge tone={isDraft ? "warn" : row.status === "CANCELLED" ? "danger" : "info"}>{formatStatus(row.status)}</Badge>. Qiimayaasha iyo kuleetarka la xaqiijiyay dib isulama beddelaan marka qiimaha guud uu beddelmo.
+              Xaaladda: <Badge tone={orderStatusTone(row.status)}>{formatStatus(row.status)}</Badge>. Qiimayaasha iyo kuleetarka la xaqiijiyay dib isulama beddelaan marka qiimaha guud uu beddelmo.
             </div>
             {hasDiscount && (
               <div>

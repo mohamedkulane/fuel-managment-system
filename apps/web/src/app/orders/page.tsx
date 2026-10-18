@@ -6,7 +6,7 @@ import Decimal from "decimal.js";
 
 import { useQuery } from "@tanstack/react-query";
 import { api, type PaginatedResponse } from "../../lib/api";
-import { formatStatus, formatFuel, decimal, businessDate, fuustoQuantity } from "../../lib/format";
+import { formatStatus, formatFuel, decimal, businessDate, fuustoQuantity, orderStatusTone } from "../../lib/format";
 import { PdfButton } from "../../components/pdf-button";
 import { MetricCard, LoadingState, Badge, Card, CardHead, Empty, ErrorState, PageHeader, Pagination } from "../../components/ui";
 
@@ -189,12 +189,12 @@ export default function OrdersPage() {
             >
               <option value="">Dhammaan Xaaladaha</option>
               <option value="DRAFT">Qabyo</option>
-              <option value="CONFIRMED">La Xaqiijiyay</option>
-              <option value="SCHEDULED">La Jadwaleeyay</option>
-              <option value="IN_PROGRESS">Wuu Socdaa</option>
-              <option value="PARTIALLY_FULFILLED">Qayb Ayaa La Fushiyay</option>
-              <option value="FULFILLED">La Dhammeeyay</option>
-              <option value="CANCELLED">La Baajiyay</option>
+              <option value="CONFIRMED">La xaqiijiyey</option>
+              <option value="SCHEDULED">Gaarsiin la qorsheeyey</option>
+              <option value="IN_PROGRESS">Gaarsiintu wey socotaa</option>
+              <option value="PARTIALLY_FULFILLED">Qayb ahaan la geeyey</option>
+              <option value="FULFILLED">La geeyey</option>
+              <option value="CANCELLED">La joojiyey</option>
             </select>
             <input type="date" className="input" value={date} aria-label="Taariikhda (Date)" onChange={e=>{setDate(e.target.value);setPage(1);}} />
           </div>
@@ -227,17 +227,7 @@ export default function OrdersPage() {
                     <td data-label="Paid">${decimal(row.paidAmount)}</td>
                     <td data-label="Remaining">{row.status === "FULFILLED" ? `$${decimal(row.invoicedBalance)}` : row.totalAmount ? `$${decimal(Decimal.max(0,new Decimal(row.totalAmount).sub(row.paidAmount ?? "0")).toString())}` : "—"}<small className="balance-label">{row.status === "FULFILLED" ? "Deyn rasmi ah" : "Qiyaas"}</small></td>
                     <td data-label="Status">
-                      <Badge
-                        tone={
-                          row.status === "DRAFT"
-                            ? "neutral"
-                            : row.status === "FULFILLED"
-                            ? "ok"
-                            : row.status === "CONFIRMED" || row.status === "SCHEDULED" || row.status === "IN_PROGRESS"
-                            ? "info"
-                            : "warn"
-                        }
-                      >
+                      <Badge tone={orderStatusTone(row.status)}>
                         {formatStatus(row.status)}
                       </Badge>
                     </td>

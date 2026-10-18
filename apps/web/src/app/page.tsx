@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import Decimal from "decimal.js";
 import { AlertCircle, Fuel, Wallet } from "lucide-react";
 import { api, type PaginatedResponse } from "../lib/api";
-import { decimal, formatFuel, formatStatus, businessDate, fuustoQuantity } from "../lib/format";
+import { decimal, formatFuel, formatStatus, businessDate, fuustoQuantity, orderStatusTone } from "../lib/format";
 import { Badge, Card, CardHead, Empty, ErrorState, LoadingState, MetricCard, PageHeader } from "../components/ui";
 import { ActionLink } from "../components/controls";
 type Overview = { stock: { warehouse: Record<string,string> }; financials: { totalOutstandingDebt: string; collectedToday: string }; operations: { pendingOrders: number } };
@@ -177,6 +177,6 @@ export default function HomePage() {
         </section>
       </div>}
     </Card>
-    <Card><CardHead title="Dalabyada maanta" action={<ActionLink className="btn" href="/orders">View All Orders</ActionLink>}/>{orders.isPending ? <LoadingState/> : orders.isError ? <ErrorState message={orders.error.message} retry={()=>void orders.refetch()}/> : <div className="table-wrap"><table className="data-table"><thead><tr><th>Macmiil</th><th>Shidaalka</th><th>Fuusto</th><th>Xaaladda</th><th/></tr></thead><tbody>{orders.data?.items.map(row=><tr key={row.id}><td className="strong">{row.customer.name}</td><td>{row.lines.map(line=>formatFuel(line.fuel.displayName)).join(", ")}</td><td>{row.lines.map(line=>fuustoQuantity(line.requestedUnits)).join(", ")}</td><td><Badge tone={row.status==="FULFILLED"?"ok":"warn"}>{formatStatus(row.status)}</Badge></td><td><ActionLink className="btn" href={"/orders/"+row.id}>View</ActionLink></td></tr>)}</tbody></table>{!orders.data?.items.length && <Empty>Ma jiraan dalabyo maanta.</Empty>}</div>}</Card>
+    <Card><CardHead title="Dalabyada maanta" action={<ActionLink className="btn" href="/orders">View All Orders</ActionLink>}/>{orders.isPending ? <LoadingState/> : orders.isError ? <ErrorState message={orders.error.message} retry={()=>void orders.refetch()}/> : <div className="table-wrap"><table className="data-table"><thead><tr><th>Macmiil</th><th>Shidaalka</th><th>Fuusto</th><th>Xaaladda</th><th/></tr></thead><tbody>{orders.data?.items.map(row=><tr key={row.id}><td className="strong">{row.customer.name}</td><td>{row.lines.map(line=>formatFuel(line.fuel.displayName)).join(", ")}</td><td>{row.lines.map(line=>fuustoQuantity(line.requestedUnits)).join(", ")}</td><td><Badge tone={orderStatusTone(row.status)}>{formatStatus(row.status)}</Badge></td><td><ActionLink className="btn" href={"/orders/"+row.id}>View</ActionLink></td></tr>)}</tbody></table>{!orders.data?.items.length && <Empty>Ma jiraan dalabyo maanta.</Empty>}</div>}</Card>
   </main>;
 }

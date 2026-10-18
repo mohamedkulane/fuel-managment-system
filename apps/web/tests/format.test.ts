@@ -19,6 +19,6 @@ test("formatting handles negative adjustments and six-place conversion snapshots
   assert.equal(decimal("20.123456", 6), "20.123456");
 });
 test("dates display at the Somalia day boundary independently of host timezone", () => {
-  assert.match(dateTime("2026-10-09T22:30:00Z"), /10 Oct 2026/);
+  assert.match(dateTime("2026-10-09T22:30:00Z"), /10 Oktoobar 2026/);
   assert.match(dateTime("2026-10-09T22:30:00Z"), /01:30/);
 });

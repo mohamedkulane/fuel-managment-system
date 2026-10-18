@@ -1,5 +1,6 @@
 import Decimal from "decimal.js";
-import { formatStatus, formatFuel, formatRole } from "./i18n";
+import { formatStatus, formatFuel, formatRole, orderStatusTone } from "./i18n";
+export { formatStatus, formatFuel, formatRole, orderStatusTone };
 
 /** Format exact decimal API strings without converting money to floating point. */
 export function decimal(value: string | undefined | null, places = 2): string {
@@ -22,4 +23,4 @@ export function dateTime(value: string): string {
   return `${Number(part("day"))} ${somaliMonths[month - 1] ?? ""} ${part("year")}, ${part("hour")}:${part("minute")}`;
 }
 export function businessDate(): string { return new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Mogadishu", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date()); }
-export { formatStatus, formatFuel, formatRole };
+

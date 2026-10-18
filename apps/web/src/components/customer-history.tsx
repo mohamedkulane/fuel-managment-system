@@ -3,7 +3,7 @@ import { ActionButton, FormLabel, ActionAnchor, ActionLink } from "./controls";
 import Decimal from "decimal.js";
 import { PaymentDialog } from "./simple-forms";
 import { Receipt, Wallet, CircleCheck, TrendingUp } from "lucide-react";
-import { sum, dateTime, decimal, formatStatus, formatFuel, fuustoQuantity } from "../lib/format";
+import { sum, dateTime, decimal, formatStatus, formatFuel, fuustoQuantity, orderStatusTone } from "../lib/format";
 
 import { FormEvent, useState } from "react";
 import { useParams } from "next/navigation";
@@ -135,12 +135,12 @@ export function CustomerOrdersTab({ customerId }: { customerId: string }) {
         <select className="select" value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }}>
           <option value="">Dhammaan Xaaladaha</option>
           <option value="DRAFT">Qabyo</option>
-          <option value="CONFIRMED">La Xaqiijiyay</option>
-          <option value="SCHEDULED">La Jadwaleeyay</option>
-          <option value="IN_PROGRESS">Wuu Socdaa</option>
-          <option value="PARTIALLY_FULFILLED">Qayb Ayaa La Fushiyay</option>
-          <option value="FULFILLED">La Dhammeeyay</option>
-          <option value="CANCELLED">La Baajiyay</option>
+          <option value="CONFIRMED">La xaqiijiyey</option>
+          <option value="SCHEDULED">Gaarsiin la qorsheeyey</option>
+          <option value="IN_PROGRESS">Gaarsiintu wey socotaa</option>
+          <option value="PARTIALLY_FULFILLED">Qayb ahaan la geeyey</option>
+          <option value="FULFILLED">La geeyey</option>
+          <option value="CANCELLED">La joojiyey</option>
         </select>
       </div>
 
@@ -191,7 +191,7 @@ export function CustomerOrdersTab({ customerId }: { customerId: string }) {
                     ))}
                   </td>
                   <td>
-                    <Badge tone={row.status === "FULFILLED" ? "ok" : row.status === "DRAFT" ? "neutral" : "info"}>
+                    <Badge tone={orderStatusTone(row.status)}>
                       {formatStatus(row.status)}
                     </Badge>
                   </td>
