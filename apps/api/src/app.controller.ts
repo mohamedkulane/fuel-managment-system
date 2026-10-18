@@ -58,6 +58,7 @@ function resolvePermissionDependencies(codes: PermissionCode[]): PermissionCode[
 type DecimalInput = string;
 const dec = (value: DecimalInput): Prisma.Decimal => new Prisma.Decimal(value);
 const positive = (value: string, name: string): Prisma.Decimal => { const result = dec(value); if (result.lte(0)) throw new BadRequestException(`${name} must be positive`); return result; };
+const positiveInteger = (value: string, name: string): Prisma.Decimal => { const result = positive(value, name); if (!result.isInteger()) throw new BadRequestException(`${name} must be a whole integer (fuusto idil)`); return result; };
 const localDate = (value: string): Date => { if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) throw new BadRequestException("Date must be YYYY-MM-DD"); return new Date(`${value}T00:00:00.000Z`); };
 const documentNo = (prefix: string): string => `${prefix}-${Date.now()}-${Math.floor(Math.random() * 10000).toString().padStart(4, "0")}`;
 const jsonDecimal = (value: Prisma.Decimal | null | undefined): string | null => value?.toFixed(6) ?? null;
@@ -871,11 +872,16 @@ export class AppController {
     const discountApprovedById = fixedDiscount.gt(0) && isOwner ? actor.id : null;
     const discountApprovedAt = fixedDiscount.gt(0) && isOwner ? new Date() : null;
 
+    const fuelIds = body.lines.map((l) => l.fuelId);
+    if (new Set(fuelIds).size !== fuelIds.length) {
+      throw new BadRequestException("Duplicate fuel lines are not allowed in a single order");
+    }
+
     const lines = body.lines.map((line) => {
       if (!line.fuelId || !line.salesUnitId || !line.requestedUnits) {
         throw new BadRequestException("Each order line needs fuelId, salesUnitId and requestedUnits");
       }
-      return { fuelId: line.fuelId, salesUnitId: line.salesUnitId, requestedUnits: positive(line.requestedUnits, "requestedUnits") };
+      return { fuelId: line.fuelId, salesUnitId: line.salesUnitId, requestedUnits: positiveInteger(line.requestedUnits, "requestedUnits") };
     });
 
     const row = await this.prisma.salesOrder.create({
@@ -1449,7 +1455,7 @@ export class AppController {
 
   @UseGuards(SessionGuard)
   @Post("dispatches")
-  async createDispatch(@Req() request: AuthenticatedRequest, @Headers("idempotency-key") headerKey: string | undefined, @Body() body: { deliverySheetId?: string; lines?: Array<{ orderLineId?: string; dispatchedUnits?: string }> }) { const actor = requirePermission(request, "orders.create"); const key = requireIdempotencyKey(headerKey); const replay = await this.prisma.dispatch.findUnique({ where: { idempotencyKey: key }, include: { lines: true } }); if (replay) return { data: { ...replay, replay: true } }; if (!body.lines?.length) throw new BadRequestException("lines are required"); const orderLines = await this.prisma.salesOrderLine.findMany({ where: { id: { in: body.lines.map((line) => line.orderLineId).filter((id): id is string => Boolean(id)) } } }); const byId = new Map(orderLines.map((line) => [line.id, line])); const lines = body.lines.map((line) => { const source = line.orderLineId ? byId.get(line.orderLineId) : undefined; if (!source || !line.dispatchedUnits || !source.litersPerUnitSnapshot) throw new BadRequestException("Dispatch lines must reference confirmed order lines"); const units = positive(line.dispatchedUnits, "dispatchedUnits"); return { orderLineId: source.id, dispatchedUnits: units, dispatchedLiters: units.mul(source.litersPerUnitSnapshot), litersPerUnitSnapshot: source.litersPerUnitSnapshot, fuelId: source.fuelId }; }); const row = await this.prisma.dispatch.create({ data: { dispatchNo: documentNo("DP"), deliverySheetId: body.deliverySheetId, lines: { create: lines.map(({ fuelId: _fuelId, ...line }) => line) }, postedById: actor.id, idempotencyKey: key }, include: { lines: true } }); return { data: row }; }
+  async createDispatch(@Req() request: AuthenticatedRequest, @Headers("idempotency-key") headerKey: string | undefined, @Body() body: { deliverySheetId?: string; lines?: Array<{ orderLineId?: string; dispatchedUnits?: string }> }) { const actor = requirePermission(request, "orders.create"); const key = requireIdempotencyKey(headerKey); const replay = await this.prisma.dispatch.findUnique({ where: { idempotencyKey: key }, include: { lines: true } }); if (replay) return { data: { ...replay, replay: true } }; if (!body.lines?.length) throw new BadRequestException("lines are required"); const orderLines = await this.prisma.salesOrderLine.findMany({ where: { id: { in: body.lines.map((line) => line.orderLineId).filter((id): id is string => Boolean(id)) } } }); const byId = new Map(orderLines.map((line) => [line.id, line])); const lines = body.lines.map((line) => { const source = line.orderLineId ? byId.get(line.orderLineId) : undefined; if (!source || !line.dispatchedUnits || !source.litersPerUnitSnapshot) throw new BadRequestException("Dispatch lines must reference confirmed order lines"); const units = positiveInteger(line.dispatchedUnits, "dispatchedUnits"); return { orderLineId: source.id, dispatchedUnits: units, dispatchedLiters: units.mul(source.litersPerUnitSnapshot), litersPerUnitSnapshot: source.litersPerUnitSnapshot, fuelId: source.fuelId }; }); const row = await this.prisma.dispatch.create({ data: { dispatchNo: documentNo("DP"), deliverySheetId: body.deliverySheetId, lines: { create: lines.map(({ fuelId: _fuelId, ...line }) => line) }, postedById: actor.id, idempotencyKey: key }, include: { lines: true } }); return { data: row }; }
 
   @UseGuards(SessionGuard)
   @Get("dispatches")
@@ -1577,7 +1583,7 @@ export class AppController {
   @UseGuards(SessionGuard)
   @Get("users/:id/permissions")
   async getUserPermissions(@Req() request: AuthenticatedRequest, @Param("id") id: string) {
-    requirePermission(request, "permissions.manage");
+    requireOwner(request);
     const user = await this.prisma.user.findUnique({
       where: { id },
       include: { permissions: true }
@@ -1596,7 +1602,7 @@ export class AppController {
     @Param("id") id: string,
     @Body() body: { permissions?: string[] }
   ) {
-    const actor = requirePermission(request, "permissions.manage");
+    const actor = requireOwner(request);
     if (id === actor.id) {
       throw new ForbiddenException("Cannot modify your own permissions");
     }
@@ -1612,19 +1618,6 @@ export class AppController {
     const validCodes = new Set<string>(PERMISSION_CODES);
     const rawSanitized = [...new Set(body.permissions.filter((p): p is PermissionCode => validCodes.has(p)))];
     const sanitized = resolvePermissionDependencies(rawSanitized);
-
-    if (actor.role !== "OWNER") {
-      const adminPerms: PermissionCode[] = ["permissions.manage", "users.manage", "settings.manage", "audit.view", "prices.update"];
-      const actorPermSet = new Set(actor.permissions ?? []);
-      for (const p of sanitized) {
-        if (adminPerms.includes(p)) {
-          throw new ForbiddenException(`Shaqaaluhu ma bixin karo ogolaanshaha maamulka: ${p}`);
-        }
-        if (!actorPermSet.has(p)) {
-          throw new ForbiddenException(`Ma bixin kartid ogolaansho aadan lahayn: ${p}`);
-        }
-      }
-    }
 
     await this.prisma.$transaction(async (tx) => {
       await tx.userPermission.deleteMany({ where: { userId: id } });
@@ -1713,7 +1706,33 @@ export class AppController {
 
   @UseGuards(SessionGuard)
   @Post("dispatches/:id/post")
-  async postDispatch(@Req() request: AuthenticatedRequest, @Param("id") id: string, @Headers("idempotency-key") headerKey?: string) { const actor = requirePermission(request, "orders.delivery.confirm"); const key = requireIdempotencyKey(headerKey); const row = await this.prisma.dispatch.findUnique({ where: { id }, include: { lines: { include: { orderLine: true } } } }); if (!row) throw new NotFoundException("Dispatch not found"); if (row.status === "POSTED" || row.status === "PARTIALLY_RECONCILED" || row.status === "RECONCILED") return { data: { id, status: row.status, replay: true } }; await this.prisma.$transaction(async (tx) => { const claimed = await tx.dispatch.updateMany({ where: { id, status: "PREPARED" }, data: { status: "POSTED", postedAt: new Date(), postedById: actor.id, postIdempotencyKey: key } }); if (claimed.count !== 1) throw new BadRequestException("Dispatch was already posted"); for (const line of row.lines) { const changed = await tx.stockBalance.updateMany({ where: { fuelId: line.orderLine.fuelId, location: "WAREHOUSE", balanceLiters: { gte: line.dispatchedLiters } }, data: { balanceLiters: { decrement: line.dispatchedLiters }, version: { increment: 1 } } }); if (changed.count !== 1) throw new BadRequestException(`Insufficient warehouse stock for ${line.orderLine.fuelId}`); await tx.stockBalance.update({ where: { fuelId_location: { fuelId: line.orderLine.fuelId, location: "IN_TRANSIT" } }, data: { balanceLiters: { increment: line.dispatchedLiters }, version: { increment: 1 } } }); await tx.inventoryMovement.create({ data: { fuelId: line.orderLine.fuelId, location: "WAREHOUSE", signedDeltaLiters: line.dispatchedLiters.neg(), eventType: "DISPATCH", sourceType: "DispatchLine", sourceId: row.id, sourceLineId: line.id, createdById: actor.id } }); await tx.inventoryMovement.create({ data: { fuelId: line.orderLine.fuelId, location: "IN_TRANSIT", signedDeltaLiters: line.dispatchedLiters, eventType: "DISPATCH", sourceType: "DispatchLine", sourceId: row.id, sourceLineId: line.id, createdById: actor.id } }); } const orderIds = [...new Set(row.lines.map((line) => line.orderLine.orderId))]; await tx.salesOrder.updateMany({ where: { id: { in: orderIds }, status: { in: ["SCHEDULED", "CONFIRMED"] } }, data: { status: "IN_PROGRESS" } }); if (row.deliverySheetId) await tx.deliverySheet.update({ where: { id: row.deliverySheetId }, data: { status: "DISPATCHED" } }); await tx.auditEvent.create({ data: { actorId: actor.id, entityType: "Dispatch", entityId: id, action: "POSTED" } }); }); return { data: { id, status: "POSTED" } }; }
+  async postDispatch(@Req() request: AuthenticatedRequest, @Param("id") id: string, @Headers("idempotency-key") headerKey?: string) {
+    const actor = requirePermission(request, "orders.delivery.confirm");
+    const key = requireIdempotencyKey(headerKey);
+    const row = await this.prisma.dispatch.findUnique({ where: { id }, include: { lines: { include: { orderLine: true } } } });
+    if (!row) throw new NotFoundException("Dispatch not found");
+    if (row.status === "POSTED" || row.status === "PARTIALLY_RECONCILED" || row.status === "RECONCILED") return { data: { id, status: row.status, replay: true } };
+    await this.prisma.$transaction(async (tx) => {
+      const claimed = await tx.dispatch.updateMany({ where: { id, status: "PREPARED" }, data: { status: "POSTED", postedAt: new Date(), postedById: actor.id, postIdempotencyKey: key } });
+      if (claimed.count !== 1) throw new BadRequestException("Dispatch was already posted");
+      for (const line of row.lines) {
+        const changed = await tx.stockBalance.updateMany({ where: { fuelId: line.orderLine.fuelId, location: "WAREHOUSE", balanceLiters: { gte: line.dispatchedLiters } }, data: { balanceLiters: { decrement: line.dispatchedLiters }, version: { increment: 1 } } });
+        if (changed.count !== 1) throw new BadRequestException(`Insufficient warehouse stock for ${line.orderLine.fuelId}`);
+        await tx.stockBalance.upsert({
+          where: { fuelId_location: { fuelId: line.orderLine.fuelId, location: "IN_TRANSIT" } },
+          create: { fuelId: line.orderLine.fuelId, location: "IN_TRANSIT", balanceLiters: line.dispatchedLiters, version: 1 },
+          update: { balanceLiters: { increment: line.dispatchedLiters }, version: { increment: 1 } }
+        });
+        await tx.inventoryMovement.create({ data: { fuelId: line.orderLine.fuelId, location: "WAREHOUSE", signedDeltaLiters: line.dispatchedLiters.neg(), eventType: "DISPATCH", sourceType: "DispatchLine", sourceId: row.id, sourceLineId: line.id, createdById: actor.id } });
+        await tx.inventoryMovement.create({ data: { fuelId: line.orderLine.fuelId, location: "IN_TRANSIT", signedDeltaLiters: line.dispatchedLiters, eventType: "DISPATCH", sourceType: "DispatchLine", sourceId: row.id, sourceLineId: line.id, createdById: actor.id } });
+      }
+      const orderIds = [...new Set(row.lines.map((line) => line.orderLine.orderId))];
+      await tx.salesOrder.updateMany({ where: { id: { in: orderIds }, status: { in: ["SCHEDULED", "CONFIRMED"] } }, data: { status: "IN_PROGRESS" } });
+      if (row.deliverySheetId) await tx.deliverySheet.update({ where: { id: row.deliverySheetId }, data: { status: "DISPATCHED" } });
+      await tx.auditEvent.create({ data: { actorId: actor.id, entityType: "Dispatch", entityId: id, action: "POSTED" } });
+    });
+    return { data: { id, status: "POSTED" } };
+  }
 
   @UseGuards(SessionGuard)
   @Post("dispatches/:id/reconcile")
@@ -1896,7 +1915,7 @@ export class AppController {
       const invoiceNo = documentNo("INV");
 
       const invoice = await this.prisma.$transaction(async (tx) => {
-        const salesOrder = await tx.salesOrder.findUniqueOrThrow({ where: { id: orderLine.orderId } });
+        const salesOrder = await tx.salesOrder.findUniqueOrThrow({ where: { id: orderLine.orderId }, include: { lines: true } });
         const orderFixedDiscount = salesOrder.fixedDiscountAmount ?? dec("0");
         let invoiceDiscount = dec("0");
 
@@ -1914,8 +1933,9 @@ export class AppController {
           const rem = orderFixedDiscount.sub(alreadyAppliedDiscount);
           const remainingOrderDiscount = rem.gt(0) ? rem : dec("0");
 
-          const requestedUnits = orderLine.requestedUnits;
-          const ratio = requestedUnits.gt(0) ? line.acceptedUnits.div(requestedUnits) : dec("1");
+          const orderRequestedGross = salesOrder.lines.reduce((sum, l) => sum.add(l.requestedUnits.mul(l.unitPriceSnapshot ?? dec("0"))), dec("0"));
+          const lineGross = line.acceptedUnits.mul(orderLine.unitPriceSnapshot ?? dec("0"));
+          const ratio = orderRequestedGross.gt(0) ? lineGross.div(orderRequestedGross) : dec("0");
           let allocatedDiscount = orderFixedDiscount.mul(ratio);
           if (allocatedDiscount.gt(remainingOrderDiscount)) allocatedDiscount = remainingOrderDiscount;
           if (allocatedDiscount.gt(lineTotal)) allocatedDiscount = lineTotal;
@@ -2405,8 +2425,47 @@ export class AppController {
     });
     if (!p) throw new NotFoundException("Payment not found");
     const total = p.order?.totalAmount ?? p.order?.subtotal ?? new Prisma.Decimal(0);
-    const orderPaid = p.order?.payments.reduce((sum, row) => sum.add(row.amount), new Prisma.Decimal(0)) ?? new Prisma.Decimal(0);
-    const pdf = await createPaymentReceiptPdf({ receiptNo: p.paymentNo, paymentDate: p.paymentDate.toISOString().slice(0, 10), status: p.status, customer: { name: p.customer.name, phone: p.customer.primaryPhone }, amount: p.amount.toFixed(2), method: p.paymentMethod.replaceAll("_", " "), reference: p.reference, account: p.financialAccount ? { name: p.financialAccount.name, identifierMasked: p.financialAccount.identifierMasked } : null, collectedBy: p.recordedBy.displayName, order: p.order ? { orderNo: p.order.orderNo, total: total.toFixed(2), paidThisTime: p.amount.toFixed(2), remainingPendingDelivery: Prisma.Decimal.max(0, total.sub(orderPaid)).toFixed(2) } : null, deliveredOrders: p.allocations.map((allocation) => ({ invoiceNo: allocation.invoice.invoiceNo, paid: allocation.amount.toFixed(2), remaining: allocation.invoice.balanceDue.toFixed(2) })), branding: await this.documentBranding() });
+    const historicalOrderPaid = p.order?.payments
+      .filter((row) => row.paymentDate <= p.paymentDate && row.id <= p.id)
+      .reduce((sum, row) => sum.add(row.amount), new Prisma.Decimal(0)) ?? new Prisma.Decimal(0);
+
+    const deliveredOrders = await Promise.all(
+      p.allocations.map(async (allocation) => {
+        const laterAllocations = await this.prisma.paymentAllocation.findMany({
+          where: {
+            invoiceId: allocation.invoiceId,
+            allocatedAt: { gt: allocation.allocatedAt }
+          }
+        });
+        const laterSum = laterAllocations.reduce((sum, a) => sum.add(a.amount), new Prisma.Decimal(0));
+        const historicalBalance = allocation.invoice.balanceDue.add(laterSum);
+        return {
+          invoiceNo: allocation.invoice.invoiceNo,
+          paid: allocation.amount.toFixed(2),
+          remaining: historicalBalance.toFixed(2)
+        };
+      })
+    );
+
+    const pdf = await createPaymentReceiptPdf({
+      receiptNo: p.paymentNo,
+      paymentDate: p.paymentDate.toISOString().slice(0, 10),
+      status: p.status,
+      customer: { name: p.customer.name, phone: p.customer.primaryPhone },
+      amount: p.amount.toFixed(2),
+      method: p.paymentMethod.replaceAll("_", " "),
+      reference: p.reference,
+      account: p.financialAccount ? { name: p.financialAccount.name, identifierMasked: p.financialAccount.identifierMasked } : null,
+      collectedBy: p.recordedBy.displayName,
+      order: p.order ? {
+        orderNo: p.order.orderNo,
+        total: total.toFixed(2),
+        paidThisTime: p.amount.toFixed(2),
+        remainingPendingDelivery: Prisma.Decimal.max(0, total.sub(historicalOrderPaid)).toFixed(2)
+      } : null,
+      deliveredOrders,
+      branding: await this.documentBranding()
+    });
     response.setHeader("Content-Type", "application/pdf");
     response.setHeader("Content-Disposition", `inline; filename="payment-receipt-${p.paymentNo}.pdf"`);
     response.send(pdf);
@@ -2623,6 +2682,7 @@ export class AppController {
     const dayStart = new Date(`${today}T00:00:00+03:00`);
     const dayEnd = new Date(dayStart.getTime() + 86400000);
     const collectedToday = await this.prisma.payment.aggregate({ where: { status: "POSTED", paymentDate: { gte: dayStart, lt: dayEnd } }, _sum: { amount: true } });
+    const refundedToday = await this.prisma.customerRefund.aggregate({ where: { refundDate: { gte: dayStart, lt: dayEnd } }, _sum: { amount: true } });
     const [
       totalCustomers,
       activeCustomers,
@@ -2658,13 +2718,23 @@ export class AppController {
 
     const outstandingDebt = invoices._sum.balanceDue?.toFixed(4) ?? "0.0000";
     const unappliedCredit = payments._sum.unappliedAmount?.toFixed(4) ?? "0.0000";
+    const grossToday = collectedToday._sum?.amount ?? dec("0");
+    const refToday = refundedToday._sum?.amount ?? dec("0");
+    const netToday = grossToday.sub(refToday);
 
     return {
       data: {
         customers: { total: totalCustomers, active: activeCustomers, hold: holdCustomers },
         stock: { warehouse: warehouseByFuel, inTransit: inTransitByFuel },
         operations: { pendingOrders, dispatched: dispatchedCount, unbilledDeliveries: unbilledCount },
-        financials: { totalOutstandingDebt: outstandingDebt, totalUnappliedCredit: unappliedCredit, collectedToday: collectedToday._sum.amount?.toFixed(4) ?? "0.0000" }
+        financials: {
+          totalOutstandingDebt: outstandingDebt,
+          totalUnappliedCredit: unappliedCredit,
+          collectedToday: netToday.toFixed(4),
+          grossCollectedToday: grossToday.toFixed(4),
+          refundedToday: refToday.toFixed(4),
+          netCollectedToday: netToday.toFixed(4)
+        }
       }
     };
   }

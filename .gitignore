@@ -3,6 +3,7 @@ node_modules/
 dist/
 coverage/
 .env
+.env*.local
 *.log
 prisma/*.db
 *.tsbuildinfo

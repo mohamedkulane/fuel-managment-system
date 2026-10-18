@@ -78,10 +78,13 @@ export function formatRole(role: string | null | undefined): string {
 
 export function formatFuel(fuel: string | null | undefined): string {
   if (!fuel) return "—";
-  const upper = fuel.toUpperCase();
-  if (upper.includes("DIESEL")) return "Naafto";
-  if (upper.includes("PETROL")) return "Basiin";
-  return fuelTranslations[fuel] ?? "Shidaal kale";
+  if (fuel.includes("+")) {
+    return fuel.split("+").map((part) => formatFuel(part.trim())).join(" + ");
+  }
+  const upper = fuel.trim().toUpperCase();
+  if (upper.includes("DIESEL") || upper === "NAAFTO") return "Naafto";
+  if (upper.includes("PETROL") || upper === "BASIIN") return "Basiin";
+  return fuelTranslations[fuel] ?? fuel;
 }
 
 export const t = {

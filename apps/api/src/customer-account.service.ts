@@ -16,7 +16,7 @@ export class CustomerAccountService {
 
   async read(customerId: string, fromDate?: string, toDate?: string) {
     const { start, end } = statementBounds(fromDate, toDate);
-    const [customer, orders, invoices, payments, ledger] = await Promise.all([
+    const [customer, orders, invoices, payments, ledger, refunds] = await Promise.all([
       this.db.customer.findUnique({
         where: { id: customerId },
         include: { addresses: { where: { active: true }, orderBy: [{ isDefault: "desc" }, { id: "asc" }] } }
@@ -54,6 +54,11 @@ export class CustomerAccountService {
       this.db.customerLedgerEntry.findMany({
         where: { customerId, ...(end ? { occurredAt: { lt: end } } : {}) },
         orderBy: [{ occurredAt: "asc" }, { id: "asc" }]
+      }),
+      this.db.customerRefund.findMany({
+        where: { customerId },
+        include: { order: { select: { id: true, orderNo: true } }, financialAccount: true, createdBy: true },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }]
       })
     ]);
     if (!customer) throw new NotFoundException("Customer not found");
@@ -75,6 +80,8 @@ export class CustomerAccountService {
     const postedPayments = payments.filter((payment) => payment.status === "POSTED");
     const totalPaid = postedPayments.filter((payment) => inPeriod(payment.paymentDate)).reduce((sum, payment) => sum.add(payment.amount), zero());
     const appliedToDeliveredSales = postedPayments.filter((payment) => inPeriod(payment.paymentDate)).reduce((sum, payment) => sum.add(payment.allocatedAmount), zero());
+    const totalRefunded = refunds.filter((r) => inPeriod(r.createdAt)).reduce((sum, r) => sum.add(r.amount), zero());
+    const netCollected = totalPaid.sub(totalRefunded);
 
     let pendingOrderRemaining = zero();
     let orderPaymentsAwaitingDelivery = zero();
@@ -175,6 +182,17 @@ export class CustomerAccountService {
         reversedAt: payment.reversals[0]?.reversedAt ?? null
       };
     });
+    const refundRows = refunds.map((r) => ({
+      id: r.id,
+      refundNo: r.refundNo,
+      date: r.createdAt,
+      amount: money(r.amount),
+      reason: r.reason,
+      orderNo: r.order?.orderNo ?? null,
+      accountName: r.financialAccount.name,
+      recordedBy: r.createdBy.displayName
+    }));
+
     const balances = statementRows(ledger, start);
 
     return {
@@ -189,6 +207,8 @@ export class CustomerAccountService {
       summary: {
         totalSales: money(totalSales),
         totalPaid: money(totalPaid),
+        totalRefunded: money(totalRefunded),
+        netCollected: money(netCollected),
         appliedToDeliveredSales: money(appliedToDeliveredSales),
         remainingDebt: money(remainingDebt),
         pendingOrderRemaining: money(pendingOrderRemaining),
@@ -199,6 +219,7 @@ export class CustomerAccountService {
       },
       orders: orderRows.filter((order) => inPeriod(order.orderDate)),
       payments: paymentRows.filter((payment) => inPeriod(payment.paymentDate)),
+      refunds: refundRows.filter((r) => inPeriod(r.date)),
       period: { fromDate: fromDate ?? null, toDate: toDate ?? null }
     };
   }

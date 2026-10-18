@@ -7,7 +7,7 @@ import type { PermissionCode } from "@fuel/shared";
 
 type Tx = Prisma.TransactionClient;
 type Direction = "MONEY_IN" | "MONEY_OUT";
-type Kind = "OPENING_BALANCE" | "CUSTOMER_PAYMENT" | "CUSTOMER_PAYMENT_REVERSAL" | "SUPPLIER_PAYMENT" | "SUPPLIER_PAYMENT_REVERSAL" | "EXPENSE" | "EXPENSE_REVERSAL" | "TRANSFER_IN" | "TRANSFER_OUT" | "ADJUSTMENT";
+type Kind = "OPENING_BALANCE" | "CUSTOMER_PAYMENT" | "CUSTOMER_PAYMENT_REVERSAL" | "CUSTOMER_REFUND" | "SUPPLIER_PAYMENT" | "SUPPLIER_PAYMENT_REVERSAL" | "EXPENSE" | "EXPENSE_REVERSAL" | "TRANSFER_IN" | "TRANSFER_OUT" | "ADJUSTMENT";
 const dec = (value: string | number | Prisma.Decimal) => new Prisma.Decimal(value);
 const documentNo = (prefix: string) => `${prefix}-${Date.now()}-${randomUUID().slice(0, 8)}`;
 
@@ -103,7 +103,7 @@ export class FinancialWorkflowsService {
   async paymentMethod(tx: Tx, accountId: string) {
     const account = await tx.financialAccount.findUnique({ where: { id: accountId } });
     if (!account || !account.active) throw new BadRequestException("Select an active financial account");
-    const method = account.paymentMethod ?? (account.type === "CASH" ? "CASH" : account.type === "BANK" ? "BANK_TRANSFER" : account.type === "OTHER" ? "OTHER" : null);
+    const method = account.paymentMethod ?? (account.type === "CASH" ? "CASH" : account.type === "BANK" ? "BANK_TRANSFER" : account.type === "MOBILE_MONEY" ? "EVC_PLUS" : account.type === "OTHER" ? "OTHER" : null);
     if (!method) throw new BadRequestException("Milkiiluhu ha doorto adeegga lacagta ee akoonkan marka hore.");
     return method;
   }
@@ -259,8 +259,18 @@ export class FinancialWorkflowsService {
 
   async suppliers(actor: Actor) {
     this.requirePerm(actor, "suppliers.view");
+    const canSeeCost = actor.role === "OWNER" || hasPermission(actor, "stock.purchase_cost.view");
     const rows = await this.db.supplier.findMany({ orderBy: [{ status: "asc" }, { name: "asc" }], include: { purchases: { where: { status: { in: ["OPEN", "PARTIALLY_PAID"] } }, select: { balanceDue: true } } } });
-    return rows.map((row) => ({ id: row.id, code: row.code, name: row.name, phone: row.phone, location: row.location, notes: row.notes, status: row.status, debt: row.purchases.reduce((sum, p) => sum.add(p.balanceDue), dec(0)).toFixed(4) }));
+    return rows.map((row) => ({
+      id: row.id,
+      code: row.code,
+      name: row.name,
+      phone: row.phone,
+      location: row.location,
+      notes: row.notes,
+      status: row.status,
+      debt: canSeeCost ? row.purchases.reduce((sum, p) => sum.add(p.balanceDue), dec(0)).toFixed(4) : null
+    }));
   }
 
   createSupplier(actor: Actor, input: { name?: string; phone?: string; location?: string; notes?: string }) {
@@ -293,9 +303,38 @@ export class FinancialWorkflowsService {
 
   async supplierDetail(actor: Actor, id: string) {
     this.requirePerm(actor, "suppliers.view");
-    const row = await this.db.supplier.findUnique({ where: { id }, include: { purchases: { orderBy: { purchaseDate: "desc" } }, payments: { orderBy: { paymentDate: "desc" }, include: { financialAccount: true } } } });
+    const canSeeCost = actor.role === "OWNER" || hasPermission(actor, "stock.purchase_cost.view");
+    const row = await this.db.supplier.findUnique({
+      where: { id },
+      include: {
+        purchases: { orderBy: { purchaseDate: "desc" } },
+        payments: { orderBy: { paymentDate: "desc" }, include: { financialAccount: true } }
+      }
+    });
     if (!row) throw new NotFoundException("Supplier not found");
-    return { id: row.id, name: row.name, phone: row.phone, debt: row.purchases.filter((p) => p.status !== "REVERSED").reduce((sum, p) => sum.add(p.balanceDue), dec(0)).toFixed(4), purchases: row.purchases.map((p) => ({ id: p.id, purchaseNo: p.purchaseNo, purchaseDate: p.purchaseDate.toISOString(), totalCost: p.totalCost.toFixed(4), paidAmount: p.paidAmount.toFixed(4), balanceDue: p.balanceDue.toFixed(4), status: p.status })), payments: row.payments.map((p) => ({ id: p.id, paymentNo: p.paymentNo, paymentDate: p.paymentDate.toISOString(), amount: p.amount.toFixed(4), status: p.status, accountName: p.financialAccount.name })) };
+    return {
+      id: row.id,
+      name: row.name,
+      phone: row.phone,
+      debt: canSeeCost ? row.purchases.filter((p) => p.status !== "REVERSED").reduce((sum, p) => sum.add(p.balanceDue), dec(0)).toFixed(4) : null,
+      purchases: canSeeCost ? row.purchases.map((p) => ({
+        id: p.id,
+        purchaseNo: p.purchaseNo,
+        purchaseDate: p.purchaseDate.toISOString(),
+        totalCost: p.totalCost.toFixed(4),
+        paidAmount: p.paidAmount.toFixed(4),
+        balanceDue: p.balanceDue.toFixed(4),
+        status: p.status
+      })) : [],
+      payments: canSeeCost ? row.payments.map((p) => ({
+        id: p.id,
+        paymentNo: p.paymentNo,
+        paymentDate: p.paymentDate.toISOString(),
+        amount: p.amount.toFixed(4),
+        status: p.status,
+        accountName: p.financialAccount.name
+      })) : []
+    };
   }
 
   async createSupplierPurchase(tx: Tx, actor: Actor, input: { supplierId: string; receiptId: string; fuelId: string; quantityFuusto: Prisma.Decimal; unitCost: Prisma.Decimal; totalCost: Prisma.Decimal; purchaseDate: Date }) {

@@ -140,6 +140,7 @@ enum FinancialMovementKind {
   OPENING_BALANCE
   CUSTOMER_PAYMENT
   CUSTOMER_PAYMENT_REVERSAL
+  CUSTOMER_REFUND
   SUPPLIER_PAYMENT
   SUPPLIER_PAYMENT_REVERSAL
   EXPENSE
@@ -199,6 +200,7 @@ model User {
   cancelledOrders            SalesOrder[]               @relation("OrderCanceller")
   approvedOrderAmendments    SalesOrderLine[]           @relation("OrderLineAmendmentApprover")
   archivedCustomers          Customer[]                 @relation("CustomerArchiver")
+  createdRefunds             CustomerRefund[]           @relation("RefundCreator")
 }
 
 model DocumentBranding {
@@ -315,6 +317,7 @@ model Customer {
   orders        SalesOrder[]
   invoices      Invoice[]
   payments      Payment[]
+  refunds       CustomerRefund[]
   ledgerEntries CustomerLedgerEntry[]
   archivedAt    DateTime?
   archivedById  String?               @db.Uuid
@@ -413,6 +416,7 @@ model SalesOrder {
   lines                      SalesOrderLine[]
   events                     OrderEvent[]
   payments                   Payment[]
+  refunds                    CustomerRefund[]
   createdAt                  DateTime         @default(now())
 
   @@index([customerId, orderDate])
@@ -689,6 +693,29 @@ model PaymentReversal {
   reversedBy User    @relation("PaymentReverser", fields: [reversedById], references: [id], onDelete: Restrict)
 }
 
+model CustomerRefund {
+  id                 String           @id @default(uuid()) @db.Uuid
+  refundNo           String           @unique
+  orderId            String           @db.Uuid
+  customerId         String           @db.Uuid
+  financialAccountId String           @db.Uuid
+  amount             Decimal          @db.Decimal(20, 4)
+  refundDate         DateTime         @default(now())
+  reason             String
+  idempotencyKey     String?          @unique
+  createdById        String           @db.Uuid
+  createdAt          DateTime         @default(now())
+
+  order              SalesOrder       @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  customer           Customer         @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  financialAccount   FinancialAccount @relation(fields: [financialAccountId], references: [id], onDelete: Restrict)
+  createdBy          User             @relation("RefundCreator", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([orderId])
+  @@index([customerId])
+  @@index([financialAccountId])
+}
+
 model CustomerLedgerEntry {
   id             String          @id @default(uuid()) @db.Uuid
   customerId     String          @db.Uuid
@@ -811,6 +838,7 @@ model FinancialAccount {
   expenses         BusinessExpense[]
   transfersFrom    AccountTransfer[]          @relation("TransferFromAccount")
   transfersTo      AccountTransfer[]          @relation("TransferToAccount")
+  refunds          CustomerRefund[]
 
   @@index([active, name])
 }

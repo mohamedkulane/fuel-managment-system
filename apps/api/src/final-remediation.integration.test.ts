@@ -427,7 +427,7 @@ describe("Final Gap Remediation Integration Tests", () => {
 
       // An immutable refund account movement and customer ledger entry are created
       const refundMovements = await prisma.financialAccountMovement.findMany({
-        where: { accountId: cashAccountId, direction: "MONEY_OUT", sourceType: "SalesOrderRefund" }
+        where: { accountId: cashAccountId, direction: "MONEY_OUT", sourceType: "CustomerRefund" }
       });
       expect(refundMovements.length).toBe(1);
       expect(refundMovements[0]?.amount.toString()).toBe("100");

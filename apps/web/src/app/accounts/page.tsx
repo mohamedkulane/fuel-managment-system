@@ -2,7 +2,7 @@
 import { useState, type FormEvent, type InputHTMLAttributes } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowDownLeft, ArrowUpRight, Edit2, Landmark, Plus, Repeat2, RotateCcw } from "lucide-react";
-import { api, type Actor, type PaginatedResponse } from "../../lib/api";
+import { api, hasPermission, type Actor, type PaginatedResponse } from "../../lib/api";
 import { businessDate, dateTime, decimal, formatStatus } from "../../lib/format";
 import { notifyError, notifySuccess } from "../../lib/toast";
 import { useWorkflow } from "../../components/simple-forms";
@@ -65,7 +65,7 @@ export default function AccountsPage() {
   const accounts = useQuery({
     queryKey: ["financial-accounts"],
     queryFn: () => api<Account[]>("/financial-accounts"),
-    enabled: me.data?.role === "OWNER"
+    enabled: hasPermission(me.data, "accounts.view")
   });
 
   const movementsQuery = useQuery({
@@ -76,13 +76,13 @@ export default function AccountsPage() {
       if (movementTo) p.set("toDate", movementTo);
       return api<PaginatedResponse<Movement>>(`/financial-accounts/${selected}/movements?${p.toString()}`);
     },
-    enabled: Boolean(selected) && me.data?.role === "OWNER"
+    enabled: Boolean(selected) && hasPermission(me.data, "accounts.view")
   });
 
   const transfersQuery = useQuery({
     queryKey: ["financial-accounts-transfers"],
     queryFn: () => api<TransferItem[]>("/financial-accounts/transfers"),
-    enabled: me.data?.role === "OWNER"
+    enabled: hasPermission(me.data, "accounts.view")
   });
 
   const create = useWorkflow<Record<string, string | boolean>>(
@@ -135,11 +135,11 @@ export default function AccountsPage() {
   });
 
   if (me.isPending) return <main className="page"><LoadingState /></main>;
-  if (me.data?.role !== "OWNER")
+  if (!hasPermission(me.data, "accounts.view"))
     return (
       <main className="page">
-        <PageHeader eyebrow="Maamulka lacagta" title="Xisaabaadka Lacagta" description="Hadhaaga akoonnada waxaa eegi kara milkiilaha oo keliya." />
-        <ErrorState message="Ogolaanshaha Milkiilaha ayaa loo baahan yahay" />
+        <PageHeader eyebrow="Maamulka lacagta" title="Xisaabaadka Lacagta" description="Xisaabaadka lacagta iyo hadhaaga akoonnada." />
+        <ErrorState message="Ogolaansho uma haysatid inaad aragto akoonnada lacagta" />
       </main>
     );
 
@@ -197,14 +197,18 @@ export default function AccountsPage() {
         description="Dheelitirka lacagta caddaanka ah, lacagaha moobiilka iyo xisaabaadka bangiyada oo leh diiwaan sax ah oo aan dib laga beddeli karin."
         actions={
           <>
-            <ActionButton className="btn" onClick={() => setTransferOpen(true)}>
-              <Repeat2 size={18} />
-              Wareeji Lacag
-            </ActionButton>
-            <ActionButton className="btn primary" onClick={() => setCreateOpen(true)}>
-              <Plus size={18} />
-              Ku Dar Akoon
-            </ActionButton>
+            {hasPermission(me.data, "accounts.transfer") && (
+              <ActionButton className="btn" onClick={() => setTransferOpen(true)}>
+                <Repeat2 size={18} />
+                Wareeji Lacag
+              </ActionButton>
+            )}
+            {hasPermission(me.data, "accounts.create") && (
+              <ActionButton className="btn primary" onClick={() => setCreateOpen(true)}>
+                <Plus size={18} />
+                Ku Dar Akoon
+              </ActionButton>
+            )}
           </>
         }
       />

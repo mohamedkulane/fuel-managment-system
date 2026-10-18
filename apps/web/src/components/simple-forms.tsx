@@ -2,7 +2,7 @@
 import { useRef, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Decimal from "decimal.js";
-import { api, mutationKey, type Actor } from "../lib/api";
+import { api, mutationKey, type Actor, hasPermission } from "../lib/api";
 import { businessDate, decimal, formatFuel } from "../lib/format";
 import { ActionButton, FormLabel } from "./controls";
 import { ErrorState, Modal, SubmitButton } from "./ui";
@@ -61,15 +61,20 @@ export function ReceiveStockForm({ onSaved }: { onSaved: () => void }) {
 
   const me = useQuery({ queryKey: ["me"], queryFn: () => api<Actor>("/auth/me") });
   const fuels = useQuery({ queryKey: ["fuels"], queryFn: () => api<{ id: string; displayName: string }[]>("/fuels") });
+
+  const canViewCost = me.data?.role === "OWNER" || hasPermission(me.data, "stock.purchase_cost.view");
+  const canViewSuppliers = me.data?.role === "OWNER" || hasPermission(me.data, "suppliers.view") || hasPermission(me.data, "stock.receive");
+  const canSelectAccounts = me.data?.role === "OWNER" || hasPermission(me.data, "stock.receive") || hasPermission(me.data, "accounts.view");
+
   const suppliers = useQuery({
     queryKey: ["suppliers"],
     queryFn: () => api<Array<{ id: string; name: string; status: string }>>("/suppliers"),
-    enabled: me.data?.role === "OWNER",
+    enabled: canViewSuppliers,
   });
   const accounts = useQuery({
     queryKey: ["financial-accounts", "selectable"],
     queryFn: () => api<Array<{ id: string; name: string; identifierMasked: string | null; currentBalance: string | null; overdraftPolicy: string | null }>>("/financial-accounts/selectable"),
-    enabled: me.data?.role === "OWNER",
+    enabled: canSelectAccounts,
   });
 
   const save = useWorkflow<{
@@ -169,7 +174,7 @@ export function ReceiveStockForm({ onSaved }: { onSaved: () => void }) {
       quantity: units,
       date: String(data.get("date")),
       notes: String(data.get("notes") || ""),
-      ...(me.data?.role === "OWNER" && (cost || supplierId) ? {
+      ...(canViewCost && (cost || supplierId) ? {
         supplierId: supplierId || undefined,
         paidNow: paidNow || "0",
         financialAccountId: (paidNow && Number(paidNow) > 0) ? accountId : undefined,
@@ -220,10 +225,10 @@ export function ReceiveStockForm({ onSaved }: { onSaved: () => void }) {
           </div>
         </div>
 
-        {me.data?.role === "OWNER" && (
+        {canViewCost && (
           <details open className="simple-disclosure" style={{ marginTop: 14, marginBottom: 14 }}>
             <summary style={{ fontWeight: 600, cursor: "pointer" }}>
-              Iibka, Keenaha & Deynta (Milkiilaha)
+              Iibka, Keenaha & Deynta
             </summary>
             <div className="form-grid" style={{ marginTop: 10 }}>
               {/* Supplier Selector - full width on top with add button */}

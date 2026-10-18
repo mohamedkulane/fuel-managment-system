@@ -83,6 +83,9 @@ export class SimpleWorkflowsController {
   @Post("deliveries") async delivery(@Req() req: AuthenticatedRequest, @Headers("idempotency-key") key: string | undefined, @Body() input: SimpleDeliveryInput) {
     return { data: await this.service.delivery(requirePermission(req, "orders.delivery.confirm"), key, input) };
   }
+  @Post("orders/:id/deliver") async orderDeliver(@Req() req: AuthenticatedRequest, @Headers("idempotency-key") key: string | undefined, @Param("id") id: string, @Body() input: { lines: any[] }) {
+    return { data: await this.service.delivery(requirePermission(req, "orders.delivery.confirm"), key, { orderId: id, lines: input.lines }) };
+  }
   @Post("orders/:id/excess-credit/keep") async keepCredit(@Req() req: AuthenticatedRequest, @Headers("idempotency-key") key: string | undefined, @Param("id") id: string) {
     return { data: await this.service.keepExcessCredit(requirePermission(req, "orders.create"), key, id) };
   }

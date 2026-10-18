@@ -67,6 +67,7 @@ export default function OrderPage() {
   const [cancelReason, setCancelReason] = useState("");
   const [refundModalOpen, setRefundModalOpen] = useState(false);
   const [refundAccount, setRefundAccount] = useState("");
+  const [refundAmount, setRefundAmount] = useState("");
   const [refundReason, setRefundReason] = useState("");
 
   useEffect(() => {
@@ -125,7 +126,11 @@ export default function OrderPage() {
   const refundCreditMutation = useMutation({
     mutationFn: () => api(`/simple/orders/${id}/excess-credit/refund`, {
       method: "POST",
-      body: JSON.stringify({ financialAccountId: refundAccount, reason: refundReason })
+      body: JSON.stringify({
+        amount: refundAmount || undefined,
+        financialAccountId: refundAccount,
+        reason: refundReason
+      })
     }),
     onSuccess: async () => {
       await client.invalidateQueries();
@@ -277,9 +282,26 @@ export default function OrderPage() {
           <Modal isOpen={refundModalOpen} onClose={() => setRefundModalOpen(false)} title="U Celi Lacagta Dheeraadka ah Macmiilka">
             <form onSubmit={(e) => { e.preventDefault(); refundCreditMutation.mutate(); }}>
               <div className="notice warn" style={{ marginBottom: 12 }}>
-                Waxaad macmiilka u celinaysaa lacag dhan <strong>${decimal(String(unappliedCredit))}</strong> oo ah lacag hore loo bixiyey oo aan shidaal lagu qaadan.
+                Waxaad macmiilka u celinaysaa lacag dhan <strong>${decimal(refundAmount || String(unappliedCredit))}</strong> oo ah lacag hore loo bixiyey oo aan shidaal lagu qaadan.
               </div>
               <div className="form-grid">
+                <div className="field full">
+                  <FormLabel htmlFor="refund-amount">Qadarka Lacagta la Celinayo ($) *</FormLabel>
+                  <input
+                    id="refund-amount"
+                    type="number"
+                    step="0.01"
+                    min="0.01"
+                    max={unappliedCredit}
+                    className="input"
+                    required
+                    value={refundAmount}
+                    onChange={(e) => setRefundAmount(e.target.value)}
+                  />
+                  <small className="text-muted" style={{ display: "block", marginTop: 2 }}>
+                    Wadarta lacagta celinta u furan: <strong>${decimal(String(unappliedCredit))}</strong>
+                  </small>
+                </div>
                 <div className="field full">
                   <FormLabel htmlFor="refund-account">Akoonka Lacagta Laga Celinayo *</FormLabel>
                   <select id="refund-account" className="select" required value={refundAccount} onChange={(e) => setRefundAccount(e.target.value)}>
@@ -295,7 +317,7 @@ export default function OrderPage() {
               {refundCreditMutation.isError && <ErrorState message={refundCreditMutation.error.message} />}
               <div className="form-actions" style={{ marginTop: 16 }}>
                 <ActionButton type="button" className="btn" onClick={() => setRefundModalOpen(false)}>Ka noqo</ActionButton>
-                <SubmitButton busy={refundCreditMutation.isPending} className="btn danger">Xaqiiji Celinta</SubmitButton>
+                <SubmitButton busy={refundCreditMutation.isPending} className="btn danger" disabled={!refundAmount || Number(refundAmount) <= 0 || Number(refundAmount) > unappliedCredit}>Xaqiiji Celinta</SubmitButton>
               </div>
             </form>
           </Modal>
@@ -310,7 +332,7 @@ export default function OrderPage() {
                   <ActionButton className="btn primary small" disabled={keepCreditMutation.isPending} onClick={() => keepCreditMutation.mutate()}>
                     U Hay Macmiilka
                   </ActionButton>
-                  <ActionButton className="btn secondary small" onClick={() => { setRefundModalOpen(true); setRefundReason(`Soo celinta hadhaaga dalabka ${row.orderNo}`); }}>
+                  <ActionButton className="btn secondary small" onClick={() => { setRefundModalOpen(true); setRefundAmount(String(unappliedCredit)); setRefundReason(`Soo celinta hadhaaga dalabka ${row.orderNo}`); }}>
                     U Celi Macmiilka
                   </ActionButton>
                 </div>

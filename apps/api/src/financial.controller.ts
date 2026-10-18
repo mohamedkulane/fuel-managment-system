@@ -1,5 +1,5 @@
-import { Body, Controller, Get, Headers, Inject, Param, Patch, Post, Query, Req, UseGuards } from "@nestjs/common";
-import { AuthenticatedRequest, requirePermission, SessionGuard } from "./auth.js";
+import { Body, Controller, ForbiddenException, Get, Headers, Inject, Param, Patch, Post, Query, Req, UseGuards } from "@nestjs/common";
+import { AuthenticatedRequest, hasPermission, requireActor, requirePermission, SessionGuard } from "./auth.js";
 import { FinancialWorkflowsService } from "./financial-workflows.service.js";
 
 @Controller("api/v1")
@@ -7,7 +7,20 @@ import { FinancialWorkflowsService } from "./financial-workflows.service.js";
 export class FinancialController {
   constructor(@Inject(FinancialWorkflowsService) private readonly service: FinancialWorkflowsService) {}
 
-  @Get("financial-accounts/selectable") async selectable(@Req() request: AuthenticatedRequest) { return { data: await this.service.selectableAccounts(requirePermission(request, "accounts.view")) }; }
+  @Get("financial-accounts/selectable")
+  async selectable(@Req() request: AuthenticatedRequest) {
+    const actor = requireActor(request);
+    const allowed = actor.role === "OWNER" ||
+      hasPermission(actor, "accounts.view") ||
+      hasPermission(actor, "payments.record") ||
+      hasPermission(actor, "orders.create") ||
+      hasPermission(actor, "expenses.create") ||
+      hasPermission(actor, "stock.receive") ||
+      hasPermission(actor, "suppliers.pay") ||
+      hasPermission(actor, "accounts.transfer");
+    if (!allowed) throw new ForbiddenException("Ogolaansho uma haysatid inaad aragto akoonnada lacagta");
+    return { data: await this.service.selectableAccounts(actor) };
+  }
   @Get("financial-accounts") async accounts(@Req() request: AuthenticatedRequest) { return { data: await this.service.accounts(requirePermission(request, "accounts.view")) }; }
   @Post("financial-accounts") async createAccount(@Req() request: AuthenticatedRequest, @Headers("idempotency-key") key: string | undefined, @Body() body: Parameters<FinancialWorkflowsService["createAccount"]>[2]) { return { data: await this.service.createAccount(requirePermission(request, "accounts.create"), key, body) }; }
   @Get("financial-accounts/:id") async account(

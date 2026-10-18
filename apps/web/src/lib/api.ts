@@ -31,3 +31,9 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const mutationKey = (): string => crypto.randomUUID();
+
+export function hasPermission(actor: Actor | undefined | null, permission: string): boolean {
+  if (!actor) return false;
+  if (actor.role === "OWNER") return true;
+  return Array.isArray(actor.permissions) && actor.permissions.includes(permission);
+}

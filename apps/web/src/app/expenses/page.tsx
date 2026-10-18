@@ -2,7 +2,7 @@
 import { useState, type FormEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { CircleDollarSign, Plus, ReceiptText, RotateCcw } from "lucide-react";
-import { api, type Actor } from "../../lib/api";
+import { api, hasPermission, type Actor } from "../../lib/api";
 import { businessDate, dateTime, decimal, formatStatus } from "../../lib/format";
 import { useWorkflow } from "../../components/simple-forms";
 import { ActionButton, FormLabel } from "../../components/controls";
@@ -35,8 +35,8 @@ export default function ExpensesPage() {
   const [reverse, setReverse] = useState<Expense | null>(null);
 
   const me = useQuery({ queryKey: ["me"], queryFn: () => api<Actor>("/auth/me") });
-  const expenses = useQuery({ queryKey: ["expenses"], queryFn: () => api<Expense[]>("/expenses"), enabled: me.data?.role === "OWNER" });
-  const accounts = useQuery({ queryKey: ["financial-accounts", "selectable"], queryFn: () => api<Account[]>("/financial-accounts/selectable"), enabled: me.data?.role === "OWNER" });
+  const expenses = useQuery({ queryKey: ["expenses"], queryFn: () => api<Expense[]>("/expenses"), enabled: hasPermission(me.data, "expenses.view") });
+  const accounts = useQuery({ queryKey: ["financial-accounts", "selectable"], queryFn: () => api<Account[]>("/financial-accounts/selectable"), enabled: hasPermission(me.data, "expenses.view") || hasPermission(me.data, "expenses.create") });
 
   const create = useWorkflow<Record<string, string | boolean>>(
     "/expenses",
@@ -51,11 +51,11 @@ export default function ExpensesPage() {
   );
 
   if (me.isPending) return <main className="page"><LoadingState /></main>;
-  if (me.data?.role !== "OWNER")
+  if (!hasPermission(me.data, "expenses.view"))
     return (
       <main className="page">
-        <PageHeader eyebrow="Kharashaadka" title="Kharashaadka" description="Kharashaadka ganacsiga waxaa maamuli kara milkiilaha oo keliya." />
-        <ErrorState message="Ogolaanshaha Milkiilaha ayaa loo baahan yahay" />
+        <PageHeader eyebrow="Kharashaadka" title="Kharashaadka" description="Kharashaadka ganacsiga iyo diiwaanka lacag bixinta." />
+        <ErrorState message="Ogolaansho uma haysatid inaad aragto kharashaadka" />
       </main>
     );
 
@@ -92,10 +92,12 @@ export default function ExpensesPage() {
         title="Kharashaadka"
         description="Diiwaangeli kharash kasta oo ganacsi hal mar. Kharashaadka akoonka lagu xiro waxay abuuraan hal dhaqdhaqaaq oo lacag baxday ah."
         actions={
-          <ActionButton className="btn primary" onClick={() => setOpen(true)}>
-            <Plus size={18} />
-            Diiwaangeli Kharash
-          </ActionButton>
+          hasPermission(me.data, "expenses.create") ? (
+            <ActionButton className="btn primary" onClick={() => setOpen(true)}>
+              <Plus size={18} />
+              Diiwaangeli Kharash
+            </ActionButton>
+          ) : undefined
         }
       />
 
@@ -139,7 +141,7 @@ export default function ExpensesPage() {
                       <Badge tone={row.status === "POSTED" ? "ok" : "danger"}>{row.status === "POSTED" ? "LA DIIWAANGELIYAY" : "LAGA NOQDAY"}</Badge>
                     </td>
                     <td style={{ textAlign: "right" }}>
-                      {row.status === "POSTED" && (
+                      {row.status === "POSTED" && (me.data?.role === "OWNER" || hasPermission(me.data, "expenses.reverse")) && (
                         <ActionButton className="btn small" onClick={() => setReverse(row)}>
                           <RotateCcw size={14} />
                           Ka Noqo

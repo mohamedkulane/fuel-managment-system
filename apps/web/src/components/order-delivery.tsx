@@ -62,7 +62,7 @@ export function OrderDelivery({ orderId, lines }: { orderId: string; lines: Line
         return {
           orderLineId: line.id,
           acceptedUnits: value,
-          remaining: accepted.lt(stats.remaining) && !isClosing ? String(data.get("remaining-" + line.id) || "") || undefined : undefined,
+          remaining: accepted.lt(stats.remaining) ? (String(data.get("remaining-" + line.id) || "") as ("RETURNED" | "IN_TRANSIT")) || undefined : undefined,
           reason: String(data.get("reason-" + line.id) || "") || undefined,
           closeRemainder: isClosing,
           amendmentReason: accepted.gt(stats.remaining) ? String(data.get("amendmentReason-" + line.id) || "") || undefined : undefined
@@ -76,7 +76,7 @@ export function OrderDelivery({ orderId, lines }: { orderId: string; lines: Line
       <ActionButton className="btn primary" onClick={() => setOpen(true)}>
         Xaqiiji Gaarsiinta
       </ActionButton>
-      <Modal isOpen={open} onClose={() => setOpen(false)} title="Xaqiiji Gaarsiinta Shidaalka (Confirm Delivery)">
+      <Modal isOpen={open} onClose={() => setOpen(false)} title="Xaqiiji Gaarsiinta Shidaalka">
         <form onSubmit={submit} className="space-y-4">
           {eligible.map((line) => {
             const stats = lineStats(line);
@@ -102,7 +102,7 @@ export function OrderDelivery({ orderId, lines }: { orderId: string; lines: Line
                 </div>
 
                 <div className="field">
-                  <FormLabel htmlFor={"accepted-" + line.id}>Tirada uu qaatay macmiilku (Accepted Fuusto)</FormLabel>
+                  <FormLabel htmlFor={"accepted-" + line.id}>Tirada uu qaatay macmiilku (Fuusto)</FormLabel>
                   <input
                     id={"accepted-" + line.id}
                     type="number"
@@ -126,7 +126,7 @@ export function OrderDelivery({ orderId, lines }: { orderId: string; lines: Line
                       Tiradani way ka badan tahay intii dalabka ku hartay. Kordhinta dalabka waxay u baahan tahay oggolaanshaha Milkiilaha.
                     </p>
                     <div className="field">
-                      <FormLabel htmlFor={"amendmentReason-" + line.id}>Sababta kordhinta (Reason for extra delivery)</FormLabel>
+                      <FormLabel htmlFor={"amendmentReason-" + line.id}>Sababta kordhinta dheeraadka ah</FormLabel>
                       <input
                         id={"amendmentReason-" + line.id}
                         name={"amendmentReason-" + line.id}
@@ -151,28 +151,26 @@ export function OrderDelivery({ orderId, lines }: { orderId: string; lines: Line
                         onChange={(e) => setCloseRemainder({ ...closeRemainder, [line.id]: e.target.checked })}
                         className="rounded"
                       />
-                      <span>Dhammaystir intan; jooji inta harsan (Close remainder)</span>
+                      <span>Dhammaystir intan oo jooji inta harsan</span>
                     </label>
 
-                    {!isClosing && (
-                      <div className="space-y-2 pt-1 border-t border-border/50">
-                        <FormLabel htmlFor={"remaining-" + line.id}>Halkee ku jiraa shidaalka haray?</FormLabel>
-                        <select
-                          id={"remaining-" + line.id}
-                          name={"remaining-" + line.id}
-                          className="select w-full text-sm"
-                          required
-                          defaultValue=""
-                        >
-                          <option value="">Dooro / Select</option>
-                          <option value="RETURNED">Bakhaarka ayay ku soo noqdeen (Returned to Warehouse)</option>
-                          <option value="IN_TRANSIT">Weli gaariga/jidka ayay ku jiraan (Still in Transit)</option>
-                        </select>
-                      </div>
-                    )}
+                    <div className="space-y-2 pt-1 border-t border-border/50">
+                      <FormLabel htmlFor={"remaining-" + line.id}>Halkee ku jiraa shidaalka haray ee gaariga ku jiray? *</FormLabel>
+                      <select
+                        id={"remaining-" + line.id}
+                        name={"remaining-" + line.id}
+                        className="select w-full text-sm"
+                        required
+                        defaultValue=""
+                      >
+                        <option value="">Dooro xaaladda shidaalka</option>
+                        <option value="RETURNED">Bakhaarka ayay ku soo noqdeen</option>
+                        <option value="IN_TRANSIT">Weli gaariga/jidka ayay ku jiraan</option>
+                      </select>
+                    </div>
 
                     <div className="field">
-                      <FormLabel htmlFor={"reason-" + line.id}>Sababta (Reason)</FormLabel>
+                      <FormLabel htmlFor={"reason-" + line.id}>Sababta dhimista ama joojinta</FormLabel>
                       <input
                         id={"reason-" + line.id}
                         name={"reason-" + line.id}

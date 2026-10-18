@@ -8,7 +8,7 @@ import { decimal, dateTime, formatStatus, formatFuel, fuustoQuantity } from "../
 import { FormEvent, useState } from "react";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, type Actor, type PaginatedResponse } from "../../lib/api";
+import { api, hasPermission, type Actor, type PaginatedResponse } from "../../lib/api";
 import { MetricCard, LoadingState, Badge, Card, CardHead, Empty, ErrorState, Modal, PageHeader, Pagination, SubmitButton } from "../../components/ui";
 import { notifyError, notifySuccess } from "../../lib/toast";
 import { SupplierDebt } from "../../components/supplier-debt";
@@ -84,12 +84,14 @@ export default function StockPage() {
         description="Kaydka bakhaarka, shidaalka jidka ku jira iyo taariikhda dhaqdhaqaaqa ee lagu qiyaaso fuustooyinka (1 fuusto = 240 litar)."
         actions={
           <>
-            {isOwner && (
+            {(isOwner || hasPermission(me.data, "stock.adjust")) && (
               <ActionButton className="btn" onClick={() => setShowAdjust(true)}>
                 Wax Ka Beddelka Kaydka
               </ActionButton>
             )}
-            <ActionButton className="btn primary" onClick={() => setShowReceive(true)}>Soo Geli Shidaal</ActionButton>
+            {(isOwner || hasPermission(me.data, "stock.receive")) && (
+              <ActionButton className="btn primary" onClick={() => setShowReceive(true)}>Soo Geli Shidaal</ActionButton>
+            )}
           </>
         }
       />
@@ -153,7 +155,7 @@ export default function StockPage() {
 
       <Modal isOpen={showReceive} onClose={() => setShowReceive(false)} title="Soo Geli Shidaal"><ReceiveStockForm onSaved={() => setShowReceive(false)} /></Modal>
       <FuelPrices />
-      {isOwner && <SupplierDebt />}
+      {(isOwner || hasPermission(me.data, "suppliers.view")) && <SupplierDebt />}
       <Card><CardHead title="Shidaalkii soo galay" action={<ActionLink className="btn" href="/stock/receive">Eeg Rasiidhada</ActionLink>} /><div className="card-body"><p>Eeg shidaalka la soo iibsaday iyo rasiidhadiisa.</p></div></Card>
       <Card><details className="simple-disclosure"><summary>Taariikhda kaydka</summary>
         <div className="toolbar">
